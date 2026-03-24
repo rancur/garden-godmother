@@ -1,0 +1,3814 @@
+#!/usr/bin/env python3
+"""Initialize the Garden God Mother plant database for Zone 9b/10a."""
+
+import sqlite3
+import json
+from pathlib import Path
+
+DB_PATH = Path(__file__).parent / "plants.db"
+
+# Zone data for default Zone 9b/10a
+ZONE_DATA = {
+    "zone": "9b/10a",
+    "location": "Zone 9b/10a",
+    "last_frost_spring": "01-26",
+    "first_frost_fall": "12-11",
+    "frost_free_days": 320,
+    "summer_peak_f": 115,
+    "monsoon_start": "07-01",
+    "monsoon_end": "09-15",
+}
+
+# Planting seasons for desert:
+# Cool season: Oct - Mar (plant Sep-Feb)
+# Warm season: Mar - Jun (plant Feb-Apr)
+# Monsoon/Hot: Jul - Sep (limited planting)
+
+PLANTS = [
+    # COOL SEASON VEGETABLES
+    {
+        "name": "Tomato",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 85,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["02-01", "03-15"],
+        "desert_transplant": ["02-15", "03-31"],
+        "desert_harvest": ["05-01", "07-15"],
+        "notes": "Plant early in desert. Heat above 95F stops fruit set. Choose heat-tolerant varieties like Phoenix, Heatmaster, Solar Fire.",
+        "companions": ["Basil", "Carrot", "Parsley", "Marigold", "Nasturtium", "Pepper", "Onion"],
+        "antagonists": ["Fennel", "Brassicas", "Corn", "Dill (mature)"],
+    },
+    {
+        "name": "Pepper",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": ["02-15", "04-01"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["05-15", "10-31"],
+        "notes": "One of the best desert performers. Thrives in heat. Shade cloth helps above 110F.",
+        "companions": ["Tomato", "Basil", "Carrot", "Onion", "Spinach", "Marigold"],
+        "antagonists": ["Fennel", "Brassicas"],
+    },
+    {
+        "name": "Cucumber",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 70,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "high",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["02-15", "03-31"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["04-15", "06-30"],
+        "notes": "Must finish before extreme heat. Armenian cucumber handles heat better than English types.",
+        "companions": ["Bean", "Corn", "Pea", "Radish", "Sunflower", "Lettuce"],
+        "antagonists": ["Potato", "Aromatic herbs (sage, mint)"],
+    },
+    {
+        "name": "Squash (Summer)",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 45,
+        "days_to_maturity_max": 65,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["02-15", "04-01"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["04-15", "07-31"],
+        "notes": "Zucchini and yellow squash are prolific desert performers. Can do a fall planting Aug-Sep too.",
+        "companions": ["Corn", "Bean", "Nasturtium", "Marigold", "Radish"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Lettuce",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 30,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 8,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 4,
+        "desert_sow_outdoor": ["09-15", "02-28"],
+        "desert_transplant": ["10-01", "02-28"],
+        "desert_harvest": ["11-01", "04-15"],
+        "notes": "Bolts fast in heat. Grow in cool season only. Shade cloth extends season. Succession plant every 2 weeks.",
+        "companions": ["Carrot", "Radish", "Strawberry", "Chive", "Onion", "Cucumber"],
+        "antagonists": ["Celery", "Parsley"],
+    },
+    {
+        "name": "Spinach",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 35,
+        "days_to_maturity_max": 50,
+        "spacing_inches": 6,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "02-28"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-15", "04-01"],
+        "notes": "Direct sow only. Bolts quickly when temps hit 75F+. Best Oct-Feb in desert.",
+        "companions": ["Strawberry", "Pea", "Bean", "Brassicas", "Radish"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Kale",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 75,
+        "spacing_inches": 18,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 5,
+        "desert_sow_outdoor": ["09-15", "02-15"],
+        "desert_transplant": ["10-01", "02-28"],
+        "desert_harvest": ["11-15", "04-15"],
+        "notes": "Lacinato/Tuscan kale does well in AZ cool season. Gets sweeter after light frost.",
+        "companions": ["Beet", "Celery", "Cucumber", "Onion", "Potato", "Dill"],
+        "antagonists": ["Strawberry", "Tomato"],
+    },
+    {
+        "name": "Carrot",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 80,
+        "spacing_inches": 3,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "02-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["12-01", "04-30"],
+        "notes": "Direct sow only, don't transplant. Desert soil may need amendments for long varieties. Chantenay/Danvers work well in clay.",
+        "companions": ["Tomato", "Lettuce", "Onion", "Pea", "Radish", "Rosemary", "Sage"],
+        "antagonists": ["Dill", "Parsnip"],
+    },
+    {
+        "name": "Radish",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 22,
+        "days_to_maturity_max": 35,
+        "spacing_inches": 2,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "03-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["10-15", "04-15"],
+        "notes": "Fastest crop in the garden. Great for interplanting. Succession sow every 2 weeks.",
+        "companions": ["Carrot", "Cucumber", "Lettuce", "Pea", "Spinach", "Squash"],
+        "antagonists": ["Hyssop"],
+    },
+    {
+        "name": "Beet",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 70,
+        "spacing_inches": 4,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "02-28"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-15", "04-30"],
+        "notes": "Direct sow. Soak seeds 24h before planting. Greens are edible too. Bull's Blood variety has gorgeous leaves.",
+        "companions": ["Onion", "Lettuce", "Brassicas", "Bush bean"],
+        "antagonists": ["Pole bean", "Mustard"],
+    },
+    {
+        "name": "Onion",
+        "category": "vegetable",
+        "subcategory": "allium",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 120,
+        "spacing_inches": 4,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": ["10-01", "01-31"],
+        "desert_transplant": ["10-15", "02-15"],
+        "desert_harvest": ["03-01", "05-31"],
+        "notes": "Use short-day varieties in AZ (Texas 1015, Granex). Plant sets or transplants for easiest results.",
+        "companions": ["Carrot", "Lettuce", "Tomato", "Pepper", "Beet", "Strawberry", "Chamomile"],
+        "antagonists": ["Bean", "Pea", "Asparagus"],
+    },
+    {
+        "name": "Garlic",
+        "category": "vegetable",
+        "subcategory": "allium",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 150,
+        "spacing_inches": 6,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "11-30"],
+        "desert_transplant": None,
+        "desert_harvest": ["03-01", "05-15"],
+        "notes": "Plant cloves in fall, harvest spring. Softneck varieties best for desert (Inchelium Red, California Early). Stop watering 2 weeks before harvest.",
+        "companions": ["Tomato", "Pepper", "Beet", "Carrot", "Rose", "Fruit trees"],
+        "antagonists": ["Bean", "Pea", "Asparagus", "Sage"],
+    },
+    {
+        "name": "Pea",
+        "category": "vegetable",
+        "subcategory": "legume",
+        "days_to_maturity_min": 55,
+        "days_to_maturity_max": 70,
+        "spacing_inches": 3,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-15", "02-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["12-15", "04-30"],
+        "notes": "Direct sow. Must finish before heat. Sugar snap and snow peas are most productive. Inoculate seeds with rhizobium.",
+        "companions": ["Carrot", "Radish", "Turnip", "Cucumber", "Corn", "Bean"],
+        "antagonists": ["Onion", "Garlic", "Chive"],
+    },
+    {
+        "name": "Bean (Bush)",
+        "category": "vegetable",
+        "subcategory": "legume",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 4,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["02-15", "04-01"],
+        "desert_transplant": None,
+        "desert_harvest": ["04-15", "06-15"],
+        "notes": "Direct sow after frost danger. Can do a fall planting Aug-Sep. Tepary beans are native desert legumes.",
+        "companions": ["Corn", "Squash", "Cucumber", "Carrot", "Beet", "Potato", "Marigold"],
+        "antagonists": ["Onion", "Garlic", "Fennel", "Chive"],
+    },
+    {
+        "name": "Corn",
+        "category": "vegetable",
+        "subcategory": "grain",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "high",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["02-15", "04-01"],
+        "desert_transplant": None,
+        "desert_harvest": ["05-15", "07-31"],
+        "notes": "Plant in blocks (not rows) for pollination. High water use. Three Sisters planting (corn, bean, squash) works great in desert.",
+        "companions": ["Bean", "Squash", "Pea", "Cucumber", "Melon"],
+        "antagonists": ["Tomato", "Celery"],
+    },
+    {
+        "name": "Eggplant",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 65,
+        "days_to_maturity_max": 85,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": ["02-01", "03-15"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["05-15", "10-31"],
+        "notes": "Thrives in desert heat. One of the longest producers. Japanese varieties (Ichiban) especially heat-hardy.",
+        "companions": ["Pepper", "Bean", "Spinach", "Marigold", "Nasturtium"],
+        "antagonists": ["Fennel"],
+    },
+    {
+        "name": "Melon",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 70,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["03-01", "04-15"],
+        "desert_transplant": ["03-15", "04-30"],
+        "desert_harvest": ["06-01", "08-31"],
+        "notes": "Desert melons are legendary. Cantaloupe and honeydew love the heat. Water deeply but infrequently.",
+        "companions": ["Corn", "Sunflower", "Nasturtium", "Radish"],
+        "antagonists": ["Potato"],
+    },
+    # HERBS
+    {
+        "name": "Basil",
+        "category": "herb",
+        "subcategory": "annual",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 75,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["03-01", "04-30"],
+        "desert_transplant": ["03-15", "05-15"],
+        "desert_harvest": ["04-15", "10-31"],
+        "notes": "Loves desert heat. African Blue basil is perennial in AZ. Pinch flowers to keep producing.",
+        "companions": ["Tomato", "Pepper", "Marigold", "Oregano"],
+        "antagonists": ["Rue", "Sage"],
+    },
+    {
+        "name": "Cilantro",
+        "category": "herb",
+        "subcategory": "annual",
+        "days_to_maturity_min": 45,
+        "days_to_maturity_max": 70,
+        "spacing_inches": 6,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "02-28"],
+        "desert_transplant": None,
+        "desert_harvest": ["10-15", "04-15"],
+        "notes": "Bolts instantly in heat. Direct sow only. Succession plant every 3 weeks. Let some bolt for coriander seed.",
+        "companions": ["Bean", "Pea", "Tomato", "Spinach"],
+        "antagonists": ["Fennel", "Dill (cross-pollinates)"],
+    },
+    {
+        "name": "Rosemary",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 80,
+        "days_to_maturity_max": 120,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["01-01", "12-31"],
+        "notes": "Plant from starts, not seed. Perennial in AZ, nearly unkillable. Excellent desert landscaping plant.",
+        "companions": ["Carrot", "Bean", "Sage", "Brassicas"],
+        "antagonists": ["Basil"],
+    },
+    {
+        "name": "Mint",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 18,
+        "sun": "partial",
+        "water": "high",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["01-01", "12-31"],
+        "notes": "ALWAYS grow in a container — it's invasive. Needs shade in summer. Comes back from roots even if top dies in heat.",
+        "companions": ["Tomato", "Brassicas", "Pea"],
+        "antagonists": ["Parsley", "Chamomile"],
+    },
+    {
+        "name": "Oregano",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 80,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["01-01", "12-31"],
+        "notes": "Mexican oregano (Lippia graveolens) is a desert native and more heat-tolerant than Mediterranean types.",
+        "companions": ["Pepper", "Tomato", "Basil", "Squash"],
+        "antagonists": [],
+    },
+    # COMPANION FLOWERS
+    {
+        "name": "Marigold",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 45,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 10,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 4,
+        "desert_sow_outdoor": ["02-15", "04-15"],
+        "desert_transplant": ["03-01", "05-01"],
+        "desert_harvest": ["04-01", "11-30"],
+        "notes": "Essential companion plant. French marigolds repel nematodes and whiteflies. Plant throughout the garden.",
+        "companions": ["Tomato", "Pepper", "Squash", "Bean", "Cucumber", "Eggplant"],
+        "antagonists": ["Bean (some allelopathy reported)"],
+    },
+    {
+        "name": "Nasturtium",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 45,
+        "days_to_maturity_max": 65,
+        "spacing_inches": 12,
+        "sun": "full to partial",
+        "water": "low",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "low",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "03-31"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-01", "05-31"],
+        "notes": "Trap crop for aphids. Edible flowers and leaves. Great ground cover in desert. Dies in extreme heat.",
+        "companions": ["Tomato", "Cucumber", "Squash", "Bean", "Brassicas"],
+        "antagonists": [],
+    },
+    {
+        "name": "Sunflower",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 70,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["02-15", "04-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["05-15", "08-31"],
+        "notes": "Native plant, thrives in desert. Provides shade for smaller plants. Attracts pollinators. Can be allelopathic — don't plant too close to sensitive crops.",
+        "companions": ["Cucumber", "Corn", "Squash", "Lettuce (shade)"],
+        "antagonists": ["Potato", "Pole bean"],
+    },
+    # =====================================================================
+    # NEW PLANTS — 55 additions for 80 total
+    # =====================================================================
+
+    # COOL SEASON BRASSICAS
+    {
+        "name": "Broccoli",
+        "category": "vegetable",
+        "subcategory": "brassica",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["09-01", "01-31"],
+        "desert_transplant": ["09-15", "02-15"],
+        "desert_harvest": ["11-15", "04-15"],
+        "notes": "Transplants preferred. Harvest central head then side shoots keep producing for weeks. Waltham 29 and De Cicco do well in AZ.",
+        "companions": ["Onion", "Garlic", "Beet", "Celery", "Potato", "Dill", "Rosemary", "Nasturtium"],
+        "antagonists": ["Tomato", "Pepper", "Strawberry", "Pole bean"],
+    },
+    {
+        "name": "Cauliflower",
+        "category": "vegetable",
+        "subcategory": "brassica",
+        "days_to_maturity_min": 55,
+        "days_to_maturity_max": 80,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["09-01", "01-15"],
+        "desert_transplant": ["09-15", "02-01"],
+        "desert_harvest": ["11-15", "04-01"],
+        "notes": "Fussier than broccoli — needs consistent temps and moisture. Snowball and Amazing varieties recommended for AZ. Blanch heads by tying leaves over curd.",
+        "companions": ["Onion", "Garlic", "Beet", "Celery", "Dill", "Nasturtium"],
+        "antagonists": ["Tomato", "Pepper", "Strawberry"],
+    },
+    {
+        "name": "Brussels Sprouts",
+        "category": "vegetable",
+        "subcategory": "brassica",
+        "days_to_maturity_min": 80,
+        "days_to_maturity_max": 110,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["09-01", "10-15"],
+        "desert_harvest": ["12-15", "03-15"],
+        "notes": "Long season crop — start indoors in Aug for fall transplant. Needs the full cool season. Frost improves flavor. Long Island Improved is reliable.",
+        "companions": ["Onion", "Garlic", "Beet", "Potato", "Dill", "Nasturtium"],
+        "antagonists": ["Tomato", "Pepper", "Strawberry", "Pole bean"],
+    },
+    {
+        "name": "Cabbage",
+        "category": "vegetable",
+        "subcategory": "brassica",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["09-01", "01-31"],
+        "desert_transplant": ["09-15", "02-15"],
+        "desert_harvest": ["11-15", "04-15"],
+        "notes": "Early Jersey Wakefield and Copenhagen Market do well in AZ. Can split if overwatered after dry spell. Mulch heavily.",
+        "companions": ["Onion", "Garlic", "Beet", "Celery", "Dill", "Nasturtium", "Rosemary"],
+        "antagonists": ["Tomato", "Pepper", "Strawberry", "Grape"],
+    },
+
+    # LEAFY GREENS
+    {
+        "name": "Swiss Chard",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 12,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "03-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-01", "05-31"],
+        "notes": "More heat-tolerant than spinach — one of the best desert leafy greens. Bright Lights variety is ornamental and productive. Cut-and-come-again harvest.",
+        "companions": ["Bean", "Brassicas", "Onion", "Lettuce"],
+        "antagonists": ["Corn", "Cucumber", "Melon"],
+    },
+    {
+        "name": "Collard Greens",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 55,
+        "days_to_maturity_max": 75,
+        "spacing_inches": 18,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 4,
+        "desert_sow_outdoor": ["09-15", "02-28"],
+        "desert_transplant": ["10-01", "03-15"],
+        "desert_harvest": ["11-15", "05-15"],
+        "notes": "Tougher than kale in the desert, handles more heat. Vates and Champion varieties recommended. Harvest lower leaves for continuous production.",
+        "companions": ["Onion", "Garlic", "Beet", "Potato", "Dill", "Nasturtium"],
+        "antagonists": ["Tomato", "Pepper", "Strawberry"],
+    },
+    {
+        "name": "Arugula",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 25,
+        "days_to_maturity_max": 40,
+        "spacing_inches": 6,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "03-01"],
+        "desert_transplant": None,
+        "desert_harvest": ["10-15", "04-01"],
+        "notes": "Very fast crop. Bolts in heat even faster than lettuce. Succession sow every 2 weeks Oct-Feb. Wild/sylvetta arugula is slower to bolt.",
+        "companions": ["Lettuce", "Spinach", "Carrot", "Beet", "Onion"],
+        "antagonists": ["Strawberry"],
+    },
+    {
+        "name": "Bok Choy",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 30,
+        "days_to_maturity_max": 50,
+        "spacing_inches": 8,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 4,
+        "desert_sow_outdoor": ["09-15", "02-15"],
+        "desert_transplant": ["10-01", "02-28"],
+        "desert_harvest": ["10-15", "04-01"],
+        "notes": "Fast-growing Asian green. Baby bok choy varieties mature in 30 days. Joi Choi is bolt-resistant. Must grow in cool season only.",
+        "companions": ["Onion", "Garlic", "Beet", "Celery", "Dill", "Nasturtium"],
+        "antagonists": ["Tomato", "Pepper", "Strawberry"],
+    },
+
+    # ROOT VEGETABLES
+    {
+        "name": "Sweet Potato",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 120,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-15", "06-01"],
+        "desert_harvest": ["07-15", "11-15"],
+        "notes": "Plant slips (not seeds) after last frost. Loves desert heat. Beauregard and Jewel varieties excel in AZ. Cure harvested tubers in sun for 10 days.",
+        "companions": ["Bean", "Corn", "Dill", "Thyme"],
+        "antagonists": ["Tomato", "Squash"],
+    },
+    {
+        "name": "Potato",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 75,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["01-01", "02-28"],
+        "desert_transplant": None,
+        "desert_harvest": ["04-01", "05-31"],
+        "notes": "Plant seed potatoes in Jan-Feb, harvest before heat. Red Pontiac and Yukon Gold work in AZ. Hill soil as plants grow. Stop watering when vines die back.",
+        "companions": ["Bean", "Corn", "Cabbage", "Horseradish", "Marigold", "Pea"],
+        "antagonists": ["Tomato", "Cucumber", "Squash", "Sunflower", "Raspberry"],
+    },
+    {
+        "name": "Turnip",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 35,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 4,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "02-28"],
+        "desert_transplant": None,
+        "desert_harvest": ["10-15", "04-15"],
+        "notes": "Fast root crop for cool season. Purple Top White Globe is classic. Hakurei (Japanese) turnips are sweet enough to eat raw. Greens are edible.",
+        "companions": ["Pea", "Bean", "Onion", "Garlic", "Lettuce"],
+        "antagonists": ["Potato", "Kale"],
+    },
+    {
+        "name": "Parsnip",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 100,
+        "days_to_maturity_max": 130,
+        "spacing_inches": 4,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "11-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["01-15", "04-15"],
+        "notes": "Very long season — plant early fall for winter/spring harvest. Use FRESH seed only (viability drops fast). Hollow Crown variety. Loosen soil deeply before planting.",
+        "companions": ["Pea", "Bean", "Onion", "Garlic", "Radish", "Pepper"],
+        "antagonists": ["Carrot", "Celery", "Dill"],
+    },
+
+    # WARM SEASON VEGETABLES
+    {
+        "name": "Okra",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 65,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 4,
+        "desert_sow_outdoor": ["03-15", "05-15"],
+        "desert_transplant": ["04-01", "05-31"],
+        "desert_harvest": ["05-15", "10-31"],
+        "notes": "Supreme desert performer — loves extreme heat. Clemson Spineless is reliable. Harvest pods at 3-4 inches; they get tough fast. Soak seeds 24h before planting.",
+        "companions": ["Pepper", "Eggplant", "Melon", "Cucumber", "Sunflower"],
+        "antagonists": [],
+    },
+    {
+        "name": "Artichoke",
+        "category": "vegetable",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 150,
+        "days_to_maturity_max": 180,
+        "spacing_inches": 48,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["09-15", "11-15"],
+        "desert_harvest": ["02-01", "05-15"],
+        "notes": "Grow as cool-season annual in AZ (too hot for perennial). Imperial Star is bred for annual production. Plant in fall, harvest spring. Goes dormant/dies in summer.",
+        "companions": ["Sunflower", "Pea", "Tarragon"],
+        "antagonists": [],
+    },
+    {
+        "name": "Asparagus",
+        "category": "vegetable",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1095,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "02-28"],
+        "desert_harvest": ["02-15", "05-15"],
+        "notes": "Plant crowns in winter. Don't harvest for 2-3 years while establishing. UC 157 is bred for warm climates. Needs deep, well-amended soil. Mulch heavily in summer.",
+        "companions": ["Tomato", "Parsley", "Basil", "Marigold"],
+        "antagonists": ["Onion", "Garlic"],
+    },
+    {
+        "name": "Celery",
+        "category": "vegetable",
+        "subcategory": "stalk",
+        "days_to_maturity_min": 85,
+        "days_to_maturity_max": 120,
+        "spacing_inches": 8,
+        "sun": "partial",
+        "water": "high",
+        "heat_tolerance": "low",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 10,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["09-15", "11-15"],
+        "desert_harvest": ["01-01", "04-01"],
+        "notes": "Very slow to germinate (2-3 weeks). Needs consistent moisture — never let dry out. Utah Tall is standard. Cutting celery is easier for beginners. Partial shade required in AZ.",
+        "companions": ["Bean", "Brassicas", "Tomato", "Onion", "Leek"],
+        "antagonists": ["Corn", "Potato", "Parsnip"],
+    },
+    {
+        "name": "Leek",
+        "category": "vegetable",
+        "subcategory": "allium",
+        "days_to_maturity_min": 80,
+        "days_to_maturity_max": 120,
+        "spacing_inches": 6,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": ["09-15", "11-15"],
+        "desert_transplant": ["10-01", "12-15"],
+        "desert_harvest": ["01-15", "04-30"],
+        "notes": "Start indoors Aug-Sep, transplant Oct-Dec. Hill soil around stems to blanch. American Flag and King Richard varieties work well. More heat-sensitive than onion.",
+        "companions": ["Carrot", "Celery", "Onion", "Brassicas"],
+        "antagonists": ["Bean", "Pea"],
+    },
+    {
+        "name": "Green Onion",
+        "category": "vegetable",
+        "subcategory": "allium",
+        "days_to_maturity_min": 30,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 2,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "04-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["10-15", "05-31"],
+        "notes": "Fastest allium. Direct sow or regrow from store-bought roots. Evergreen Hardy White is reliable. Succession plant every 3 weeks. Can handle some heat with shade.",
+        "companions": ["Carrot", "Lettuce", "Tomato", "Beet", "Brassicas"],
+        "antagonists": ["Bean", "Pea"],
+    },
+
+    # CUCURBITS (specific varieties)
+    {
+        "name": "Watermelon",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 70,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 60,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["03-01", "04-15"],
+        "desert_transplant": ["03-15", "05-01"],
+        "desert_harvest": ["06-15", "09-15"],
+        "notes": "Desert watermelons are exceptionally sweet. Crimson Sweet, Sugar Baby, and Ali Baba thrive in AZ heat. Reduce water as fruit ripens for better flavor. Thump test for ripeness.",
+        "companions": ["Corn", "Sunflower", "Nasturtium", "Radish", "Marigold"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Cantaloupe",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 70,
+        "days_to_maturity_max": 85,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["03-01", "04-15"],
+        "desert_transplant": ["03-15", "04-30"],
+        "desert_harvest": ["06-01", "08-31"],
+        "notes": "Arizona is famous for sweet cantaloupes. Hale's Best Jumbo was bred for the desert. Fruit slips from vine when ripe. Back off water in final 2 weeks.",
+        "companions": ["Corn", "Sunflower", "Nasturtium", "Radish"],
+        "antagonists": ["Potato", "Cucumber"],
+    },
+    {
+        "name": "Pumpkin",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 120,
+        "spacing_inches": 60,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["03-01", "04-01"],
+        "desert_transplant": ["03-15", "04-15"],
+        "desert_harvest": ["06-15", "10-31"],
+        "notes": "Can also do a monsoon planting in July for Halloween pumpkins. Small Sugar and Jack Be Little mature faster. Shade cloth helps fruit set during peak heat.",
+        "companions": ["Corn", "Bean", "Nasturtium", "Marigold"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Winter Squash",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 80,
+        "days_to_maturity_max": 110,
+        "spacing_inches": 48,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["02-15", "03-31"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["06-01", "10-31"],
+        "notes": "Acorn, spaghetti, and delicata squash all do well. Cure in sun for 10 days after harvest. Store in cool dry place for months.",
+        "companions": ["Corn", "Bean", "Nasturtium", "Marigold", "Radish"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Butternut Squash",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 85,
+        "days_to_maturity_max": 110,
+        "spacing_inches": 48,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["02-15", "03-31"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["06-01", "10-31"],
+        "notes": "Waltham Butternut is standard. More heat-tolerant and vine-borer resistant than other winter squash. Cure 2 weeks in shade after harvest. Stores 3-6 months.",
+        "companions": ["Corn", "Bean", "Nasturtium", "Marigold"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Zucchini",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 40,
+        "days_to_maturity_max": 55,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["02-15", "04-01"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["04-01", "07-31"],
+        "notes": "Incredibly prolific. Black Beauty and Costata Romanesco are great varieties. Harvest at 6-8 inches. Can do a second fall planting in August. One plant feeds a family.",
+        "companions": ["Corn", "Bean", "Nasturtium", "Marigold", "Radish"],
+        "antagonists": ["Potato"],
+    },
+
+    # SOLANACEAE (specific hot pepper varieties)
+    {
+        "name": "Tomatillo",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 80,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["02-15", "03-15"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["05-15", "10-31"],
+        "notes": "Plant at least 2 for cross-pollination. More heat-tolerant than tomato — keeps producing through summer. Toma Verde and Purple varieties do great in AZ. Harvest when husk splits.",
+        "companions": ["Basil", "Pepper", "Marigold", "Carrot", "Onion"],
+        "antagonists": ["Fennel", "Brassicas", "Dill"],
+    },
+    {
+        "name": "Ground Cherry",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 65,
+        "days_to_maturity_max": 80,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["06-01", "10-31"],
+        "notes": "Aunt Molly's is the standard variety. Fruits drop when ripe — lay mulch to keep clean. More heat-tolerant than tomato. Prolific self-seeder. Sweet pineapple-like flavor.",
+        "companions": ["Basil", "Pepper", "Marigold", "Parsley"],
+        "antagonists": ["Fennel", "Brassicas"],
+    },
+    {
+        "name": "Jalapeno",
+        "category": "vegetable",
+        "subcategory": "hot pepper",
+        "days_to_maturity_min": 65,
+        "days_to_maturity_max": 80,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": ["02-15", "04-01"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["05-15", "11-15"],
+        "notes": "TAM Jalapeno is milder; Early Jalapeno matures faster. Stress (less water, more heat) increases capsaicin. Let some ripen to red for chipotle-style. Exceptional AZ performer.",
+        "companions": ["Tomato", "Basil", "Carrot", "Onion", "Marigold"],
+        "antagonists": ["Fennel", "Brassicas"],
+    },
+    {
+        "name": "Habanero",
+        "category": "vegetable",
+        "subcategory": "hot pepper",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 120,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 10,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["06-15", "11-15"],
+        "notes": "Needs long warm season — start indoors early Jan. Caribbean Red and Orange varieties. Desert heat intensifies flavor. Can overwinter in AZ with protection.",
+        "companions": ["Tomato", "Basil", "Carrot", "Onion", "Marigold"],
+        "antagonists": ["Fennel", "Brassicas"],
+    },
+    {
+        "name": "Serrano",
+        "category": "vegetable",
+        "subcategory": "hot pepper",
+        "days_to_maturity_min": 70,
+        "days_to_maturity_max": 85,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": ["02-15", "04-01"],
+        "desert_transplant": ["03-01", "04-15"],
+        "desert_harvest": ["05-15", "11-15"],
+        "notes": "More prolific than jalapeno. Thrives in AZ heat. Pick green or let ripen to red. Dries well. Shade cloth above 110F helps prevent sunscald on fruit.",
+        "companions": ["Tomato", "Basil", "Carrot", "Onion", "Marigold"],
+        "antagonists": ["Fennel", "Brassicas"],
+    },
+
+    # FRUITS
+    {
+        "name": "Strawberry",
+        "category": "fruit",
+        "subcategory": "berry",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 12,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["09-15", "11-15"],
+        "desert_harvest": ["01-15", "05-15"],
+        "notes": "Plant bare-root crowns in fall. Chandler, Camarosa, and Sweet Charlie do well in AZ. Treat as cool-season annual — plants decline in summer heat. Mulch heavily.",
+        "companions": ["Lettuce", "Spinach", "Onion", "Borage", "Bean"],
+        "antagonists": ["Brassicas", "Fennel"],
+    },
+    {
+        "name": "Fig",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 180,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "02-28"],
+        "desert_harvest": ["06-01", "10-31"],
+        "notes": "Exceptional desert fruit tree. Black Mission, Kadota, and Brown Turkey thrive in AZ. Two crops per year (breba + main). Needs deep watering. Can grow in large containers.",
+        "companions": ["Nasturtium", "Comfrey", "Marigold"],
+        "antagonists": [],
+    },
+    {
+        "name": "Pomegranate",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1095,
+        "spacing_inches": 180,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "02-28"],
+        "desert_harvest": ["09-01", "11-30"],
+        "notes": "Perfect desert fruit — drought-tolerant, heat-loving. Wonderful variety is standard. Fruit splits if watering is inconsistent during ripening. Prune to 3-5 trunks.",
+        "companions": ["Basil", "Nasturtium", "Marigold"],
+        "antagonists": [],
+    },
+    {
+        "name": "Grape",
+        "category": "fruit",
+        "subcategory": "vine",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1095,
+        "spacing_inches": 96,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "02-28"],
+        "desert_harvest": ["06-15", "09-30"],
+        "notes": "Table grapes do great in AZ heat. Thompson Seedless, Flame Seedless, and Black Monukka. Needs sturdy trellis. Prune hard in winter. Bird netting essential for harvest.",
+        "companions": ["Basil", "Bean", "Pea", "Clover"],
+        "antagonists": ["Cabbage", "Radish"],
+    },
+    {
+        "name": "Lemon",
+        "category": "fruit",
+        "subcategory": "citrus",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 180,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "04-30"],
+        "desert_harvest": ["11-01", "04-30"],
+        "notes": "Meyer Lemon is the go-to for AZ — more cold-hardy than true lemons. Eureka for year-round production. Protect from frost (below 28F). Deep water every 7-10 days in summer.",
+        "companions": ["Nasturtium", "Marigold", "Borage", "Lavender"],
+        "antagonists": [],
+    },
+    {
+        "name": "Orange",
+        "category": "fruit",
+        "subcategory": "citrus",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1095,
+        "spacing_inches": 240,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "04-30"],
+        "desert_harvest": ["12-01", "04-30"],
+        "notes": "Arizona Sweet and Trovita oranges bred for desert. Washington Navel is classic. Frost protection needed below 28F. AZ citrus is sweeter due to hot days/cool nights.",
+        "companions": ["Nasturtium", "Marigold", "Borage"],
+        "antagonists": [],
+    },
+    {
+        "name": "Grapefruit",
+        "category": "fruit",
+        "subcategory": "citrus",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1095,
+        "spacing_inches": 240,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "04-30"],
+        "desert_harvest": ["11-01", "05-31"],
+        "notes": "AZ is premier grapefruit country. Rio Red and Marsh are standards. Needs more heat units than other citrus — perfect for Phoenix area. Fruit can stay on tree for months.",
+        "companions": ["Nasturtium", "Marigold", "Borage"],
+        "antagonists": [],
+    },
+    {
+        "name": "Blackberry",
+        "category": "fruit",
+        "subcategory": "berry",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 48,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "02-28"],
+        "desert_harvest": ["05-01", "07-15"],
+        "notes": "Needs afternoon shade in AZ. Brazos and Rosborough are heat-tolerant varieties. Thornless types (Arapaho) easier to manage. Mulch heavily. Prune spent canes after fruiting.",
+        "companions": ["Tansy", "Garlic", "Nasturtium"],
+        "antagonists": ["Potato", "Tomato"],
+    },
+    {
+        "name": "Raspberry",
+        "category": "fruit",
+        "subcategory": "berry",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 36,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "02-28"],
+        "desert_harvest": ["04-01", "06-15"],
+        "notes": "Challenging in AZ heat — needs afternoon shade and consistent moisture. Bababerry and Dorman Red are most heat-tolerant. Growing in containers with shade cloth is best strategy.",
+        "companions": ["Garlic", "Tansy", "Nasturtium"],
+        "antagonists": ["Potato", "Tomato", "Blackberry"],
+    },
+
+    # DESERT NATIVES / ADAPTED
+    {
+        "name": "Prickly Pear",
+        "category": "vegetable",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 60,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "09-30"],
+        "desert_harvest": ["07-01", "10-31"],
+        "notes": "Opuntia ficus-indica is the edible species. Both pads (nopales) and fruit (tunas) are edible. Plant pad directly in soil — roots in weeks. Zero supplemental water once established. Sonoran native.",
+        "companions": [],
+        "antagonists": [],
+    },
+    {
+        "name": "Moringa",
+        "category": "vegetable",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 180,
+        "spacing_inches": 120,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["03-15", "05-15"],
+        "desert_transplant": ["04-01", "06-01"],
+        "desert_harvest": ["06-01", "11-30"],
+        "notes": "Grows incredibly fast — 10+ ft in one season. Leaves, pods, and flowers all edible. Freezes to ground below 32F but regrows from roots in AZ. Cut back hard to keep manageable.",
+        "companions": [],
+        "antagonists": [],
+    },
+    {
+        "name": "Jujube",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1460,
+        "spacing_inches": 180,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "03-31"],
+        "desert_harvest": ["08-01", "11-30"],
+        "notes": "Perfect desert fruit tree — drought-tolerant, handles 115F+ and freezes. Li and Lang are best varieties. Fruit tastes like apple when fresh. Nearly pest-free. Minimal pruning needed.",
+        "companions": [],
+        "antagonists": [],
+    },
+    {
+        "name": "Date Palm",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 2555,
+        "days_to_maturity_max": 3650,
+        "spacing_inches": 360,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": ["09-01", "12-31"],
+        "notes": "Phoenix means 'land of dates' — Medjool dates are grown commercially here. Needs extreme heat to ripen fruit. Female trees produce fruit (need male for pollination). 7-10 years to first fruit from offshoot.",
+        "companions": [],
+        "antagonists": [],
+    },
+    {
+        "name": "Armenian Cucumber",
+        "category": "vegetable",
+        "subcategory": "fruit",
+        "days_to_maturity_min": 55,
+        "days_to_maturity_max": 75,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 3,
+        "desert_sow_outdoor": ["03-01", "04-30"],
+        "desert_transplant": ["03-15", "05-15"],
+        "desert_harvest": ["05-01", "09-30"],
+        "notes": "Technically a melon (C. melo) but tastes like cucumber. THE cucumber for desert gardens — produces through 110F+ heat when regular cucumbers fail. Harvest at 12-18 inches. Needs trellis.",
+        "companions": ["Bean", "Corn", "Pea", "Radish", "Sunflower"],
+        "antagonists": ["Potato", "Aromatic herbs (sage, mint)"],
+    },
+    {
+        "name": "Tepary Bean",
+        "category": "vegetable",
+        "subcategory": "legume",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 6,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["03-15", "08-01"],
+        "desert_transplant": None,
+        "desert_harvest": ["06-01", "10-31"],
+        "notes": "Native Sonoran Desert legume — thrives on monsoon rain alone. Phaseolus acutifolius. White, brown, and speckled varieties. Higher protein than common bean. Traditional O'odham crop. Extreme drought tolerance.",
+        "companions": ["Corn", "Squash", "Sunflower"],
+        "antagonists": ["Onion", "Garlic"],
+    },
+    {
+        "name": "Malabar Spinach",
+        "category": "vegetable",
+        "subcategory": "leafy green",
+        "days_to_maturity_min": 55,
+        "days_to_maturity_max": 70,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 4,
+        "desert_sow_outdoor": ["04-01", "06-01"],
+        "desert_transplant": ["04-15", "06-15"],
+        "desert_harvest": ["05-15", "10-31"],
+        "notes": "THE summer spinach substitute for desert. Basella alba — vining plant, needs trellis. Thick succulent leaves, mild flavor. Loves heat and humidity (thrives in monsoon). Red-stemmed variety is ornamental.",
+        "companions": ["Corn", "Sunflower", "Bean"],
+        "antagonists": [],
+    },
+    {
+        "name": "Roselle",
+        "category": "vegetable",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 120,
+        "days_to_maturity_max": 150,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["03-15", "04-30"],
+        "desert_transplant": ["04-01", "05-15"],
+        "desert_harvest": ["09-01", "12-01"],
+        "notes": "Hibiscus sabdariffa — the plant behind hibiscus tea (jamaica). Calyces harvested after flowering in fall. Thrives in AZ monsoon heat. Start early indoors — needs long season. Beautiful ornamental shrub 5-6ft tall.",
+        "companions": ["Okra", "Sunflower"],
+        "antagonists": [],
+    },
+
+    # HERBS (missing)
+    {
+        "name": "Thyme",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 70,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["01-01", "12-31"],
+        "notes": "Extremely drought-tolerant perennial. Plant from starts. English and French thyme both thrive in AZ. Excellent ground cover. Prefers well-drained soil — amend clay with gravel.",
+        "companions": ["Tomato", "Eggplant", "Strawberry", "Brassicas", "Rose"],
+        "antagonists": [],
+    },
+    {
+        "name": "Sage",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 75,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["01-01", "12-31"],
+        "notes": "Desert garden staple. Common sage (Salvia officinalis) handles AZ heat/cold. Cleveland sage is native. Prune after flowering. Needs good drainage — never overwater.",
+        "companions": ["Rosemary", "Brassicas", "Carrot", "Strawberry"],
+        "antagonists": ["Cucumber", "Basil", "Rue"],
+    },
+    {
+        "name": "Dill",
+        "category": "herb",
+        "subcategory": "annual",
+        "days_to_maturity_min": 40,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "02-28"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-15", "04-15"],
+        "notes": "Direct sow only — hates transplanting. Bouquet and Fernleaf varieties. Bolts fast in heat. Let some go to seed for self-sowing. Attracts swallowtail butterflies and beneficial wasps.",
+        "companions": ["Brassicas", "Lettuce", "Onion", "Cucumber"],
+        "antagonists": ["Carrot", "Tomato (mature dill)", "Cilantro"],
+    },
+    {
+        "name": "Chive",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 8,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["10-01", "02-28"],
+        "desert_transplant": ["10-15", "03-15"],
+        "desert_harvest": ["11-01", "05-31"],
+        "notes": "Perennial allium — goes dormant in AZ summer heat but returns in fall. Edible purple flowers. Repels aphids. Grow from divisions for fastest results. Garlic chives are more heat-tolerant.",
+        "companions": ["Carrot", "Tomato", "Rose", "Apple"],
+        "antagonists": ["Bean", "Pea"],
+    },
+    {
+        "name": "Parsley",
+        "category": "herb",
+        "subcategory": "biennial",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 80,
+        "spacing_inches": 8,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["09-15", "02-28"],
+        "desert_transplant": ["10-01", "03-15"],
+        "desert_harvest": ["11-01", "05-31"],
+        "notes": "Italian flat-leaf has better flavor; curly is more ornamental. Slow to germinate (soak seeds 24h). Good cool-to-warm season herb in AZ. Attracts swallowtail butterflies.",
+        "companions": ["Tomato", "Asparagus", "Corn", "Rose"],
+        "antagonists": ["Lettuce", "Mint"],
+    },
+    {
+        "name": "Lavender",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 200,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["04-01", "06-30"],
+        "notes": "Spanish lavender (L. stoechas) and Goodwin Creek Grey are most heat-tolerant for AZ. English lavender struggles in monsoon humidity. Must have excellent drainage — raised beds or amended soil. Never overwater.",
+        "companions": ["Rose", "Thyme", "Sage", "Rosemary", "Citrus"],
+        "antagonists": [],
+    },
+    {
+        "name": "Lemongrass",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 75,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-15", "05-31"],
+        "desert_harvest": ["06-01", "11-30"],
+        "notes": "Root store-bought stalks in water to propagate. Thrives in AZ summer heat and monsoon. Grows into large 3-4ft clump. Dies back in winter but returns from roots. Mosquito-repellent qualities.",
+        "companions": ["Tomato", "Pepper", "Citrus"],
+        "antagonists": [],
+    },
+    {
+        "name": "Mexican Tarragon",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": ["04-15", "11-30"],
+        "notes": "Tagetes lucida — desert substitute for French tarragon which can't handle AZ heat. Anise/tarragon flavor. Yellow marigold-like flowers in fall attract pollinators. Dies back in winter, returns from roots.",
+        "companions": ["Pepper", "Tomato", "Eggplant"],
+        "antagonists": [],
+    },
+
+    # COMPANION FLOWERS (missing)
+    {
+        "name": "Zinnia",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 45,
+        "days_to_maturity_max": 65,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["02-15", "09-01"],
+        "desert_transplant": None,
+        "desert_harvest": ["04-15", "11-30"],
+        "notes": "Outstanding desert flower — thrives in extreme heat. Direct sow. Giant varieties for cutting; Profusion series for disease resistance. Deadhead for continuous blooms. Attracts butterflies and beneficial insects.",
+        "companions": ["Tomato", "Pepper", "Squash", "Bean", "Cucumber"],
+        "antagonists": [],
+    },
+    {
+        "name": "Cosmos",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 70,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["02-15", "04-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["04-15", "11-30"],
+        "notes": "Direct sow — easy and drought-tolerant. Cosmos sulphureus (yellow/orange) is more heat-tolerant than C. bipinnatus. Attracts lacewings and parasitic wasps that eat garden pests.",
+        "companions": ["Tomato", "Pepper", "Squash", "Corn"],
+        "antagonists": [],
+    },
+    {
+        "name": "Borage",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 65,
+        "spacing_inches": 18,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "03-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-15", "05-31"],
+        "notes": "Edible blue flowers. Major pollinator magnet. Improves strawberry and tomato flavor/yield as companion. Self-seeds aggressively. Plant in cool season — declines in extreme heat.",
+        "companions": ["Tomato", "Strawberry", "Squash", "Brassicas"],
+        "antagonists": [],
+    },
+    {
+        "name": "Calendula",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 45,
+        "days_to_maturity_max": 60,
+        "spacing_inches": 12,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "02-28"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-01", "04-30"],
+        "notes": "Edible flowers (pot marigold). Cool-season flower in AZ. Attracts beneficial hoverflies. Trap crop for aphids. Reseda and Pacific Beauty varieties. Self-seeds freely.",
+        "companions": ["Tomato", "Pepper", "Asparagus", "Brassicas"],
+        "antagonists": [],
+    },
+    {
+        "name": "Sweet Alyssum",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 40,
+        "days_to_maturity_max": 55,
+        "spacing_inches": 6,
+        "sun": "full to partial",
+        "water": "low",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["09-15", "03-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["10-15", "05-31"],
+        "notes": "Excellent living mulch and ground cover. Attracts parasitic wasps, hoverflies, and lacewings. Plant around vegetable beds as pest control border. Self-seeds. Dies in extreme summer heat but returns in fall.",
+        "companions": ["Brassicas", "Potato", "Grape", "Rose"],
+        "antagonists": [],
+    },
+
+    # TREES & VINES
+    {
+        "name": "Indian Laurel",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 1095,
+        "days_to_maturity_max": 1825,
+        "spacing_inches": 360,
+        "sun": "full to partial",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": None,
+        "notes": "Ficus microcarpa nitida. Extremely popular AZ landscape tree used for privacy hedges and walls. AGGRESSIVE ROOT SYSTEM — plant 30-50ft from structures, sidewalks, and sewer lines. Roots lift concrete and invade plumbing. Avoid western exposure in AZ as trunk sunburns. Tolerates heavy pruning into columnar/hedge shapes. Drought-tolerant once established. Can grow 50ft+ tall and 70ft+ wide if unpruned. Column varieties stay 3-5ft wide. Thrips cause leaf curling — mainly cosmetic.",
+        "companions": [],
+        "antagonists": [],
+    },
+    {
+        "name": "Desert Gold Peach",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1095,
+        "spacing_inches": 240,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["11-01", "01-31"],
+        "desert_harvest": ["05-15", "06-15"],
+        "notes": "Low-chill peach (250 hrs) bred for desert climates. Self-fertile — single tree produces fruit. Sweet yellow freestone fruit ripens late May-early June in AZ. Plant bare-root in fall/winter for best establishment before summer. Requires annual dormant pruning for fruit production. Apply copper fungicide spray in January for peach leaf curl prevention. Amend soil 50/50 with compost, add sulfur if pH > 7.0. Mulch 2-3in thick but keep 6in from trunk. Deep water 2-3x/week in summer. Heavy feeder — fertilize with 10-10-10 six weeks after planting.",
+        "companions": ["Basil", "Nasturtium", "Marigold", "Garlic", "Tansy", "Chive"],
+        "antagonists": [],
+    },
+    {
+        "name": "Tangerine Crossvine",
+        "category": "flower",
+        "subcategory": "vine",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1460,
+        "spacing_inches": 72,
+        "sun": "full to partial",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["03-01", "05-31"],
+        "notes": "Bignonia capreolata 'Tangerine Beauty'. Semi-evergreen native vine with stunning orange-red trumpet flowers with yellow throats in spring. REQUIRES TRELLIS — climbs by tendrils with adhesive discs, can reach 30ft. Excellent in 4x2 planter with trellis. Blooms on old wood — prune only after flowering. Drought-tolerant once established but looks best with regular water. Nearly pest and disease free. Attracts hummingbirds and butterflies. Can be aggressive grower — prune to control. Hardy zones 5-9.",
+        "companions": ["Nasturtium", "Marigold", "Lavender"],
+        "antagonists": [],
+    },
+
+    # POLLINATOR SHRUBS & NATIVE WILDFLOWERS
+    {
+        "name": "Barbados Cherry",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 730,
+        "days_to_maturity_max": 1460,
+        "spacing_inches": 120,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": ["05-01", "11-30"],
+        "notes": "Malpighia emarginata (Acerola). Extremely high vitamin C fruit — 50-100x more than oranges. Grows 8-12ft tall and wide in AZ. Hardy to 28-30F (protect young trees from frost). Bubbler irrigate every 10 days when fruiting, monthly otherwise. Avoid high nitrogen — inhibits flowering. Apply citrus micronutrient solution mid-winter. Up to 40 productive years. Fruit must be eaten fresh or frozen within hours of picking. Plant in protected south-facing microclimate in Zone 9b.",
+        "companions": ["Nasturtium", "Marigold", "Basil"],
+        "antagonists": [],
+    },
+    {
+        "name": "Baja Fairy Duster",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 48,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": None,
+        "notes": "Calliandra californica. Evergreen shrub 3-5ft tall with stunning red pom-pom flowers that bloom year-round, peaking spring-fall. Top hummingbird, bee, and butterfly magnet. Cold hardy to 22F (roots survive 5F). Water 1-2x/month in winter, weekly in dry summer. Tolerates all AZ soils. Selective prune in fall/spring for density — never shear. Nearly zero maintenance once established. Available at Moon Valley Nurseries.",
+        "companions": ["Blackfoot Daisy", "Moss Verbena", "Parry's Penstemon"],
+        "antagonists": [],
+    },
+    {
+        "name": "Parry's Penstemon",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "12-31"],
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": None,
+        "notes": "Penstemon parryi. Arizona native wildflower — harbinger of spring. Sends up 3-5ft flower stalks covered with dozens of bright rose-pink tubular flowers in March-April. Cold hardy to 10F. Sow seed in fall for spring blooms (takes 2 years from seed to first bloom). Prone to root rot in poorly drained soils — needs sandy/gravelly alkaline soil. More likely to die from overwatering than neglect. Deadhead spent flowers to extend bloom. Self-seeds reliably. Seeds available from Native Seeds/SEARCH.",
+        "companions": ["Blackfoot Daisy", "Baja Fairy Duster", "Desert Milkweed"],
+        "antagonists": [],
+    },
+    {
+        "name": "Sparky Tecoma",
+        "category": "flower",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 60,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": None,
+        "notes": "Tecoma 'Sparky'. Named after ASU's mascot — apricot-yellow flowers with reddish-orange throats. Compact 5-6ft tall x 4-5ft wide. Blooms early summer through late fall (9 months of color). Produces few/no seed pods. Prune frost damage in March. Slightly more cold-tender than 'Orange Jubilee' — protect in cooler microclimates. Watch for caterpillars in late summer (skeletonized leaves). Major hummingbird and butterfly attractor. Available at most AZ nurseries.",
+        "companions": ["Baja Fairy Duster", "Purple Trailing Lantana", "Blackfoot Daisy"],
+        "antagonists": [],
+    },
+    {
+        "name": "Blackfoot Daisy",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 180,
+        "days_to_maturity_max": 365,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "11-30"],
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": None,
+        "notes": "Melampodium leucanthum. Low mounded perennial 6-12in tall, 12-24in wide. White honey-scented daisies with yellow centers bloom spring through frost if occasionally watered. Needs excellent drainage — rocky/gravelly poor soil is ideal. Do NOT fertilize. Deep water 2-3x/month in summer, 1x/month in winter. Cut back halfway in late winter to keep compact. Deadheading not needed — ever-blooming. Native to AZ mesas and slopes. Attracts bees and butterflies.",
+        "companions": ["Parry's Penstemon", "Moss Verbena", "Baja Fairy Duster"],
+        "antagonists": [],
+    },
+    {
+        "name": "Moss Verbena",
+        "category": "flower",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 180,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "03-31"],
+        "desert_transplant": ["10-01", "04-30"],
+        "desert_harvest": None,
+        "notes": "Glandularia pulchella (syn. Verbena tenuisecta). Low-growing evergreen groundcover 8-12in tall, spreading 3-6ft wide. Striking purple flower clusters nearly year-round. Excellent pollinator attractor — irresistible to bees and butterflies. Tolerates poor, sandy, alkaline soil. Let dry between waterings — overwatering causes root rot and reduces flowering. Lacy, fern-like foliage. Self-seeds prolifically. Great as living mulch around other desert plants.",
+        "companions": ["Blackfoot Daisy", "Parry's Penstemon", "Purple Trailing Lantana"],
+        "antagonists": [],
+    },
+    {
+        "name": "Purple Trailing Lantana",
+        "category": "flower",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 180,
+        "days_to_maturity_max": 365,
+        "spacing_inches": 48,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": None,
+        "notes": "Lantana montevidensis. Fast-growing groundcover 1ft tall, spreading 3-5ft wide. Lavender-purple flowers spring through fall. Top butterfly, bee, and hummingbird attractor. Thrives in reflected heat off sidewalks/walls. Plant after last frost. Weekly water in summer once established, every 2-3 weeks in winter. Prune 1-2x/year. Cold hardy to 10F (may die back but regrows). CAUTION: Mildly toxic to pets/children if consumed. Available at all AZ nurseries. Not native but thoroughly desert-adapted.",
+        "companions": ["Sparky Tecoma", "Moss Verbena", "Blackfoot Daisy"],
+        "antagonists": [],
+    },
+
+    # YUCCA & YUCCA-LIKE (Pollinator-Friendly for AZ)
+    {
+        "name": "Soaptree Yucca",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 1095,
+        "days_to_maturity_max": 2555,
+        "spacing_inches": 96,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": None,
+        "notes": "Yucca elata. Sonoran/Chihuahuan desert native. Develops trunk 6-15ft tall with dramatic 3-5ft white flower spikes in late spring. Mutualistic pollination with yucca moths (Tegeticula). Zero supplemental water once established. Flowers are edible (sweet, like Belgian endive). Slow growing. Excellent structural accent plant. Extremely long-lived. Sharp leaf tips — site away from pathways.",
+        "companions": ["Blackfoot Daisy", "Desert Milkweed", "Moss Verbena"],
+        "antagonists": [],
+    },
+    {
+        "name": "Banana Yucca",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 1095,
+        "days_to_maturity_max": 2555,
+        "spacing_inches": 72,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": None,
+        "notes": "Yucca baccata. Native to AZ mountains and mesas. Trunkless or short-trunked, 2-5ft tall with stiff blue-green leaves. Large fleshy banana-shaped fruits are edible (roasted or dried by indigenous peoples). Pollinated by yucca moth Tegeticula baccatella. Extremely cold and drought hardy. Slow growing. Produces offsets — can form large clumps over time. Prefers rocky, well-drained soil.",
+        "companions": ["Blackfoot Daisy", "Parry's Penstemon"],
+        "antagonists": [],
+    },
+    {
+        "name": "Mojave Yucca",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 1825,
+        "days_to_maturity_max": 3650,
+        "spacing_inches": 72,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": None,
+        "notes": "Yucca schidigera (Spanish Dagger). Native to western AZ, found at 1000-6000ft elevation. Tree-form yucca to 15ft tall, 5ft wide. Dense crown of bayonet-like leaves. Very slow growing (~1in/year). Incredibly long-lived (200+ years). Mutualistic yucca moth pollination. Zero supplemental water. Loamy, sandy, well-drained soil. Sharp leaf tips — keep away from walkways.",
+        "companions": ["Blackfoot Daisy", "Desert Milkweed"],
+        "antagonists": [],
+    },
+    {
+        "name": "Red Yucca",
+        "category": "flower",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 72,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "04-30"],
+        "desert_harvest": None,
+        "notes": "Hesperaloe parviflora. NOT a true yucca — in asparagus family. Chihuahuan desert native. Basal clump 3-4ft tall, 6ft wide with arching blue-green spineless leaves. Coral-red tubular flowers on 3-5ft stalks bloom spring through fall — #1 hummingbird magnet in AZ landscapes. Attracts night-pollinating moths too. Zero maintenance once established. Needs excellent drainage. One of the best-performing landscape succulents for low desert AZ. Available everywhere — Moon Valley, Star Nursery, Home Depot.",
+        "companions": ["Blackfoot Daisy", "Moss Verbena", "Baja Fairy Duster"],
+        "antagonists": [],
+    },
+
+    # MILKWEEDS (AZ Native — Monarch & Queen Butterfly Host Plants)
+    {
+        "name": "Desert Milkweed",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 48,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "12-31"],
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": None,
+        "notes": "Asclepias subulata (Rush Milkweed). Sonoran Desert native. Leafless green stems 3-5ft tall in clumps. White/cream flower clusters spring-summer. Host plant for Monarch and Queen butterflies. Nectar source for Tarantula Hawk wasp. Extremely drought and heat tolerant. Spreads by underground runners — can be aggressive. Plant in contained area or away from beds. Milky sap is toxic — wear gloves when handling. Seeds available at Desert Botanical Garden shop and Spadefoot Nursery.",
+        "companions": ["Parry's Penstemon", "Blackfoot Daisy", "Baja Fairy Duster"],
+        "antagonists": [],
+    },
+    {
+        "name": "Pine-leaf Milkweed",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 24,
+        "sun": "full to partial",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "12-31"],
+        "desert_transplant": ["10-01", "04-30"],
+        "desert_harvest": None,
+        "notes": "Asclepias linaria. AZ native with fine pine-needle-like foliage. Compact 2-3ft tall. White flower clusters spring-summer, extending to Aug-Sep to support migratory Monarch generation. Host plant for Monarch and Queen butterflies. Less aggressive than Desert Milkweed — well-behaved clumper. Drought tolerant once established. Sandy, well-drained soil. Seeds available from Spadefoot Nursery and Desert Botanical Garden.",
+        "companions": ["Parry's Penstemon", "Blackfoot Daisy", "Moss Verbena"],
+        "antagonists": [],
+    },
+    {
+        "name": "Butterfly Weed",
+        "category": "flower",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 18,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["10-01", "12-31"],
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": None,
+        "notes": "Asclepias tuberosa. Vibrant orange flower clusters summer-fall. 1-2ft tall. Growing season extends to Aug-Sep to support migratory Monarch generation. Attracts butterflies, bees, and hummingbirds. Deep taproot makes transplanting difficult — direct sow preferred. Does NOT spread by runners like other milkweeds. Cold-stratify seeds 4-6 weeks before sowing. Well-drained soil essential. Dies back in winter, returns from taproot. Hardiest milkweed for AZ. Seeds from American Meadows, High Country Gardens.",
+        "companions": ["Blackfoot Daisy", "Moss Verbena", "Parry's Penstemon"],
+        "antagonists": [],
+    },
+    {
+        "name": "Showy Milkweed",
+        "category": "flower",
+        "subcategory": "desert adapted",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["10-01", "12-31"],
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": None,
+        "notes": "Asclepias speciosa. Large showy pinkish-purple flower clusters. 2-4ft tall. Growing season extends to Aug-Sep for migratory Monarch generation. Spreads aggressively by underground rhizomes — MUST be contained or given dedicated area. Needs more water than other AZ milkweeds. Tolerates different soil types. Dies back in winter. Cold-stratify seeds. Best in northern AZ or irrigated beds in Phoenix metro. Important Monarch host plant.",
+        "companions": ["Butterfly Weed", "Parry's Penstemon"],
+        "antagonists": [],
+    },
+    {
+        "name": "Arizona Milkweed",
+        "category": "flower",
+        "subcategory": "desert native",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 18,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["10-01", "12-31"],
+        "desert_transplant": ["03-01", "05-31"],
+        "desert_harvest": None,
+        "notes": "Asclepias angustifolia. Native ONLY to Arizona in the US. Well-behaved clumping milkweed 2-3ft tall — does NOT spread aggressively by runners. Nearly continuous white flowers spring through fall. Host for Monarch and Queen butterflies. Prefers partial shade in low desert (east or north side of house). Narrow graceful green leaves. Hardy to 15F. Naturally found at 3500-7500ft elevation but adaptable to lower desert with afternoon shade. Seeds from Borderlands Plants, Spadefoot Nursery.",
+        "companions": ["Pine-leaf Milkweed", "Parry's Penstemon", "Blackfoot Daisy"],
+        "antagonists": [],
+    },
+    # ── SNAPDRAGON ──
+    {
+        "name": "Snapdragon",
+        "category": "flower",
+        "subcategory": "annual/perennial",
+        "days_to_maturity_min": 80,
+        "days_to_maturity_max": 100,
+        "spacing_inches": 8,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 8,
+        "desert_sow_outdoor": ["09-15", "11-15"],
+        "desert_transplant": ["10-01", "12-15"],
+        "desert_harvest": ["12-01", "04-30"],
+        "notes": "Antirrhinum majus. Cool-season flower in AZ — plant in fall, blooms through winter/spring. Stops blooming above 80F. Can survive summer with shade and water but looks ragged. Group 3/4 varieties more heat tolerant. Deadhead for continuous blooms. Excellent cut flower. Attracts hummingbirds and bees. Self-sows readily.",
+        "companions": ["Sweet Alyssum", "Calendula", "Marigold", "Nasturtium", "Zinnia", "Lettuce", "Tomato"],
+        "antagonists": ["Mint", "Potato", "Fennel", "Dill", "Brassicas"],
+    },
+    # ── SNAP PEAS ──
+    {
+        "name": "Snap Pea",
+        "category": "vegetable",
+        "subcategory": "legume",
+        "days_to_maturity_min": 58,
+        "days_to_maturity_max": 70,
+        "spacing_inches": 3,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-15", "02-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["12-15", "04-30"],
+        "notes": "Sugar snap type — eat pod and all. Direct sow only. Must finish before heat (above 75F). Provide trellis or support. Inoculate seeds with rhizobium for nitrogen fixation. Succession sow every 2-3 weeks Oct-Jan for continuous harvest. Hardy to 28F. Overwintering plants give earliest spring harvest.",
+        "companions": ["Carrot", "Radish", "Turnip", "Cucumber", "Corn", "Bean", "Lettuce", "Spinach"],
+        "antagonists": ["Onion", "Garlic", "Chive"],
+    },
+    # ── SNOW PEAS ──
+    {
+        "name": "Snow Pea",
+        "category": "vegetable",
+        "subcategory": "legume",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 75,
+        "spacing_inches": 3,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-15", "02-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["12-15", "04-30"],
+        "notes": "Flat edible-pod pea — harvest when pods are flat before peas swell. Direct sow only. Must finish before heat. Needs trellis or support (vines reach 4-6 ft). Inoculate seeds with rhizobium. Succession sow Oct-Jan. Hardy to 28F. Oregon Sugar Pod II is a reliable desert variety.",
+        "companions": ["Carrot", "Radish", "Turnip", "Cucumber", "Corn", "Bean", "Lettuce", "Spinach"],
+        "antagonists": ["Onion", "Garlic", "Chive"],
+    },
+    # =====================================================================
+    # BATCH 2 — New plants
+    # =====================================================================
+
+    # ── GLOBE MALLOW (AZ native wildflower) ──
+    {
+        "name": "Globe Mallow",
+        "category": "flower",
+        "subcategory": "native wildflower",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 180,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "excellent",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "02-28"],
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["03-01", "06-30"],
+        "notes": "Sphaeralcea ambigua — iconic Sonoran Desert native wildflower. Blooms orange, pink, red, lavender, or white. Extremely drought-tolerant once established. Requires NO supplemental irrigation after establishment. Attracts native bees, butterflies, and hummingbirds. Seeds need scarification (nick or soak in hot water) for germination. Self-seeds freely. Deer resistant. Thrives in poor, rocky, alkaline desert soil — do NOT amend or fertilize.",
+        "companions": ["Desert Milkweed", "Penstemon", "Blackfoot Daisy", "Sage", "Lavender"],
+        "antagonists": [],
+    },
+    # ── AFRICAN MARIGOLD (Tagetes erecta — distinct from French Marigold) ──
+    {
+        "name": "African Marigold",
+        "category": "flower",
+        "subcategory": "companion",
+        "days_to_maturity_min": 50,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["02-15", "04-15"],
+        "desert_transplant": ["03-01", "05-01"],
+        "desert_harvest": ["04-15", "11-30"],
+        "notes": "Tagetes erecta — taller and larger-flowered than French marigold (Tagetes patula). Grows 18-36 inches tall with huge 3-5 inch pom-pom blooms in yellow, gold, and orange. Excellent nematode suppression when planted as cover crop. Roots release alpha-terthienyl which kills soil nematodes. More heat-tolerant than French types. Deadhead for continuous blooming. Crackerjack and Antigua series do well in AZ desert heat.",
+        "companions": ["Tomato", "Pepper", "Squash", "Bean", "Cucumber", "Eggplant", "Basil"],
+        "antagonists": ["Bean (some allelopathy reported)"],
+    },
+    # ── SALVIA HOT LIPS ──
+    {
+        "name": "Salvia Hot Lips",
+        "category": "flower",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 90,
+        "days_to_maturity_max": 180,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "03-31"],
+        "desert_harvest": ["03-01", "11-30"],
+        "notes": "Salvia microphylla 'Hot Lips' — stunning bicolor red and white flowers that shift color with temperature. Cooler temps produce more bicolor; heat produces solid red. Semi-evergreen perennial shrub, 24-36 inches tall. Hummingbird magnet. Very drought-tolerant once established. Prune hard in late winter for compact growth. Deer and rabbit resistant. Native to Mexico — well-adapted to hot, dry conditions. Excellent in xeriscape gardens alongside other salvias and desert natives.",
+        "companions": ["Lavender", "Rosemary", "Sage", "Thyme", "Globe Mallow"],
+        "antagonists": [],
+    },
+    # ── CHAMOMILE ──
+    {
+        "name": "Chamomile",
+        "category": "herb",
+        "subcategory": "annual",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 8,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["09-15", "02-15"],
+        "desert_transplant": ["10-01", "02-28"],
+        "desert_harvest": ["11-01", "04-30"],
+        "notes": "German chamomile (Matricaria chamomilla) is the annual type grown for tea — treat as cool-season herb in AZ. Roman chamomile (Chamaemelum nobile) is a perennial ground cover but struggles in desert heat. Tiny seeds — surface sow, don't cover. Harvest flowers when petals reflex backward. Self-seeds prolifically. Called 'plant doctor' — said to improve health of nearby plants. Attracts beneficial hoverflies and wasps.",
+        "companions": ["Onion", "Brassicas", "Cucumber", "Wheat"],
+        "antagonists": ["Mint"],
+    },
+    # ── CATNIP ──
+    {
+        "name": "Catnip",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 18,
+        "sun": "full to partial",
+        "water": "low",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["10-01", "02-28"],
+        "desert_transplant": ["10-15", "03-15"],
+        "desert_harvest": ["11-15", "05-31"],
+        "notes": "Nepeta cataria — perennial herb in the mint family. Drought-tolerant once established but goes semi-dormant in AZ summer heat. Repels aphids, flea beetles, squash bugs, and mosquitoes. Attracts beneficial lacewings and parasitic wasps. Cats will roll in it — protect young plants with wire cages. Harvest leaves before flowering for strongest potency. Can become invasive — deadhead to prevent self-seeding. Also makes a calming tea for humans.",
+        "companions": ["Squash", "Pumpkin", "Beet", "Potato", "Rose"],
+        "antagonists": [],
+    },
+    # ── LEMON BALM ──
+    {
+        "name": "Lemon Balm",
+        "category": "herb",
+        "subcategory": "perennial",
+        "days_to_maturity_min": 60,
+        "days_to_maturity_max": 90,
+        "spacing_inches": 18,
+        "sun": "partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 6,
+        "desert_sow_outdoor": ["10-01", "02-15"],
+        "desert_transplant": ["10-15", "03-15"],
+        "desert_harvest": ["11-15", "05-31"],
+        "notes": "Melissa officinalis — lemon-scented perennial herb in the mint family. Needs afternoon shade in AZ desert. Goes semi-dormant in extreme summer heat but returns in fall. Spreads aggressively via self-seeding and runners — grow in containers or deadhead religiously. Excellent for teas, cooking, and potpourri. Repels mosquitoes and gnats. Attracts bees (melissa = Greek for honeybee). Calming medicinal herb used for anxiety and sleep.",
+        "companions": ["Tomato", "Squash", "Brassicas", "Fruit trees"],
+        "antagonists": [],
+    },
+    # ── BLUEBERRY ──
+    {
+        "name": "Blueberry",
+        "category": "fruit",
+        "subcategory": "berry",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 1095,
+        "spacing_inches": 60,
+        "sun": "full to partial",
+        "water": "high",
+        "heat_tolerance": "low",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["11-01", "02-28"],
+        "desert_harvest": ["04-15", "06-30"],
+        "notes": "Extremely challenging in AZ due to alkaline soil (pH 7-8) — blueberries need pH 4.5-5.5. MUST grow in containers with acidic soil mix (1/3 peat moss, 1/3 pine bark, 1/3 azalea potting mix + 2/3 cup elemental sulfur per plant). AZ tap water is alkaline — acidify with vinegar or citric acid weekly. Morning sun, afternoon shade essential. Southern highbush varieties (Bountiful Blue, Misty, Sunshine Blue) are best for low-chill zones. Mulch with pine needles. Fertilize with acid-loving plant food only — never nitrate-based. Consistent moisture critical — never let roots dry out.",
+        "companions": ["Azalea", "Rhododendron", "Strawberry", "Basil", "Thyme"],
+        "antagonists": ["Tomato", "Pepper", "Eggplant", "Fennel"],
+    },
+    # ── BOYSENBERRY ──
+    {
+        "name": "Boysenberry",
+        "category": "fruit",
+        "subcategory": "berry",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 60,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "high",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["12-01", "02-28"],
+        "desert_harvest": ["05-01", "07-15"],
+        "notes": "Rubus ursinus x idaeus hybrid — cross between raspberry, blackberry, and loganberry. Thrives in zones 5-9b. In AZ desert, afternoon shade is critical — plant against east- or north-facing wall. Needs consistent moisture during fruiting but good drainage. Trailing canes need trellis or wire support. Prune spent floricanes after harvest. Mulch heavily (4-6 inches) to keep roots cool. Thorned types have slightly better flavor; thornless types are easier to manage. Chill hours: 200-400, which Phoenix barely meets — choose low-chill selections. Produces large, dark purple, intensely flavored berries.",
+        "companions": ["Garlic", "Tansy", "Nasturtium", "Marigold", "Chive"],
+        "antagonists": ["Potato", "Tomato", "Pepper", "Raspberry"],
+    },
+]
+
+
+def init_db():
+    # Safety check: refuse to reinitialize a database that has real data
+    if DB_PATH.exists():
+        try:
+            check_db = sqlite3.connect(str(DB_PATH))
+            beds = check_db.execute("SELECT COUNT(*) FROM garden_beds").fetchone()[0]
+            if beds > 0:
+                print(f"SAFETY: Database has {beds} beds. Refusing to reinitialize. Delete the file manually if you really want to reset.")
+                check_db.close()
+                return
+            check_db.close()
+        except Exception:
+            pass  # Table might not exist yet, proceed with init
+
+    db = sqlite3.connect(str(DB_PATH))
+    db.execute("PRAGMA journal_mode=WAL")
+
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS zone_info (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS plants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            subcategory TEXT,
+            days_to_maturity_min INTEGER,
+            days_to_maturity_max INTEGER,
+            spacing_inches INTEGER,
+            sun TEXT,
+            water TEXT,
+            heat_tolerance TEXT,
+            cold_tolerance TEXT,
+            desert_seasons TEXT,  -- JSON array
+            sow_indoor_weeks_before_transplant INTEGER,
+            desert_sow_outdoor TEXT,  -- JSON [start, end] or null
+            desert_transplant TEXT,   -- JSON [start, end] or null
+            desert_harvest TEXT,      -- JSON [start, end] or null
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS companions (
+            plant_id INTEGER NOT NULL,
+            companion_name TEXT NOT NULL,
+            relationship TEXT NOT NULL CHECK(relationship IN ('companion', 'antagonist')),
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            UNIQUE(plant_id, companion_name, relationship)
+        );
+
+        CREATE TABLE IF NOT EXISTS areas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            area_type TEXT NOT NULL CHECK(area_type IN ('beds', 'trays', 'both')),
+            sort_order INTEGER DEFAULT 0,
+            color TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS garden_beds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            width_cells INTEGER NOT NULL,
+            height_cells INTEGER NOT NULL,
+            cell_size_inches INTEGER DEFAULT 12,
+            location TEXT,
+            notes TEXT,
+            bed_type TEXT DEFAULT 'grid' CHECK(bed_type IN ('grid', 'linear', 'single', 'freeform', 'vertical')),
+            description TEXT,
+            irrigation_type TEXT DEFAULT 'manual',
+            irrigation_zone_name TEXT,
+            irrigation_schedule TEXT,
+            area_id INTEGER REFERENCES areas(id),
+            sort_order INTEGER DEFAULT 0,
+            depth_inches REAL,
+            physical_width_inches REAL,
+            physical_length_inches REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS soil_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            soil_type TEXT NOT NULL,
+            brand TEXT NOT NULL,
+            product_name TEXT NOT NULL,
+            description TEXT,
+            composition TEXT,
+            ph_range_min REAL,
+            ph_range_max REAL,
+            best_for TEXT,
+            url TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS bed_sections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bed_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            start_cell INTEGER NOT NULL,
+            end_cell INTEGER NOT NULL,
+            irrigation_zone_name TEXT,
+            notes TEXT,
+            FOREIGN KEY (bed_id) REFERENCES garden_beds(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS ground_plants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            plant_id INTEGER NOT NULL,
+            variety_id INTEGER,
+            x_feet REAL,
+            y_feet REAL,
+            zone_id INTEGER,
+            planted_date TEXT,
+            status TEXT DEFAULT 'growing' CHECK(status IN ('planned', 'planted', 'growing', 'established', 'dormant', 'removed')),
+            irrigation_type TEXT DEFAULT 'manual',
+            irrigation_zone_name TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            FOREIGN KEY (zone_id) REFERENCES zones(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS plantings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bed_id INTEGER,
+            plant_id INTEGER NOT NULL,
+            variety_id INTEGER,
+            cell_x INTEGER,
+            cell_y INTEGER,
+            planted_date TEXT,
+            expected_harvest_date TEXT,
+            actual_harvest_date TEXT,
+            status TEXT DEFAULT 'planned' CHECK(status IN ('planned', 'seeded', 'sprouted', 'growing', 'flowering', 'fruiting', 'harvested', 'established', 'removed', 'failed')),
+            season TEXT,
+            year INTEGER,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (bed_id) REFERENCES garden_beds(id),
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            FOREIGN KEY (variety_id) REFERENCES varieties(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS seed_trays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            rows INTEGER NOT NULL,
+            cols INTEGER NOT NULL,
+            cell_size TEXT DEFAULT 'standard',
+            location TEXT,
+            notes TEXT,
+            irrigation_type TEXT DEFAULT 'manual',
+            irrigation_zone_name TEXT,
+            area_id INTEGER REFERENCES areas(id),
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS seed_tray_cells (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tray_id INTEGER NOT NULL,
+            row INTEGER NOT NULL,
+            col INTEGER NOT NULL,
+            plant_id INTEGER,
+            seed_date TEXT,
+            germination_date TEXT,
+            status TEXT DEFAULT 'empty' CHECK(status IN ('empty', 'seeded', 'germinated', 'ready_to_transplant', 'transplanted', 'failed')),
+            notes TEXT,
+            FOREIGN KEY (tray_id) REFERENCES seed_trays(id),
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            UNIQUE(tray_id, row, col)
+        );
+
+        CREATE TABLE IF NOT EXISTS seed_inventory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plant_id INTEGER NOT NULL,
+            variety TEXT,
+            brand TEXT,
+            quantity_seeds INTEGER,
+            purchase_date TEXT,
+            expiration_date TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (plant_id) REFERENCES plants(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS planting_photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            planting_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            caption TEXT,
+            taken_at TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (planting_id) REFERENCES plantings(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS photo_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            photo_id INTEGER NOT NULL UNIQUE,
+            plant_identified TEXT,
+            growth_stage TEXT,
+            health TEXT,
+            issues TEXT,
+            recommendations TEXT,
+            confidence TEXT,
+            summary TEXT,
+            model TEXT,
+            analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (photo_id) REFERENCES planting_photos(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS plant_families (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            family_name TEXT UNIQUE NOT NULL,
+            common_name TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS harvests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            planting_id INTEGER NOT NULL,
+            harvest_date TEXT NOT NULL,
+            weight_oz REAL,
+            quantity INTEGER,
+            quality TEXT CHECK(quality IN ('excellent', 'good', 'fair', 'poor')),
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (planting_id) REFERENCES plantings(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL CHECK(category IN ('seeds', 'soil', 'fertilizer', 'tools', 'pest_control', 'infrastructure', 'water', 'other')),
+            description TEXT NOT NULL,
+            amount_cents INTEGER NOT NULL,
+            purchase_date TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS varieties (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plant_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            days_to_maturity_min INTEGER,
+            days_to_maturity_max INTEGER,
+            heat_tolerance TEXT,
+            disease_resistance TEXT,
+            flavor_profile TEXT,
+            size TEXT,
+            color TEXT,
+            growth_habit TEXT,
+            desert_rating INTEGER CHECK(desert_rating BETWEEN 1 AND 5),
+            desert_notes TEXT,
+            source TEXT,
+            openplantbook_pid TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            UNIQUE(plant_id, name)
+        );
+
+        CREATE TABLE IF NOT EXISTS sensor_readings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sensor_type TEXT NOT NULL CHECK(sensor_type IN ('weather', 'moisture', 'rachio', 'irrigation_event')),
+            sensor_name TEXT NOT NULL,
+            value REAL,
+            unit TEXT,
+            metadata TEXT,
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sensor_readings_type_time ON sensor_readings(sensor_type, recorded_at);
+        CREATE INDEX IF NOT EXISTS idx_sensor_readings_name_time ON sensor_readings(sensor_name, recorded_at);
+
+        CREATE TABLE IF NOT EXISTS irrigation_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            zone_name TEXT,
+            event_type TEXT CHECK(event_type IN ('run_start', 'run_end', 'skip', 'rain_delay')),
+            duration_minutes REAL,
+            source TEXT,
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS sensor_readings_hourly (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sensor_type TEXT NOT NULL,
+            sensor_name TEXT NOT NULL,
+            value_min REAL,
+            value_max REAL,
+            value_avg REAL,
+            sample_count INTEGER,
+            hour_start TIMESTAMP NOT NULL,
+            UNIQUE(sensor_type, sensor_name, hour_start)
+        );
+
+        CREATE TABLE IF NOT EXISTS sensor_readings_daily (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sensor_type TEXT NOT NULL,
+            sensor_name TEXT NOT NULL,
+            value_min REAL,
+            value_max REAL,
+            value_avg REAL,
+            sample_count INTEGER,
+            day_start TEXT NOT NULL,
+            UNIQUE(sensor_type, sensor_name, day_start)
+        );
+
+        CREATE TABLE IF NOT EXISTS planting_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            planting_id INTEGER NOT NULL,
+            note_type TEXT NOT NULL CHECK(note_type IN ('observation', 'problem', 'success', 'lesson', 'weather_impact', 'pest_issue', 'harvest_note')),
+            content TEXT NOT NULL,
+            severity TEXT CHECK(severity IN ('info', 'warning', 'critical')),
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (planting_id) REFERENCES plantings(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS journal_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_type TEXT NOT NULL DEFAULT 'note' CHECK(entry_type IN ('note', 'observation', 'milestone', 'problem', 'harvest', 'weather', 'photo')),
+            title TEXT,
+            content TEXT NOT NULL,
+            plant_id INTEGER,
+            planting_id INTEGER,
+            bed_id INTEGER,
+            tray_id INTEGER,
+            ground_plant_id INTEGER,
+            photo_id INTEGER,
+            mood TEXT CHECK(mood IN ('great', 'good', 'okay', 'concerned', 'bad')),
+            tags TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            FOREIGN KEY (planting_id) REFERENCES plantings(id),
+            FOREIGN KEY (bed_id) REFERENCES garden_beds(id),
+            FOREIGN KEY (tray_id) REFERENCES seed_trays(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS journal_entry_photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            journal_entry_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            original_filename TEXT,
+            caption TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (journal_entry_id) REFERENCES journal_entries(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS season_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            year INTEGER NOT NULL,
+            season TEXT NOT NULL CHECK(season IN ('cool', 'warm', 'monsoon')),
+            total_plantings INTEGER,
+            total_harvested INTEGER,
+            total_failed INTEGER,
+            total_harvest_weight_oz REAL,
+            top_performers TEXT,
+            worst_performers TEXT,
+            lessons_learned TEXT,
+            weather_summary TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(year, season)
+        );
+
+        CREATE TABLE IF NOT EXISTS property (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL DEFAULT 'My Property',
+            width_feet INTEGER NOT NULL DEFAULT 100,
+            height_feet INTEGER NOT NULL DEFAULT 80,
+            orientation_degrees INTEGER NOT NULL DEFAULT 0,
+            latitude REAL NOT NULL DEFAULT 0.0,
+            longitude REAL NOT NULL DEFAULT 0.0,
+            address TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS zones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            property_id INTEGER NOT NULL DEFAULT 1,
+            name TEXT NOT NULL,
+            zone_type TEXT NOT NULL CHECK(zone_type IN ('garden', 'house', 'patio', 'lawn', 'driveway', 'walkway', 'fence', 'other')),
+            x_feet INTEGER NOT NULL DEFAULT 0,
+            y_feet INTEGER NOT NULL DEFAULT 0,
+            width_feet INTEGER NOT NULL,
+            height_feet INTEGER NOT NULL,
+            color TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (property_id) REFERENCES property(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS bed_positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bed_id INTEGER NOT NULL UNIQUE,
+            zone_id INTEGER,
+            x_feet INTEGER NOT NULL DEFAULT 0,
+            y_feet INTEGER NOT NULL DEFAULT 0,
+            rotation_degrees INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (bed_id) REFERENCES garden_beds(id),
+            FOREIGN KEY (zone_id) REFERENCES zones(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS garden_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_type TEXT NOT NULL CHECK(task_type IN ('purchase_seeds', 'start_seeds', 'transplant', 'direct_sow', 'water', 'fertilize', 'harvest', 'pest_check', 'prune', 'weed', 'mulch', 'custom')),
+            title TEXT NOT NULL,
+            description TEXT,
+            priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'completed', 'skipped', 'overdue')),
+            due_date TEXT,
+            completed_date TEXT,
+            plant_id INTEGER,
+            planting_id INTEGER,
+            bed_id INTEGER,
+            tray_id INTEGER,
+            auto_generated INTEGER DEFAULT 0,
+            source TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            FOREIGN KEY (planting_id) REFERENCES plantings(id),
+            FOREIGN KEY (bed_id) REFERENCES garden_beds(id),
+            FOREIGN KEY (tray_id) REFERENCES seed_trays(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_garden_tasks_status ON garden_tasks(status, due_date);
+        CREATE INDEX IF NOT EXISTS idx_garden_tasks_due ON garden_tasks(due_date);
+
+        CREATE TABLE IF NOT EXISTS planter_types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            brand TEXT,
+            form_factor TEXT NOT NULL CHECK(form_factor IN ('vertical_tower', 'vertical_wall', 'raised_bed', 'container', 'ground', 'trellis', 'hanging')),
+            tiers INTEGER,
+            pockets_per_tier INTEGER,
+            total_pockets INTEGER,
+            pocket_depth_inches REAL,
+            pocket_volume_gallons REAL,
+            footprint_diameter_inches REAL,
+            footprint_width_inches REAL,
+            footprint_depth_inches REAL,
+            height_inches REAL,
+            watering_system TEXT,
+            material TEXT,
+            indoor_outdoor TEXT DEFAULT 'outdoor',
+            url TEXT,
+            recommended_plants TEXT,
+            unsuitable_plants TEXT,
+            desert_notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS plant_planter_compatibility (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plant_id INTEGER NOT NULL,
+            planter_type_id INTEGER,
+            form_factor TEXT,
+            compatibility TEXT NOT NULL CHECK(compatibility IN ('excellent', 'good', 'possible', 'poor', 'unsuitable')),
+            notes TEXT,
+            FOREIGN KEY (plant_id) REFERENCES plants(id),
+            FOREIGN KEY (planter_type_id) REFERENCES planter_types(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS soil_amendments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bed_id INTEGER,
+            ground_plant_id INTEGER,
+            amendment_type TEXT NOT NULL CHECK(amendment_type IN ('compost', 'fertilizer', 'sulfur', 'gypsum', 'mulch', 'worm_castings', 'bone_meal', 'fish_emulsion', 'other')),
+            product_name TEXT,
+            amount TEXT,
+            applied_date TEXT NOT NULL,
+            next_due_date TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (bed_id) REFERENCES garden_beds(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_soil_amendments_bed ON soil_amendments(bed_id);
+        CREATE INDEX IF NOT EXISTS idx_soil_amendments_ground_plant ON soil_amendments(ground_plant_id);
+        CREATE INDEX IF NOT EXISTS idx_soil_amendments_next_due ON soil_amendments(next_due_date);
+
+        CREATE TABLE IF NOT EXISTS plant_details (
+            plant_id INTEGER PRIMARY KEY,
+            scientific_name TEXT,
+            family TEXT,
+            genus TEXT,
+            common_names TEXT,
+
+            -- Growing Requirements
+            usda_zones TEXT,
+            min_soil_temp_f INTEGER,
+            max_soil_temp_f INTEGER,
+            ph_min REAL,
+            ph_max REAL,
+            soil_type TEXT,
+
+            -- Physical Characteristics
+            mature_height_inches INTEGER,
+            mature_spread_inches INTEGER,
+            growth_rate TEXT,
+            growth_habit TEXT,
+            root_depth TEXT,
+
+            -- Support & Structure
+            needs_trellis INTEGER DEFAULT 0,
+            needs_cage INTEGER DEFAULT 0,
+            needs_staking INTEGER DEFAULT 0,
+            support_notes TEXT,
+
+            -- Soil & Nutrition
+            nitrogen_fixer INTEGER DEFAULT 0,
+            heavy_feeder INTEGER DEFAULT 0,
+            light_feeder INTEGER DEFAULT 0,
+            preferred_amendments TEXT,
+            soil_prep_notes TEXT,
+
+            -- Water Details
+            water_inches_per_week REAL,
+            drought_tolerant INTEGER DEFAULT 0,
+            mulch_recommended INTEGER DEFAULT 1,
+
+            -- Culinary Uses
+            edible_parts TEXT,
+            culinary_uses TEXT,
+            flavor_profile TEXT,
+            nutritional_highlights TEXT,
+
+            -- Pest & Disease
+            common_pests TEXT,
+            common_diseases TEXT,
+            organic_pest_solutions TEXT,
+            disease_resistance TEXT,
+
+            -- Pollination & Reproduction
+            pollination_type TEXT,
+            attracts_pollinators INTEGER DEFAULT 0,
+            attracts_beneficial_insects INTEGER DEFAULT 0,
+            deer_resistant INTEGER DEFAULT 0,
+
+            -- Succession & Rotation
+            succession_planting_interval_days INTEGER,
+            good_cover_crop INTEGER DEFAULT 0,
+            rotation_group TEXT,
+            plant_before TEXT,
+            plant_after TEXT,
+
+            -- Sources & Links
+            seed_sources TEXT,
+
+            -- Metadata
+            openplantbook_pid TEXT,
+            data_quality_score INTEGER DEFAULT 0,
+            last_enriched_at TIMESTAMP,
+
+            -- Harvest / Success Classification
+            is_harvestable INTEGER DEFAULT 1,
+            success_state TEXT DEFAULT 'harvested',
+            success_description TEXT,
+
+            FOREIGN KEY (plant_id) REFERENCES plants(id)
+        );
+    """)
+
+    # Insert zone data
+    for key, value in ZONE_DATA.items():
+        db.execute(
+            "INSERT OR REPLACE INTO zone_info (key, value) VALUES (?, ?)",
+            (key, str(value)),
+        )
+
+    # Seed default property
+    db.execute("""INSERT OR REPLACE INTO property (id, name, width_feet, height_feet, orientation_degrees, latitude, longitude, address)
+                  VALUES (1, 'My Property', 45, 108, 180, 0.0, 0.0, '')""")
+
+    # Seed property zones from plot plan / floor plan
+    ZONES = [
+        # (name, zone_type, x, y, width, height, color, notes)
+        ("House", "house", 5, 15, 35, 63, "#8B7355", "Single story, ~15ft to roof peak"),
+        ("Covered Patio", "patio", 5, 4, 11, 12, "#A0A0A0", "Rear covered patio, ~10'10\" x 12'3\""),
+        ("Driveway", "driveway", 22, 78, 18, 12, "#C0C0C0", "Front driveway from garage to street"),
+        ("Front Porch", "patio", 5, 78, 10, 8, "#B0A090", "Small covered porch at front door"),
+        ("West Side Yard (Rear)", "garden", 0, 0, 5, 15, "#7CB342", "West side of rear yard, between fence and patio"),
+        ("East Side Yard (Rear)", "garden", 40, 0, 5, 15, "#7CB342", "East side of rear yard"),
+        ("West Side Yard", "garden", 0, 15, 5, 63, "#8BC34A", "Between west fence and house"),
+        ("East Side Yard", "garden", 40, 15, 5, 63, "#8BC34A", "Between east fence and house"),
+        ("Rear Yard (North)", "garden", 5, 0, 35, 4, "#66BB6A", "Open area behind the patio, between side yards"),
+        ("Front Yard", "lawn", 0, 78, 22, 18, "#AED581", "Between house front and street, west of driveway"),
+        ("North Fence (CMU Block)", "fence", 0, 0, 45, 1, "#9E9E9E", "CMU block wall — north/rear property line"),
+        ("West Fence (CMU Block)", "fence", 0, 0, 1, 108, "#9E9E9E", "CMU block wall — west property line"),
+        ("East Fence (CMU Block)", "fence", 44, 0, 1, 108, "#9E9E9E", "CMU block wall — east property line"),
+    ]
+    for z in ZONES:
+        db.execute(
+            "INSERT OR IGNORE INTO zones (property_id, name, zone_type, x_feet, y_feet, width_feet, height_feet, color, notes) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)",
+            z,
+        )
+
+    # Insert plants
+    for p in PLANTS:
+        db.execute("""
+            INSERT OR REPLACE INTO plants
+            (name, category, subcategory, days_to_maturity_min, days_to_maturity_max,
+             spacing_inches, sun, water, heat_tolerance, cold_tolerance,
+             desert_seasons, sow_indoor_weeks_before_transplant,
+             desert_sow_outdoor, desert_transplant, desert_harvest, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            p["name"], p["category"], p["subcategory"],
+            p["days_to_maturity_min"], p["days_to_maturity_max"],
+            p["spacing_inches"], p["sun"], p["water"],
+            p["heat_tolerance"], p["cold_tolerance"],
+            json.dumps(p["desert_seasons"]),
+            p["sow_indoor_weeks_before_transplant"],
+            json.dumps(p["desert_sow_outdoor"]) if p["desert_sow_outdoor"] else None,
+            json.dumps(p["desert_transplant"]) if p["desert_transplant"] else None,
+            json.dumps(p["desert_harvest"]) if p["desert_harvest"] else None,
+            p["notes"],
+        ))
+
+        # Get plant ID
+        plant_id = db.execute("SELECT id FROM plants WHERE name = ?", (p["name"],)).fetchone()[0]
+
+        # Insert companions
+        for comp in p.get("companions", []):
+            db.execute(
+                "INSERT OR IGNORE INTO companions (plant_id, companion_name, relationship) VALUES (?, ?, 'companion')",
+                (plant_id, comp),
+            )
+        for ant in p.get("antagonists", []):
+            db.execute(
+                "INSERT OR IGNORE INTO companions (plant_id, companion_name, relationship) VALUES (?, ?, 'antagonist')",
+                (plant_id, ant),
+            )
+
+    db.commit()
+
+    # Insert varieties
+    VARIETIES = [
+        # ── TOMATO varieties ──
+        ("Tomato", "Phoenix", "Desert-bred variety, sets fruit up to 110F. Developed for extreme desert conditions.", 65, 80, "excellent", None, "Classic tomato, good all-rounder", "Medium (6-8 oz)", "Red", "Determinate", 5, "THE desert tomato. Bred specifically for AZ/desert Southwest. Sets fruit when others quit.", "University of Arizona"),
+        ("Tomato", "Heatmaster", "Heat-tolerant hybrid that keeps setting fruit in extreme heat.", 70, 80, "excellent", "VFFA", "Good balanced flavor", "Medium-large (8-10 oz)", "Red", "Determinate", 5, "Reliable producer even during AZ heat waves. Great for beginners.", "Hybrid"),
+        ("Tomato", "Solar Fire", "Sets fruit in extreme heat conditions, bred for hot climates.", 72, 76, "excellent", "VFF", "Mild, classic tomato taste", "Medium (7-9 oz)", "Red", "Determinate", 5, "Developed for Florida heat but thrives in desert. Consistent performer.", "University of Florida"),
+        ("Tomato", "Cherokee Purple", "Classic heirloom with rich, complex flavor. Needs shade cloth in desert.", 72, 85, "moderate", None, "Rich, smoky, complex — one of the best-tasting heirlooms", "Large (10-16 oz)", "Purple-brown", "Indeterminate", 2, "Outstanding flavor but struggles above 95F. Must have shade cloth and consistent water.", "Heirloom"),
+        ("Tomato", "Roma", "Paste tomato, meaty with few seeds. Good heat tolerance.", 73, 80, "high", "VF", "Mild, low acid, meaty", "Medium paste (3-4 oz)", "Red", "Determinate", 4, "Great for salsa and sauce. Handles heat better than slicers. Heavy producer.", "Open-pollinated"),
+        ("Tomato", "Sun Gold", "Intensely sweet cherry tomato, extremely productive.", 55, 65, "high", "FTWV", "Explosively sweet, tropical notes", "Cherry (0.5-1 oz)", "Golden orange", "Indeterminate", 4, "One of the sweetest cherry tomatoes. Produces hundreds of fruits. Crack-prone but worth it.", "Hybrid"),
+        ("Tomato", "Celebrity", "All-America Selections winner, disease resistant and reliable.", 70, 78, "high", "VFFNT", "Good classic tomato flavor", "Medium (7-8 oz)", "Red", "Semi-determinate", 4, "Extremely disease resistant. Reliable desert producer. Good for beginners.", "Hybrid"),
+        ("Tomato", "Better Boy", "Classic American hybrid, good all-around performer.", 70, 75, "moderate", "VFN", "Classic tomato flavor", "Large (10-16 oz)", "Red", "Indeterminate", 3, "Good in spring but struggles in peak summer. Plant early for best results.", "Hybrid"),
+        ("Tomato", "Brandywine", "Legendary heirloom, incredible flavor but finicky.", 78, 90, "low", None, "Rich, creamy, balanced sweet-acid — considered the gold standard", "Large (12-24 oz)", "Pink", "Indeterminate", 1, "Extremely heat-sensitive. Only attempt in fall/cool season with shade cloth. Flavor is unmatched if you can grow it.", "Heirloom"),
+        ("Tomato", "Sweet 100", "Prolific cherry tomato that produces long trusses of sweet fruit.", 60, 70, "moderate", "VF", "Very sweet, balanced", "Cherry (0.5 oz)", "Red", "Indeterminate", 3, "Long producer but slows in extreme heat. Good spring crop.", "Hybrid"),
+        ("Tomato", "Juliet", "Grape tomato, crack resistant, heavy producer.", 60, 65, "high", None, "Sweet, rich flavor", "Grape (1-2 oz)", "Red", "Indeterminate", 4, "Crack-resistant skin makes it ideal for desert heat swings. Great for salads and snacking.", "Hybrid"),
+        ("Tomato", "Black Krim", "Russian heirloom with deep, smoky flavor. Needs protection.", 70, 85, "moderate", None, "Rich, smoky, salty-sweet complexity", "Large (8-16 oz)", "Dark red-brown/black", "Indeterminate", 2, "Beautiful dark fruit with outstanding flavor. Needs shade cloth and careful watering in desert.", "Heirloom"),
+
+        # ── PEPPER varieties ──
+        ("Pepper", "Jalapeno", "Classic hot pepper, extremely heat-tolerant. Prolific desert producer.", 65, 80, "excellent", None, "Spicy, bright, grassy", "Small-medium (2-3 in)", "Green to red", "Compact bush", 5, "One of the easiest and most productive desert peppers. Stress increases heat.", None),
+        ("Pepper", "Habanero", "Extremely hot pepper that absolutely loves desert heat.", 90, 120, "excellent", None, "Fruity, floral, intensely hot", "Small (1-2 in)", "Orange/red/yellow", "Bushy", 5, "Thrives in extreme heat — the hotter the better. Long growing season.", None),
+        ("Pepper", "Serrano", "Prolific hot pepper, hotter than jalapeno, reliable desert performer.", 70, 80, "excellent", None, "Bright, crisp, hot", "Small (2-3 in)", "Green to red", "Upright bush", 5, "Insanely productive in desert conditions. Great for salsa verde.", None),
+        ("Pepper", "California Wonder", "Classic bell pepper. Needs shade cloth above 105F.", 70, 85, "moderate", None, "Sweet, crisp, mild", "Large (4-5 in)", "Green to red", "Bushy", 3, "Sweet peppers struggle more than hot peppers in extreme heat. Shade cloth is essential above 105F.", None),
+        ("Pepper", "Shishito", "Japanese mild pepper, great for roasting. Excellent desert performer.", 60, 75, "high", None, "Mild, sweet, occasionally spicy surprise", "Small (3-4 in)", "Green", "Compact bush", 4, "Very productive in desert heat. Perfect for quick blistering. One in ten is surprisingly hot.", None),
+        ("Pepper", "Anaheim", "Mild green chile, great fresh or roasted. Good desert tolerance.", 70, 80, "high", None, "Mild, sweet, roasty", "Large (6-8 in)", "Green to red", "Upright", 4, "Classic Southwestern chile. Roasts beautifully. Also sold as Hatch-style chile.", None),
+        ("Pepper", "Thai", "Compact, incredibly productive hot pepper that loves desert heat.", 70, 85, "excellent", None, "Sharp, intense heat", "Tiny (1-2 in)", "Green to red", "Compact, ornamental", 5, "Extremely compact and productive. One plant produces hundreds of small fiery peppers.", None),
+        ("Pepper", "Poblano", "Larger mild pepper for stuffing. Needs consistent water.", 65, 80, "moderate", None, "Rich, mild, earthy", "Large (4-5 in)", "Dark green to red", "Bushy", 3, "Great for chile rellenos. Needs more consistent water than hot peppers. Dried form is ancho.", None),
+
+        # ── CUCUMBER varieties ──
+        ("Cucumber", "Armenian", "THE desert cucumber. Technically a melon. Extremely heat tolerant.", 50, 70, "excellent", None, "Mild, refreshing, no bitterness", "Long (12-18 in)", "Pale green, ribbed", "Vigorous vine", 5, "Not technically a cucumber (Cucumis melo). Handles extreme heat that kills true cucumbers. Never bitter.", None),
+        ("Cucumber", "Lemon", "Round yellow cucumber, heat tolerant and unique.", 55, 65, "high", None, "Mild, sweet, crisp", "Round (3-4 in diameter)", "Yellow", "Spreading vine", 4, "Unusual round shape. More heat tolerant than most cucumbers. Pick at tennis-ball size.", None),
+        ("Cucumber", "Persian (Beit Alpha)", "Thin-skinned Middle Eastern variety, good desert tolerance.", 50, 60, "high", None, "Sweet, crisp, seedless", "Medium (5-7 in)", "Dark green", "Bush to semi-vine", 4, "Bred for hot climates. Thin skin means no peeling needed. Very productive.", None),
+        ("Cucumber", "Marketmore 76", "Classic American slicing cucumber. Moderate desert tolerance.", 58, 68, "moderate", "Multiple disease resistance", "Classic, mild", "Medium (8-9 in)", "Dark green", "Vine", 3, "Reliable slicer but needs shade cloth in peak heat. Disease resistant.", "Open-pollinated"),
+        ("Cucumber", "Suyo Long", "Chinese variety, burpless and heat tolerant. Up to 15 inches.", 55, 65, "high", None, "Mild, sweet, burpless", "Long (12-15 in)", "Dark green, ribbed", "Vine", 4, "Excellent heat tolerance for a true cucumber. Ribbed skin, great flavor. Needs trellis.", None),
+
+        # ── LETTUCE varieties ──
+        ("Lettuce", "Black Seeded Simpson", "Bolt-resistant loose leaf lettuce, quick growing.", 28, 45, "moderate", None, "Mild, tender", "Loose leaf head", "Light green", "Loose leaf", 4, "One of the most bolt-resistant lettuces. Quick crop for desert cool season. Succession plant.", "Open-pollinated"),
+        ("Lettuce", "Jericho", "Bred in Israel for desert/Middle East conditions. Outstanding heat tolerance.", 55, 65, "high", None, "Sweet, crisp romaine", "Tall romaine head", "Green", "Upright romaine", 5, "THE desert lettuce. Bred in the Jericho desert of Israel. Holds longer in heat than any other lettuce.", None),
+        ("Lettuce", "Red Sails", "Heat-tolerant red leaf lettuce. Beautiful color.", 30, 45, "moderate", None, "Mild, tender, slightly sweet", "Loose leaf head", "Red/burgundy", "Loose leaf", 4, "Good bolt resistance and heat tolerance. Attractive red color. Quick crop.", "Open-pollinated"),
+        ("Lettuce", "Buttercrunch", "Compact butterhead with moderate heat tolerance.", 50, 65, "moderate", None, "Buttery, tender, sweet", "Small butterhead", "Green", "Compact butterhead", 3, "Classic butterhead flavor. Moderate heat tolerance — plant early in season.", "Open-pollinated"),
+        ("Lettuce", "Salad Bowl", "Loose leaf lettuce, quick crop, easy to grow.", 28, 40, "low", None, "Mild, tender", "Loose leaf rosette", "Light green", "Loose leaf rosette", 3, "Very fast crop. Good for succession planting. Bolts in heat but grows fast enough to harvest first.", "Open-pollinated"),
+
+        # ── SQUASH varieties (mapped to "Squash (Summer)") ──
+        ("Squash (Summer)", "Tromboncino", "Italian heirloom vine squash. Heat-loving and vine-borer resistant.", 55, 70, "excellent", "Vine borer resistant", "Nutty, sweet when young", "Long curved (12-18 in)", "Pale green", "Vigorous vine (needs trellis)", 5, "Vine borer resistant! Huge advantage in desert. Best on a trellis. Harvest young for zucchini, or let mature for winter squash.", "Italian heirloom"),
+        ("Squash (Summer)", "Costata Romanesco", "Ribbed Italian heirloom with outstanding nutty flavor.", 50, 60, "high", None, "Nutty, rich, excellent when young", "Medium (6-10 in), ribbed", "Gray-green, ribbed", "Bush", 4, "Superior flavor to regular zucchini. Distinctive ribs. Male flowers are prized for stuffing.", "Italian heirloom"),
+        ("Squash (Summer)", "Black Beauty Zucchini", "Classic dark green zucchini, very productive.", 45, 55, "high", None, "Mild, classic zucchini", "Medium (6-8 in)", "Dark green", "Compact bush", 4, "The standard zucchini. Very productive in desert. Harvest at 6-8 inches for best flavor.", "Open-pollinated"),
+        ("Squash (Summer)", "Yellow Crookneck", "Traditional summer squash with curved neck.", 45, 55, "high", None, "Buttery, mild", "Medium (4-6 in)", "Yellow", "Bush", 4, "Classic Southern summer squash. Harvest young when skin is still tender.", "Open-pollinated"),
+        ("Squash (Summer)", "Tatume", "Mexican heirloom round squash. Incredibly heat tolerant.", 45, 65, "excellent", "Vine borer resistant", "Mild, versatile", "Round (3-4 in)", "Green", "Vigorous vine", 5, "Mexican heirloom that thrives in extreme desert heat. Vine borer resistant. Used like zucchini.", "Mexican heirloom"),
+
+        # ── BASIL varieties ──
+        ("Basil", "Genovese", "Classic Italian sweet basil. Standard for pesto.", 50, 65, "high", None, "Sweet, aromatic, classic Italian", "Medium (18-24 in)", "Green", "Bushy", 4, "The standard pesto basil. Does well in desert heat but needs consistent water. Pinch flowers.", "Italian"),
+        ("Basil", "African Blue", "Perennial basil in AZ! Ornamental and productive.", 60, 80, "excellent", None, "Camphor notes, peppery, strong", "Large (24-36 in)", "Purple-green", "Large, shrubby, perennial", 5, "Perennial in AZ — survives year-round! Ornamental purple flowers attract pollinators. Sterile hybrid (won't seed).", "Hybrid"),
+        ("Basil", "Thai", "Southeast Asian basil with anise flavor. Loves heat.", 50, 65, "excellent", None, "Anise, licorice, spicy", "Medium (12-18 in)", "Green with purple stems", "Compact, upright", 5, "Thrives in desert heat. Essential for Thai and Vietnamese cuisine. Purple stems and flowers.", None),
+        ("Basil", "Holy (Tulsi)", "Sacred basil from India. Heat-loving perennial herb.", 50, 70, "excellent", None, "Peppery, clove-like, complex", "Medium (18-24 in)", "Green/purple", "Bushy, semi-perennial", 5, "Used in Ayurvedic medicine. Three types: Rama (green), Krishna (purple), Vana (wild). Loves AZ heat.", "Indian"),
+        ("Basil", "Lemon", "Fragrant lemon-scented basil. Good for teas and fish.", 50, 65, "high", None, "Citrusy, bright, lemony", "Medium (12-18 in)", "Light green", "Compact bush", 4, "Lovely citrus fragrance. Great for tea, fish dishes, and desserts. Good desert performer.", None),
+
+        # ── MELON varieties ──
+        ("Melon", "Hales Best", "Bred in Imperial Valley CA — desert legend cantaloupe.", 75, 85, "excellent", None, "Very sweet, classic cantaloupe", "Medium (3-4 lbs)", "Tan netted", "Vine", 5, "Bred in 1920s in the Imperial Valley desert. THE desert cantaloupe. Legendary sweetness in hot, dry conditions.", "Open-pollinated"),
+        ("Melon", "Ambrosia", "Very sweet cantaloupe hybrid with fine netting.", 80, 86, "high", "PM", "Extra sweet, juicy, aromatic", "Medium (4-5 lbs)", "Tan, fine netting", "Vine", 4, "Extremely sweet cantaloupe. Good disease resistance. Reliable desert producer.", "Hybrid"),
+        ("Melon", "Crenshaw", "Large, sweet melon with smooth skin. Premium flavor.", 90, 110, "high", None, "Very sweet, buttery, floral", "Large (6-10 lbs)", "Yellow-green smooth skin", "Vine", 4, "Premium melon with outstanding flavor. Longer season than cantaloupe. Worth the wait.", None),
+        ("Melon", "Sugar Baby Watermelon", "Compact icebox watermelon, perfect for small gardens.", 70, 80, "high", None, "Sweet, crisp, classic watermelon", "Small (8-12 lbs)", "Dark green rind, red flesh", "Compact vine", 4, "Compact vines for smaller desert gardens. Reliable producer. Good starter watermelon.", "Open-pollinated"),
+        ("Melon", "Ali Baba Watermelon", "Iraqi heirloom watermelon, incredible in desert heat.", 80, 95, "excellent", None, "Extremely sweet, complex, honey notes", "Large (15-30 lbs)", "Light green striped rind, red flesh", "Vigorous vine", 5, "Iraqi heirloom that thrives in desert conditions. Incredibly sweet in AZ heat. Needs space.", "Iraqi heirloom"),
+
+        # ── ADDITIONAL VARIETIES (to reach 60+) ──
+        # More tomato
+        ("Tomato", "Early Girl", "Classic early-producing tomato. Good spring crop before heat.", 52, 62, "moderate", "VFF", "Good classic flavor", "Medium (4-6 oz)", "Red", "Indeterminate", 3, "Early harvest before heat sets in. Plant early February for best results.", "Hybrid"),
+
+        # Eggplant varieties
+        ("Eggplant", "Ichiban", "Japanese eggplant, slender and incredibly heat-hardy.", 50, 60, "excellent", None, "Mild, tender, thin-skinned", "Long slender (10-12 in)", "Dark purple", "Upright", 5, "The best eggplant for desert. Thin-skinned, no bitterness. Keeps producing all summer.", "Japanese"),
+        ("Eggplant", "Black Beauty", "Classic large eggplant. Good desert performer.", 73, 80, "high", None, "Classic, mild when young", "Large globe (4-6 in)", "Dark purple-black", "Bushy", 4, "Standard globe eggplant. Harvest young for best texture. Shade cloth above 110F.", "Open-pollinated"),
+        ("Eggplant", "Rosa Bianca", "Italian heirloom, beautiful lavender-white coloring.", 73, 85, "moderate", None, "Mild, creamy, no bitterness", "Medium globe (4-5 in)", "Lavender/white", "Bushy", 3, "Gorgeous variety with outstanding flavor. Less heat tolerant — needs shade cloth.", "Italian heirloom"),
+
+        # Okra varieties
+        ("Okra", "Clemson Spineless", "Standard okra variety. Incredible desert performer.", 50, 55, "excellent", None, "Mild, mucilaginous", "Medium pods (3-4 in)", "Green", "Tall upright (4-6 ft)", 5, "The classic okra. Thrives in extreme desert heat — the hotter, the better. Harvest pods at 3-4 inches.", "Open-pollinated"),
+        ("Okra", "Burgundy", "Red-podded ornamental okra. Beautiful and productive.", 55, 65, "excellent", None, "Mild, slightly nutty", "Medium pods (3-4 in)", "Burgundy red", "Tall upright (4-5 ft)", 5, "Gorgeous red pods turn green when cooked. As productive as Clemson. Great ornamental value.", "Open-pollinated"),
+
+        # Herb varieties
+        ("Rosemary", "Tuscan Blue", "Upright rosemary with intense flavor. Desert-tough.", 90, 120, "excellent", None, "Strong, pungent, piney", "Large shrub (4-6 ft)", "Blue-green", "Tall upright shrub", 5, "Nearly unkillable in AZ. Beautiful blue flowers. Can become a large landscape shrub.", None),
+        ("Cilantro", "Slow Bolt", "Bred to resist bolting longer than standard cilantro.", 45, 60, "moderate", None, "Classic cilantro", "Small (12-18 in)", "Green", "Compact", 4, "Stays leafy 2-3 weeks longer than regular cilantro before bolting. Essential for desert cool season.", "Open-pollinated"),
+
+        # Bean varieties
+        ("Bean (Bush)", "Tepary", "Native desert bean, incredibly drought tolerant.", 55, 75, "excellent", None, "Nutty, earthy, rich protein", "Small dried bean", "White/brown", "Low bush", 5, "Native to Sonoran Desert. Used by Tohono O'odham for millennia. Survives on monsoon rains alone.", "Native heirloom"),
+        ("Bean (Bush)", "Provider", "Early snap bean, good cool weather tolerance.", 48, 55, "moderate", None, "Classic green bean", "Medium (5-6 in)", "Green", "Compact bush", 3, "Fast producer. Plant early spring before heat. Germinates in cool soil.", "Open-pollinated"),
+
+        # Sweet potato
+        ("Sweet Potato", "Beauregard", "Standard orange sweet potato. Excellent desert performer.", 90, 100, "excellent", None, "Sweet, moist, classic", "Medium tubers", "Orange flesh, copper skin", "Spreading vine", 5, "The standard sweet potato for hot climates. Loves desert heat. Plant slips after last frost.", "Open-pollinated"),
+
+        # Corn varieties
+        ("Corn", "Hopi Blue", "Native American blue corn, incredibly drought tolerant.", 75, 100, "excellent", None, "Sweet, nutty, earthy", "Medium ears (7-9 in)", "Deep blue-purple", "Tall (6-8 ft)", 5, "Hopi people have grown this in the desert for millennia. Dry-farmed without irrigation. Sacred variety.", "Native heirloom"),
+        ("Corn", "Painted Mountain", "Multi-colored flour corn, extremely cold and heat hardy.", 75, 85, "high", None, "Mild, good for flour", "Medium ears", "Multi-colored", "Short (4-5 ft)", 4, "One of the most adaptable corns. Bred from multiple Native American varieties. Short season.", "Open-pollinated"),
+
+        # Watermelon (under parent Watermelon plant)
+        ("Watermelon", "Crimson Sweet", "Classic striped watermelon, reliable desert producer.", 80, 90, "high", None, "Very sweet, crisp", "Large (20-25 lbs)", "Green striped, red flesh", "Vigorous vine", 4, "The standard open-pollinated watermelon. Consistent quality in desert heat.", "Open-pollinated"),
+        ("Watermelon", "Desert King", "Yellow-fleshed watermelon bred for hot, dry climates.", 80, 90, "excellent", None, "Sweet, honey-like", "Medium (15-20 lbs)", "Light green rind, yellow flesh", "Vigorous vine", 5, "Bred specifically for desert conditions. Yellow flesh is a unique treat. Very drought tolerant.", None),
+
+        # Tomatillo
+        ("Tomatillo", "Toma Verde", "Standard green tomatillo. Very prolific in desert.", 60, 70, "high", None, "Tart, citrusy, bright", "Medium (2 in)", "Green", "Sprawling bush", 5, "Essential for salsa verde. Much more heat-tolerant than tomatoes. Keeps producing all summer.", "Open-pollinated"),
+        ("Tomatillo", "Purple", "Purple-skinned tomatillo with sweeter flavor.", 60, 75, "high", None, "Sweeter than green, berry notes", "Medium (1.5-2 in)", "Purple", "Sprawling bush", 4, "Sweeter than green tomatillos. Great for fresh salsa. Same heat tolerance.", "Open-pollinated"),
+
+        # ── NEW TOMATO varieties ──
+        ("Tomato", "Big Boy", "Classic Burpee hybrid beefsteak, first hybrid tomato marketed in America.", 70, 75, "moderate", "VF", "Classic rich tomato flavor", "Large (10-16 oz)", "Red", "Indeterminate", 3, "The original hybrid tomato. Good spring producer but struggles in peak AZ heat. Plant early Feb for best results. Better Boy is an improved version with more disease resistance.", "Hybrid"),
+        ("Tomato", "Bush Early Girl", "Compact determinate version of Early Girl. Perfect for containers.", 50, 54, "moderate", "VFFNT", "Good classic tomato flavor", "Medium (6-7 oz)", "Red", "Determinate", 3, "Compact 3ft plants ideal for patio pots. Very early — harvest before extreme heat. Up to 100 tomatoes per plant. Start indoors early Jan in AZ.", "Hybrid"),
+        ("Tomato", "Slicer", "Generic slicing tomato type, good all-purpose variety.", 70, 80, "moderate", None, "Classic tomato, mild", "Medium-large (6-10 oz)", "Red", "Varies", 3, "General slicing type. Choose heat-tolerant cultivars for AZ (Celebrity, Heatmaster). Best planted early Feb.", None),
+
+        # ── NEW PEPPER varieties ──
+        ("Pepper", "Sweet Banana", "Mild, elongated yellow pepper. Prolific producer.", 60, 70, "high", None, "Sweet, mild, tangy", "Medium (4-6 in)", "Yellow to orange to red", "Compact bush (2 ft)", 4, "Very productive in AZ heat. Harvest yellow for mild, let ripen red for sweeter. Great for pickling, salads, stuffing. Drought tolerant.", "Open-pollinated"),
+        ("Pepper", "Better Belle", "Improved sweet bell pepper with strong disease resistance.", 65, 75, "moderate", "TMV, Xcv", "Sweet, crisp, thick-walled", "Large (4-5 in)", "Green to red", "Compact bush (18-24 in)", 3, "Disease-resistant bell pepper. Needs shade cloth above 105F like all bells. Thick walls great for stuffing. Compact enough for containers.", "Hybrid"),
+        ("Pepper", "Green Hybrid Bell", "Standard green bell pepper hybrid, reliable producer.", 70, 80, "moderate", "VF", "Sweet, crisp, classic bell", "Large (4-5 in)", "Green", "Bushy (24-30 in)", 3, "Generic hybrid bell pepper. Sweet peppers struggle above 90F — shade cloth essential in AZ summer. Plant early spring for best production before heat.", "Hybrid"),
+
+        # ── NEW BEAN varieties ──
+        ("Bean (Bush)", "Amethyst", "Purple bush bean with stunning violet pods. Stringless.", 55, 70, "high", "BMV", "Classic green bean when cooked", "Medium (5-5.5 in)", "Purple (turns green when cooked)", "Compact upright bush", 4, "Beautiful purple pods easy to spot for harvest. Turns green when cooked. Stringless filet type. Good heat tolerance for a bean. Longer and straighter than Royal Burgundy.", "Open-pollinated"),
+
+        # ── NEW CORN varieties ──
+        ("Corn", "Painted Hill", "Multicolored sweet corn, cross of Luther Hill and Painted Mountain.", 70, 85, "high", None, "Sweet, good fresh or dried", "Medium ears (7 in)", "Multi-colored (yellow, red, purple, blue, white)", "Medium (6 ft)", 4, "Open-pollinated sweet corn adapted for short seasons but performs well in AZ warmth. Can germinate in cool soil. Often produces multiple ears per stalk. Beautiful multicolored kernels.", "Open-pollinated"),
+        ("Corn", "Silver Queen", "Classic white sweet corn, late-season variety.", 88, 92, "high", None, "Meltingly sweet, tender, old-fashioned corn flavor", "Large ears (8-9 in)", "White", "Tall (7-9 ft)", 3, "Late-maturing white corn — needs 90 days. In AZ, plant early Feb to harvest before extreme heat. Huge ears with small tender kernels. Considered the gold standard of white sweet corn.", "Hybrid"),
+
+        # ── NEW EGGPLANT varieties ──
+        ("Eggplant", "Fairy Tale", "Small striped eggplant, AAS winner. Prolific and ornamental.", 50, 65, "high", None, "Mild, sweet, no bitterness, tender", "Small (1-2 oz, 3-4 in)", "Lavender-white striped", "Compact bush (18-24 in)", 4, "Gorgeous striped mini eggplants. Very prolific — up to 50+ fruits per plant. Great for containers. No need to salt before cooking. Harvest at 3-4 inches for best flavor.", "Hybrid"),
+
+        # ── NEW WATERMELON varieties ──
+        ("Watermelon", "Sugar Baby", "Compact icebox watermelon, perfect for small desert gardens.", 75, 85, "high", None, "Very sweet, crisp, classic watermelon", "Small (8-12 lbs)", "Dark green rind, red flesh", "Compact vine (shorter runners)", 4, "Early-maturing icebox melon ideal for AZ. Compact vines need less space. Drought resistant. Dark rind handles sun exposure. In AZ, direct sow March for June harvest.", "Open-pollinated"),
+
+        # ── NEW CUCUMBER varieties ──
+        ("Cucumber", "Diva", "Seedless, burpless, all-female cucumber. AAS winner.", 55, 62, "moderate", "Scab, PM", "Sweet, crisp, no bitterness, burpless", "Medium (6-8 in)", "Dark green, glossy", "Semi-bush to vine", 3, "All-female (gynoecious/parthenocarpic) — produces without pollination. Seedless, burpless, thin-skinned. Good disease resistance. In AZ, must finish before extreme heat — plant early March.", "Hybrid"),
+
+        # ── NEW BASIL varieties ──
+        ("Basil", "Sweet Basil", "Classic Genovese-type sweet basil, the standard pesto basil.", 50, 65, "high", None, "Sweet, aromatic, classic Italian basil", "Medium (18-24 in)", "Green", "Bushy upright", 4, "The standard sweet basil synonymous with Genovese. Essential for pesto, caprese, Italian cooking. Pinch flower buds to extend leaf production. Needs consistent water in AZ.", "Italian"),
+
+        # =====================================================================
+        # BATCH 2 — New varieties
+        # =====================================================================
+
+        # ── CARROT varieties ──
+        ("Carrot", "Little Finger", "Tiny French gourmet baby carrot, perfect for containers and shallow desert soil.", 55, 65, "low", None, "Sweet, tender, delicate", "Small (3-4 in long, finger-sized)", "Orange", "Short Nantes type", 4, "Only 3-4 inches long — ideal for AZ clay/caliche soil where long varieties fail. Perfect for containers and GreenStalk pockets. Sweet enough to eat raw. Great for succession planting every 2 weeks Oct-Feb.", "French heirloom"),
+        ("Carrot", "Carnival Rainbow", "Multicolored carrot mix with purple, yellow, white, orange, and red roots.", 65, 80, "low", None, "Sweet, each color has slight flavor variation", "Medium (6-8 in)", "Purple, yellow, white, orange, red mix", "Imperator/Nantes mix", 3, "Beautiful rainbow mix for the cool-season desert garden. Purple varieties have anthocyanins. Needs loose, amended soil — amend clay with sand and compost. Direct sow Oct-Jan for best results in AZ.", "Open-pollinated mix"),
+
+        # ── LAVENDER varieties ──
+        ("Lavender", "English Lavender", "Lavandula angustifolia — classic lavender for culinary and aromatherapy use. Sweetest fragrance.", 90, 200, "moderate", None, "Sweet, floral, classic lavender", "Medium shrub (12-24 in)", "Purple-blue", "Compact mound", 2, "The classic culinary lavender but STRUGGLES in AZ monsoon humidity. Prone to root rot in wet soil. Needs perfect drainage (raised bed, gravel mulch). Best planted on east-facing slope for morning sun/afternoon shade. Munstead and Hidcote are most heat-tolerant cultivars. Not the best choice for AZ — try Spanish or Goodwin Creek Grey instead.", "Mediterranean"),
+        ("Lavender", "French Lavender", "Lavandula dentata — toothed leaves, long bloom period. More heat-tolerant than English.", 90, 180, "high", None, "Mild lavender, less intense than English", "Medium-large shrub (24-36 in)", "Purple-blue", "Upright, bushy", 3, "Toothed leaf edges distinguish from other lavenders. Blooms nearly year-round in mild AZ winters. More humidity-tolerant than English lavender. Good for landscape use but less prized for culinary. Needs good drainage but handles AZ monsoon better.", "Mediterranean"),
+        ("Lavender", "Spanish Lavender", "Lavandula stoechas — distinctive 'rabbit ear' petals atop flower heads. Most heat-tolerant.", 90, 180, "excellent", None, "Strong, camphor-like, not culinary", "Medium shrub (18-30 in)", "Purple with pink 'rabbit ear' bracts", "Compact, rounded mound", 5, "THE best lavender for AZ desert. Handles extreme heat and monsoon humidity far better than English types. Iconic 'rabbit ears' (sterile bracts) top each flower head. Not used for culinary — mainly ornamental and aromatic. Blooms spring through fall in AZ. Virtually unkillable with good drainage.", "Mediterranean"),
+        ("Lavender", "Goodwin Creek Grey", "Lavandula x ginginsii — hybrid with silvery foliage. Outstanding AZ performer.", 90, 180, "excellent", None, "Strong, classic lavender scent", "Large shrub (24-36 in)", "Deep violet-blue flowers, silver-grey foliage", "Upright, spreading mound", 5, "TOP PICK for AZ desert. Hybrid lavender with gorgeous silver-grey foliage and deep violet flowers. Blooms almost year-round in AZ. Extremely heat and drought tolerant. Handles monsoon humidity well. Fast grower — can reach 3 ft wide. Attracts bees and butterflies. The best all-around lavender for desert Southwest.", "Hybrid"),
+        ("Lavender", "Phenomenal", "Lavandula x intermedia 'Phenomenal' — lavandin hybrid bred for heat, humidity, and cold tolerance.", 90, 200, "high", None, "Strong, classic lavender, good for sachets and oil", "Large shrub (24-36 in tall, 36-48 in wide)", "Violet-blue", "Large upright mound", 4, "Bred to survive where other lavenders fail. Exceptional disease resistance — tolerates humidity that kills English lavender. Large plant with high oil content. Good for sachets, oils, and dried arrangements. In AZ, performs well with minimal water and good drainage. One of the most reliable lavenders for challenging climates.", "Hybrid"),
+
+        # ── ROSEMARY varieties ──
+        ("Rosemary", "Prostrate", "Trailing/creeping rosemary, excellent ground cover or cascading over walls.", 90, 120, "excellent", None, "Milder than upright types, aromatic", "Low spreading (6-12 in tall, 4-8 ft spread)", "Blue-green", "Low trailing/cascading", 5, "Spectacular cascading over retaining walls or raised beds. Excellent desert ground cover — tough, drought-tolerant, and evergreen. Roots along stems as it spreads. Same culinary use as upright types. Irene and Huntington Carpet are popular cultivars. Nearly maintenance-free in AZ.", None),
+        ("Rosemary", "Arp", "Most cold-hardy rosemary variety, reliably hardy to 10F.", 90, 120, "high", None, "Mild, lemony rosemary flavor", "Medium shrub (3-4 ft)", "Grey-green", "Open, upright shrub", 4, "Named for Arp, Texas. The gold standard for cold hardiness — survives down to -10F. In AZ, cold isn't the issue, but Arp handles heat well too. Lighter colored foliage than Tuscan Blue. Open growth habit — less dense than other varieties. Good all-around performer.", "Open-pollinated"),
+        ("Rosemary", "Hill Hardy", "Cold-hardy, compact rosemary with strong flavor. Reliable performer.", 90, 120, "high", None, "Strong, classic rosemary, pungent", "Medium shrub (3-5 ft)", "Dark green", "Dense upright shrub", 4, "Very similar to Arp in cold hardiness. Dense, bushy growth makes it excellent for hedges. Strong flavor preferred by many cooks over milder varieties. Does well in AZ heat with minimal water. Named for Madalene Hill of Texas.", None),
+        ("Rosemary", "Barbecue", "Tall, upright rosemary with stiff woody stems perfect for skewers.", 90, 120, "excellent", None, "Strong, smoky-piney rosemary", "Large upright (4-6 ft)", "Dark green", "Tall, stiff upright stems", 5, "Bred for long, straight, stiff woody stems that make natural BBQ skewers. Strip leaves from stem, skewer meat/vegetables, grill — the stem infuses rosemary flavor. Grows tall and upright in AZ. Drought-tolerant and heat-loving. Double-duty plant: culinary herb AND grilling tool.", None),
+
+        # ── PARSLEY varieties ──
+        ("Parsley", "Italian Dark Single", "Dark green flat-leaf parsley with intense flavor. The professional chef's choice.", 65, 80, "moderate", None, "Intense, bright, herbaceous, peppery", "Medium (12-18 in)", "Very dark green", "Upright, flat-leaf", 4, "Darker and more intensely flavored than standard Italian flat-leaf. Preferred by chefs for cooking (not just garnish). More bolt-resistant than curly types. Slow to germinate — soak seeds 24 hours and be patient. In AZ, grows well Oct-Apr. Biennial — will bolt in second year. Attracts swallowtail butterflies.", "Italian"),
+
+        # ── MINT varieties ──
+        ("Mint", "Mojito Mint", "Cuban-style spearmint variety with mild, sweet flavor. The classic mojito herb.", 60, 90, "moderate", None, "Mild, sweet, less menthol than peppermint, perfect cocktail mint", "Medium (12-24 in)", "Light green", "Spreading, upright stems", 4, "Mentha x villosa — a milder, sweeter spearmint perfect for mojitos and other cocktails. Less aggressively minty than peppermint. MUST be grown in containers in AZ — as invasive as all mints. Needs afternoon shade in desert. Goes semi-dormant in extreme summer heat but bounces back. Makes excellent iced tea too.", None),
+
+        # ── THYME varieties ──
+        ("Thyme", "English Thyme", "Thymus vulgaris — the classic culinary thyme. Essential kitchen herb.", 70, 90, "high", None, "Warm, earthy, slightly floral, classic thyme", "Small (6-12 in)", "Grey-green", "Low mounding shrub", 5, "THE standard culinary thyme used in French, Mediterranean, and American cooking. Extremely drought-tolerant and heat-hardy in AZ. Evergreen perennial that gets woodier with age. Harvest before flowering for strongest flavor. Prune by one-third after flowering to prevent legginess. Excellent in rock gardens and borders. One of the easiest herbs for AZ.", "European"),
+
+        # ── SAGE varieties ──
+        ("Sage", "Common Sage", "Salvia officinalis — the standard culinary garden sage. Essential kitchen herb.", 75, 100, "high", None, "Warm, earthy, slightly bitter, savory", "Medium shrub (18-24 in)", "Grey-green, velvety", "Woody mounding shrub", 4, "The standard culinary sage for stuffing, sausage, and butter sauces. Evergreen perennial in AZ. Needs good drainage — amend clay soil. Gets woody after 3-4 years; replace or hard-prune. Harvest before flowering. Beautiful grey-green foliage. Berggarten cultivar has larger leaves and rarely flowers.", "Mediterranean"),
+        ("Sage", "Purple Sage", "Salvia officinalis 'Purpurascens' — ornamental culinary sage with purple-grey foliage.", 75, 100, "high", None, "Same as common sage, slightly milder", "Medium shrub (18-24 in)", "Purple-grey", "Compact mounding shrub", 4, "Gorgeous purple-tinged foliage adds color to herb gardens. Same culinary use as common sage but slightly milder. Less vigorous than green sage — stays more compact. Needs afternoon shade in extreme AZ heat to prevent leaf scorch. Excellent ornamental value year-round.", "Mediterranean"),
+        ("Sage", "Pineapple Sage", "Salvia elegans — tropical sage with pineapple-scented leaves and red tubular flowers.", 90, 120, "moderate", None, "Sweet, fruity, distinct pineapple aroma", "Large (3-5 ft)", "Bright green", "Tall, bushy, herbaceous", 3, "Not a true culinary sage — prized for pineapple-scented leaves in teas, desserts, and fruit salads. Brilliant red tubular flowers in fall are hummingbird magnets. Tender perennial — may die back in AZ winter frost but regrows from roots. Needs more water than other sages. Afternoon shade helps in desert.", "Central American"),
+        ("Sage", "White Sage", "Salvia apiana — sacred native California/Southwest sage used for smudging and ceremony.", 120, 365, "excellent", None, "Strongly aromatic, camphor-like, not culinary", "Large shrub (3-5 ft)", "White-silver", "Open, upright shrub", 5, "Native to Southwest deserts. Sacred plant to many Indigenous peoples. Extremely drought-tolerant — needs NO supplemental water once established. Silver-white foliage is stunning in xeriscape. Bees go crazy for the tall flower spikes. Do NOT overwater — root rot is the #1 killer. Perfect drainage essential. Wild harvest is controversial — grow your own.", "Native"),
+        ("Sage", "Cleveland Sage", "Salvia clevelandii — native Southern California/Baja sage with intensely aromatic foliage.", 90, 180, "excellent", None, "Intensely aromatic, floral-sage, used for seasoning", "Medium shrub (3-4 ft)", "Grey-green", "Rounded mounding shrub", 5, "One of the most fragrant landscape plants available. Incredible scent carries on desert breezes. Native to SoCal/Baja — perfectly adapted to desert heat. Amethyst blue flowers in spring attract bees and hummingbirds. Can be used for cooking like common sage. Winnifred Gilman cultivar is most popular. Virtually no irrigation once established.", "Native"),
+
+        # ── STRAWBERRY varieties ──
+        ("Strawberry", "Chandler", "June-bearing variety, THE best strawberry for AZ desert production.", 60, 90, "low", None, "Large, sweet, excellent flavor", "Large (1-2 in)", "Red", "Short-day, spreading runners", 5, "THE #1 strawberry for AZ. Short-day variety that fruits heavily Jan-Apr in desert. University of Arizona Cooperative Extension's top recommendation. Large, sweet, firm berries. Plant bare-root crowns in Oct-Nov. Excellent flavor when grown in cool AZ winters. Produces abundantly before summer heat shuts it down.", "UC Davis"),
+        ("Strawberry", "Sweet Charlie", "Early-season short-day strawberry, excellent for AZ winter production.", 55, 80, "low", None, "Very sweet, aromatic, medium-firm", "Medium-large (1-1.5 in)", "Deep red", "Short-day, moderate runners", 5, "Developed in Florida — loves mild winters. One of the earliest-producing strawberries in AZ, often fruiting by December. Very sweet with strong strawberry aroma. Good disease resistance. Slightly smaller than Chandler but earlier harvest. Excellent for AZ cool-season growing.", "University of Florida"),
+        ("Strawberry", "Festival", "High-yielding short-day strawberry with good disease resistance.", 60, 85, "low", None, "Sweet-tart, firm, good shipping quality", "Medium-large", "Bright red, glossy", "Short-day, moderate runners", 4, "Very high-yielding commercial variety that performs well in AZ home gardens. Good resistance to anthracnose and botrytis. Firm berries hold up well. Sweet-tart flavor. Produces slightly later than Sweet Charlie but yields more total fruit.", "University of Florida"),
+        ("Strawberry", "Albion", "Everbearing (day-neutral) strawberry, produces spring through fall.", 60, 90, "moderate", None, "Very sweet, firm, conical shape", "Large (1-2 in)", "Dark red, glossy", "Day-neutral, few runners", 3, "Day-neutral means it fruits regardless of day length — can produce spring through fall. In AZ, production slows in peak summer heat but continues in shade cloth. Large, firm, conical berries with outstanding sweetness. Lower total yield than short-day types but longer harvest window. Best in containers where summer heat can be managed.", "UC Davis"),
+        ("Strawberry", "Seascape", "Everbearing (day-neutral) strawberry, heavy producer with large fruit.", 60, 90, "moderate", None, "Sweet, aromatic, large berries", "Large (1-2 in)", "Red", "Day-neutral, moderate runners", 3, "Another day-neutral type that produces over a long season. Slightly more heat-tolerant than Albion. Large berries with good flavor. In AZ, plant in fall, harvest Dec-May, then decide if worth keeping through summer with shade cloth. Often treated as annual in desert.", "UC Davis"),
+        ("Strawberry", "Quinault", "Everbearing heirloom strawberry, produces large soft berries.", 60, 90, "moderate", None, "Very sweet, soft, classic strawberry flavor", "Large (very large, up to 2 in)", "Red", "Everbearing, prolific runners", 3, "Classic everbearing heirloom with very large, soft berries. Too soft for commercial shipping but outstanding for home gardens. Sweet flavor. Produces runners prolifically — great for hanging baskets and GreenStalk planters. In AZ, best production Oct-May. Soft fruit means eat same day or freeze.", "Heirloom"),
+
+        # ── DILL varieties ──
+        ("Dill", "Bouquet", "Classic tall dill for seed heads and pickling. The standard variety.", 40, 60, "low", None, "Strong dill flavor, great for pickles", "Tall (24-36 in)", "Blue-green", "Tall, upright, umbel flowers", 3, "The standard dill for pickling — large seed heads are perfect for dill pickles. Bolts quickly in AZ heat, which is actually useful if you want seed heads. Direct sow Oct-Feb only. Let some go to seed for self-sowing. Attracts swallowtail butterflies and beneficial wasps.", "Open-pollinated"),
+        ("Dill", "Fernleaf", "Compact dwarf dill bred for containers. Slow to bolt.", 40, 55, "low", None, "Mild, sweet dill flavor", "Compact (12-18 in)", "Dark green, fine-textured", "Compact, bushy", 4, "AAS winner. Compact enough for containers and GreenStalk pockets. Slower to bolt than standard dill — stays leafy longer in AZ cool season. Finer-textured foliage. Best for fresh dill weed rather than seed heads. Direct sow Oct-Feb. Good for succession planting.", "Open-pollinated"),
+        ("Dill", "Long Island Mammoth", "Giant dill variety, up to 5 feet tall. Massive seed heads.", 50, 65, "low", None, "Strong, classic dill", "Very tall (3-5 ft)", "Green", "Very tall upright", 3, "Heirloom giant dill that grows 3-5 feet tall. Huge seed umbels perfect for dill pickles. In AZ, direct sow early Oct for tallest growth before spring bolt. Needs support in windy areas. One planting produces enough dill seed for a year of pickling.", "Heirloom"),
+
+        # ── CALENDULA varieties ──
+        ("Calendula", "Pacific Beauty", "Tall calendula mix with large, fully double flowers in warm shades.", 45, 60, "low", None, "Mild, slightly peppery petals", "Tall (18-24 in)", "Orange, yellow, cream, apricot mix", "Tall upright", 4, "Most popular calendula variety for AZ cool-season gardens. Large, fully double flowers in warm sunset shades. Edible petals add color to salads. Tall enough for cut flowers. Self-seeds freely — once established, comes back every fall. Deadhead for continuous bloom Oct-Apr.", "Open-pollinated"),
+        ("Calendula", "Resina", "Medicinal calendula variety with highest resin content for salves and tinctures.", 45, 60, "low", None, "Sticky, resinous petals — medicinal use", "Medium (18-24 in)", "Bright orange", "Upright, branching", 4, "Bred specifically for medicinal use — highest resin (calendulin) content of any variety. Sticky petals are processed into healing salves, creams, and tinctures for skin. Also makes excellent companion plant. Grow in AZ cool season Oct-Mar. Harvest flowers when fully open on sunny days for highest resin content.", "German medicinal"),
+        ("Calendula", "Indian Prince", "Striking bicolor calendula with deep orange petals and mahogany undersides.", 45, 55, "low", None, "Mild, slightly tangy edible petals", "Medium (18-24 in)", "Deep orange with dark mahogany backs", "Upright, branching", 4, "Most dramatic-looking calendula. Deep orange petals with striking dark mahogany-red undersides. Outstanding cut flower. Edible petals. Good cool-season performer in AZ. Self-seeds. Slightly more compact than Pacific Beauty.", "Open-pollinated"),
+        ("Calendula", "Snow Princess", "White/cream calendula variety, unusual and elegant.", 45, 60, "low", None, "Mild, delicate", "Medium (12-18 in)", "White to pale cream", "Compact, bushy", 3, "Unusual white/cream colored calendula for gardens that want softer tones. More compact than orange varieties. Same cool-season performance in AZ. Interesting contrast planted alongside orange types. Less commonly available — may need to order seed online.", "Open-pollinated"),
+
+        # ── AFRICAN MARIGOLD varieties ──
+        ("African Marigold", "Crackerjack", "Classic tall African marigold mix with huge 4-5 inch pom-pom flowers.", 70, 90, "high", None, "N/A (ornamental)", "Tall (24-36 in)", "Yellow, gold, orange mix", "Tall upright", 5, "The classic tall African marigold. Massive pom-pom flowers up to 5 inches across. Excellent for back of border and cutting. In AZ, sow indoors Feb, transplant after frost. Blooms heavily through monsoon and into November. Outstanding nematode suppression.", "Open-pollinated"),
+        ("African Marigold", "Antigua", "Compact African marigold series with huge flowers on shorter plants.", 70, 85, "excellent", None, "N/A (ornamental)", "Compact (10-14 in)", "Yellow, gold, orange, primrose", "Compact mound with large flowers", 5, "Best African marigold for AZ containers and borders. Compact plants (only 12 in tall) topped with massive 3-4 inch fully double flowers. Handles extreme desert heat. Antigua Gold and Antigua Orange are most popular. Great for edging raised beds.", "Hybrid"),
+
+        # ── GLOBE MALLOW varieties ──
+        ("Globe Mallow", "Orange", "Standard orange-flowered globe mallow — the most common wild form.", 90, 180, "excellent", None, "N/A (ornamental/native)", "Medium shrub (24-36 in)", "Bright apricot-orange", "Rounded mound", 5, "The classic orange globe mallow seen across Sonoran Desert roadsides and hillsides. Apricot-orange cup-shaped flowers bloom Feb-May. Zero irrigation once established. Self-seeds. The quintessential AZ native wildflower.", "Native"),
+        ("Globe Mallow", "Pink", "Pink-flowered form of desert globe mallow.", 90, 180, "excellent", None, "N/A (ornamental/native)", "Medium shrub (24-36 in)", "Pink to rose", "Rounded mound", 5, "Less common than orange form but equally tough. Soft pink flowers are striking in xeriscape. Same zero-water-needed desert adaptation. Louis Hamilton is a popular pink cultivar.", "Native"),
+        ("Globe Mallow", "White", "White-flowered globe mallow — rare and sought after.", 90, 180, "excellent", None, "N/A (ornamental/native)", "Medium shrub (24-36 in)", "White to pale lavender", "Rounded mound", 5, "Rare white form — highly prized by native plant collectors. Same bulletproof desert toughness. Gorgeous paired with orange and pink forms for a multicolor native display.", "Native"),
+
+        # ── OREGANO varieties ──
+        ("Oregano", "Italian Oregano", "Origanum x majoricum — hybrid of oregano and marjoram. The best culinary oregano.", 80, 100, "high", None, "Sweet, complex, best of oregano and marjoram combined", "Medium (12-18 in)", "Green", "Mounding, semi-upright", 4, "Hybrid cross between common oregano (O. vulgare) and sweet marjoram (O. majorana). Combines the strong flavor of oregano with the sweetness of marjoram. Considered the BEST culinary oregano by many chefs. Sterile hybrid — won't self-seed, propagate by cuttings or division. Does well in AZ with good drainage. Less aggressive than common oregano.", "Hybrid"),
+
+        # ── RASPBERRY varieties ──
+        ("Raspberry", "Canby Red", "Thornless red raspberry with large, sweet berries. Developed at Oregon State University.", 365, 730, "low", "Aphid resistant", "Sweet, classic raspberry flavor with mild tartness", "Large (3-4g per berry)", "Bright red", "Upright, thornless canes (4-5 ft)", 2, "Zones 3-8 officially — challenging in AZ 9b/10a. Needs heavy afternoon shade (50% shade cloth minimum), consistent moisture, and container growing for root temperature control. Thornless canes make harvest easy. June-bearing — harvest before extreme heat. Sensitive to root rot in heavy soil. Better suited to AZ than most raspberries but still requires dedicated care. Mulch heavily with straw.", "Oregon State University"),
+
+        # ── POMEGRANATE varieties ──
+        ("Pomegranate", "Wonderful", "The standard commercial pomegranate — large, deep red fruit with tangy-sweet arils.", 730, 1095, "excellent", None, "Tangy-sweet, balanced acid, deep ruby arils", "Large (8-12 oz fruit)", "Deep purplish-red", "Multi-trunk tree/large shrub (10-15 ft)", 5, "THE desert pomegranate. Self-fruitful, prolific producer. Thrives in AZ extreme heat (115F+) and alkaline soil. Large showy orange-red flowers. Fruit ripens Sep-Nov. Consistent watering during fruit development prevents splitting. Prune to 3-5 trunks. Cold hardy to 10F. Can live 100+ years. Minimal pest issues. One of the easiest and most rewarding fruit trees for AZ.", None),
+
+        # ── BLUEBERRY varieties ──
+        ("Blueberry", "Bountiful Blue", "Southern highbush blueberry — one of the best low-chill varieties for hot climates.", 365, 730, "moderate", "Mummy berry resistant", "Sweet, mildly tangy, classic blueberry", "Medium-large berries in clusters", "Blue-purple with waxy bloom", "Upright, semi-compact bush (4-5 ft)", 3, "One of the better blueberry choices for AZ — low chill requirement (150-200 hours) that Phoenix can meet. MUST be in container with acidic mix (pH 4.5-5.5): 1/3 peat moss + 1/3 pine bark + 1/3 azalea mix + elemental sulfur. AZ tap water is alkaline — add 1 tbsp white vinegar per gallon of irrigation water. Morning sun, afternoon shade mandatory. Mulch with pine needles to maintain acidity. Evergreen in mild AZ winters. Self-fertile but produces more with a second variety (Misty, Sunshine Blue). Feed with acid-loving fertilizer (Holly-tone) only.", None),
+
+        # ── BOYSENBERRY varieties ──
+        ("Boysenberry", "Thornless", "Standard thornless boysenberry — easier to manage with slightly reduced thorn density.", 365, 730, "moderate", None, "Intensely sweet-tart, complex berry flavor, aromatic", "Large (up to 1 inch), elongated", "Dark purple-black when ripe", "Trailing canes (8-12 ft), needs trellis", 3, "Most common boysenberry sold in US nurseries. Not truly thornless — has small, soft spines on young canes but far fewer than thorned type. Same large, intensely flavored berries. In AZ, plant Dec-Feb against east wall for afternoon shade. Trailing canes need sturdy wire trellis. Mulch heavily. Consistent water during fruit set. Produces on second-year canes (floricanes) — prune spent canes after harvest. 200-300 chill hours.", None),
+        ("Boysenberry", "Thorned (Original)", "Original thorned boysenberry — slightly more vigorous with arguably better flavor.", 365, 730, "moderate", None, "Rich, complex, intensely sweet-tart — considered superior to thornless by many", "Large (up to 1.5 inch), elongated", "Dark purple-black when ripe", "Vigorous trailing canes (10-15 ft), needs trellis", 3, "The original boysenberry developed by Rudolph Boysen in the 1920s. Many growers insist thorned types have richer flavor and larger berries. More vigorous canes but harder to manage. Same AZ requirements: afternoon shade, heavy mulch, consistent moisture. Wear gauntlets for pruning and harvest. Worth the extra trouble if flavor is priority.", None),
+        ("Boysenberry", "Brulee", "New Zealand-bred thornless boysenberry with firm, plump berries.", 365, 730, "moderate", None, "Sweet, aromatic, firm texture holds up well", "Large, plump, firm", "Dark purple-red", "Trailing, thornless canes", 3, "Developed by Plant & Food Research New Zealand. Thornless canes with firm berries that ship and store better than standard boysenberry. Good for fresh eating and jam. Same desert growing requirements apply — afternoon shade, acidic-to-neutral soil, heavy mulch. Less commonly available in US but worth seeking out for AZ container growing.", "Plant & Food Research NZ"),
+        ("Boysenberry", "Mapua", "New Zealand cultivar with extra-bold flavor and large reddish berries.", 365, 730, "moderate", None, "Extra-bold, intensely flavored, richer than standard", "Large, reddish", "Reddish-purple", "Trailing, semi-thornless canes", 3, "NZ-bred cultivar prized for its extra-bold flavor profile. Large reddish berries with more complex taste than standard boysenberry. Semi-thornless. Hard to source in the US but occasionally available from specialty nurseries. Same AZ desert management: shade, mulch, consistent water, trellis.", "Plant & Food Research NZ"),
+
+        # =====================================================================
+        # BATCH 3 — Varieties for remaining plants (130 varieties for 83 plants)
+        # =====================================================================
+
+        # ── ARUGULA varieties ──
+        ("Arugula", "Astro", "Fast-growing, mild arugula. Less peppery than wild types.", 21, 40, "low", None, "Mild, nutty, less peppery", "Baby to full (4-6 in leaves)", "Dark green", "Rosette", 4, "Quick crop for AZ cool season. Mild enough for salad mix. Bolts fast in heat — grow Oct-Feb only.", "Open-pollinated"),
+        ("Arugula", "Sylvetta (Wild)", "Perennial wild arugula with intense peppery flavor.", 40, 60, "moderate", None, "Intensely peppery, nutty, bold", "Small (3-4 in leaves), deeply lobed", "Dark green", "Low rosette, perennial", 4, "Much more heat-tolerant than regular arugula. Perennial in AZ — goes dormant in summer, returns in fall. Intense flavor.", "Wild/heirloom"),
+
+        # ── BEET varieties ──
+        ("Beet", "Bull's Blood", "Deep crimson beet with stunning dark red foliage. Dual-purpose.", 35, 55, "low", None, "Sweet, earthy, tender greens", "Medium (2-3 in root)", "Deep crimson root, dark red leaves", "Compact rosette", 4, "Gorgeous dark red leaves are as valuable as the root. Great microgreen. Direct sow Oct-Feb in AZ.", "Heirloom"),
+        ("Beet", "Chioggia", "Italian heirloom with candy-striped red and white interior rings.", 50, 65, "low", None, "Mild, sweet, less earthy than red beets", "Medium (2-3 in)", "Red exterior, red/white striped interior", "Standard rosette", 3, "Beautiful sliced raw in salads — cooking fades the stripes. Cool season only in AZ.", "Italian heirloom"),
+        ("Beet", "Detroit Dark Red", "Classic deep red beet, the American standard.", 55, 65, "low", None, "Sweet, earthy, classic beet flavor", "Medium-large (3 in)", "Deep dark red throughout", "Standard rosette", 4, "The standard red beet. Reliable producer in AZ cool season. Uniform shape and color.", "Open-pollinated"),
+
+        # ── KALE varieties ──
+        ("Kale", "Lacinato (Dinosaur)", "Italian heirloom with dark blue-green puckered leaves.", 55, 65, "low", None, "Sweeter, more tender than curly kale, nutty", "Tall (18-24 in)", "Dark blue-green, heavily textured", "Upright, palm-like", 4, "THE best eating kale. Dark puckered leaves get sweeter after frost. Great for AZ cool season. Also called Tuscan or Dino kale.", "Italian heirloom"),
+        ("Kale", "Red Russian", "Tender flat-leaf kale with purple stems and grey-green leaves.", 50, 60, "low", None, "Very tender, mild, sweet", "Medium (18-24 in)", "Grey-green with purple stems/veins", "Flat, spreading rosette", 4, "One of the most tender and mild kales. Beautiful color. Excellent raw in salads. Good AZ cool-season performer.", "Russian heirloom"),
+        ("Kale", "Winterbor", "Curly kale hybrid, extremely cold-hardy and productive.", 55, 65, "low", None, "Mild, classic curly kale", "Medium (18-24 in)", "Blue-green, tightly curled", "Dense, curled rosette", 4, "Super productive curly kale for AZ winter gardens. Very uniform. Holds well in the garden.", "Hybrid"),
+
+        # ── SPINACH varieties ──
+        ("Spinach", "Bloomsdale Long Standing", "Savoy-type spinach with crinkled dark leaves. Bolt resistant.", 40, 48, "low", None, "Rich, sweet, classic spinach", "Medium (8-12 in rosette)", "Dark green, heavily savoyed", "Compact rosette", 4, "Best bolt-resistant spinach for AZ. Dark crinkled leaves. Direct sow Oct-Feb. Succession plant every 2 weeks.", "Heirloom"),
+        ("Spinach", "Tyee", "Hybrid semi-savoy spinach, excellent bolt resistance.", 37, 45, "moderate", "DM", "Mild, sweet, tender", "Medium (8-10 in)", "Dark green, semi-savoyed", "Upright rosette", 4, "Outstanding bolt resistance extends AZ harvest. Downy mildew resistant. Vigorous grower.", "Hybrid"),
+
+        # ── RADISH varieties ──
+        ("Radish", "Cherry Belle", "Classic round red radish, fast and easy.", 22, 28, "low", None, "Mild, crisp, slightly peppery", "Small round (1 in)", "Bright red, white interior", "Compact", 4, "The standard quick radish. 3-4 week crop in AZ cool season. Perfect for succession planting.", "Open-pollinated"),
+        ("Radish", "French Breakfast", "Elongated red and white radish with mild flavor.", 25, 30, "low", None, "Mild, crisp, slightly sweet", "Elongated (2-3 in)", "Red with white tip", "Compact", 4, "Elegant elongated shape. Milder than round types. Quick AZ cool-season crop.", "Heirloom"),
+        ("Radish", "Watermelon", "Large Chinese radish with green exterior and pink interior.", 50, 65, "low", None, "Mild, sweet, slightly peppery", "Large (3-4 in diameter)", "Green exterior, bright pink interior", "Large rosette", 3, "Stunning sliced open — looks like watermelon. Needs longer growing time. Best planted Oct-Nov in AZ for winter harvest.", "Chinese heirloom"),
+
+        # ── ONION varieties ──
+        ("Onion", "Texas 1015Y", "Giant sweet onion bred for southern heat. Short-day type.", 100, 120, "moderate", None, "Very sweet, mild, low sulfur", "Large (4-6 in)", "Yellow", "Upright", 5, "THE sweet onion for AZ. Short-day variety perfectly suited for desert latitude. Plant sets Oct-Nov, harvest Apr-May. Can reach softball size.", "Texas A&M"),
+        ("Onion", "Red Burgundy", "Short-day red onion with beautiful color and mild flavor.", 90, 110, "moderate", None, "Mild, sweet, slightly pungent", "Medium (3-4 in)", "Deep red/burgundy", "Upright", 4, "Beautiful color for salads and grilling. Short-day type suited for AZ. Plant fall for spring harvest.", "Open-pollinated"),
+        ("Onion", "White Bermuda", "Classic mild white onion, short-day. Great for fresh eating.", 90, 110, "moderate", None, "Very mild, sweet, crisp", "Medium-large (3-5 in)", "White", "Upright", 4, "Traditional mild white onion for southern gardens. Perfect for AZ winter growing. Excellent sliced fresh.", "Open-pollinated"),
+
+        # ── GARLIC varieties ──
+        ("Garlic", "California Early", "Softneck garlic, the standard supermarket type. Easy to grow.", 150, 180, "moderate", None, "Mild, classic garlic", "Medium bulb (8-12 cloves)", "White", "Upright", 4, "Easy softneck garlic for AZ. Plant cloves Oct-Nov, harvest May-Jun. Braids well for storage.", "Open-pollinated"),
+        ("Garlic", "Inchelium Red", "Softneck artichoke garlic with rich, complex flavor.", 150, 180, "moderate", None, "Rich, complex, mild heat", "Large bulb (12-20 cloves)", "White with pink/red blush", "Upright", 4, "Artisan softneck with outstanding flavor. Won taste tests. Good AZ performer. Plant in fall.", "Heirloom"),
+
+        # ── PEA varieties ──
+        ("Pea", "Sugar Snap", "Original snap pea, sweet and crunchy pods. Cool season only.", 58, 70, "low", None, "Very sweet, crunchy, eat whole", "Pods (3 in)", "Green", "Vine (5-6 ft, needs trellis)", 3, "The original snap pea. Must grow in AZ cool season only (Nov-Feb). Needs trellis. Sweet enough to eat raw.", "Hybrid"),
+        ("Pea", "Oregon Sugar Pod", "Flat snow pea, productive and disease resistant.", 60, 70, "low", "PM, FW", "Sweet, tender flat pod", "Flat pods (4-5 in)", "Green", "Bush-vine (24-30 in)", 3, "Best snow pea for AZ cool season. Shorter vines. Good disease resistance.", "Open-pollinated"),
+
+        # ── BROCCOLI varieties ──
+        ("Broccoli", "Waltham 29", "Classic heirloom broccoli, cold-hardy and reliable.", 65, 80, "low", None, "Classic broccoli, mild", "Medium head (4-6 in)", "Blue-green", "Compact upright", 4, "Reliable cool-season broccoli for AZ. Plant transplants Sep-Oct for winter harvest. Produces side shoots after main head cut.", "Heirloom"),
+        ("Broccoli", "De Cicco", "Italian heirloom that produces many side shoots after main head.", 50, 70, "low", None, "Tender, sweet, classic broccoli", "Small main head, many side shoots", "Green", "Branching", 4, "Excellent for continuous harvest in AZ winter. Small main head but abundant side shoots for weeks.", "Italian heirloom"),
+
+        # ── CAULIFLOWER varieties ──
+        ("Cauliflower", "Snowball", "Classic white cauliflower, self-blanching.", 55, 75, "low", None, "Mild, sweet, classic cauliflower", "Medium head (6-7 in)", "White", "Compact rosette", 3, "Traditional white cauliflower for AZ cool season. Self-blanching leaves protect the curd. Plant Sep-Oct.", "Open-pollinated"),
+        ("Cauliflower", "Graffiti", "Stunning purple cauliflower that retains color when cooked.", 70, 80, "low", None, "Mild, slightly nutty, sweet", "Medium head (6-7 in)", "Bright purple", "Compact rosette", 3, "Beautiful purple heads — color comes from anthocyanins. Good AZ cool-season performer.", "Hybrid"),
+
+        # ── BRUSSELS SPROUTS varieties ──
+        ("Brussels Sprouts", "Long Island Improved", "Classic compact Brussels sprouts, best for home gardens.", 85, 110, "low", None, "Nutty, sweet after frost", "Small sprouts (1-1.5 in)", "Green", "Tall stalk (24-30 in)", 2, "Challenging in AZ — needs sustained cool temps. Plant transplants in Sep, hope for cold winter. Flavor improves after frost. Worth trying but no guarantees.", "Heirloom"),
+
+        # ── CABBAGE varieties ──
+        ("Cabbage", "Copenhagen Market", "Early round cabbage, compact heads. Good cool-season producer.", 65, 75, "low", None, "Mild, sweet, tender", "Medium head (4-6 lbs)", "Green", "Compact round head", 4, "Early-maturing cabbage for AZ cool season. Compact heads. Plant transplants Sep-Oct.", "Heirloom"),
+        ("Cabbage", "Red Acre", "Compact red/purple cabbage with beautiful color.", 75, 85, "low", None, "Slightly peppery, mild", "Small-medium head (3-4 lbs)", "Deep red-purple", "Compact round head", 3, "Beautiful purple cabbage for AZ winter gardens. Smaller heads but gorgeous color.", "Open-pollinated"),
+
+        # ── SWISS CHARD varieties ──
+        ("Swiss Chard", "Bright Lights", "Rainbow chard mix with stunning multicolored stems.", 55, 65, "moderate", None, "Mild, earthy, slightly sweet", "Medium (12-18 in)", "Green leaves with red, yellow, orange, pink, white stems", "Upright rosette", 5, "Gorgeous rainbow stems. More heat-tolerant than spinach. Produces through AZ spring into early summer. Cut-and-come-again harvest.", "Open-pollinated"),
+        ("Swiss Chard", "Fordhook Giant", "Classic large-stalked white chard. Heavy producer.", 50, 60, "moderate", None, "Mild, earthy, tender", "Large (18-24 in)", "Dark green leaves, thick white stalks", "Large upright rosette", 4, "The standard white-stalked chard. Very productive in AZ cool season. Heavy feeder.", "Heirloom"),
+
+        # ── COLLARD GREENS varieties ──
+        ("Collard Greens", "Georgia Southern", "Traditional Southern collards, heat-tolerant.", 55, 75, "high", None, "Mild, sweet, slightly cabbage-like", "Large leaves (10-12 in)", "Blue-green", "Tall rosette (2-3 ft)", 5, "Very heat-tolerant for a brassica. Can produce into AZ spring. Traditional Southern cooking green.", "Heirloom"),
+        ("Collard Greens", "Vates", "Compact collard, more cold-hardy and bolt-resistant.", 55, 65, "moderate", None, "Mild, sweet, tender", "Medium leaves (8-10 in)", "Dark green", "Compact rosette (18-24 in)", 4, "More compact than Georgia types. Good bolt resistance extends AZ harvest. Frost sweetens flavor.", "Open-pollinated"),
+
+        # ── BOK CHOY varieties ──
+        ("Bok Choy", "Joi Choi", "Large, thick-stemmed pak choi. Bolt resistant.", 45, 55, "low", None, "Mild, sweet, crisp stems", "Medium-large (10-12 in)", "White stems, dark green leaves", "Upright rosette", 4, "Best bolt-resistant bok choy for AZ. Thick juicy stems. Plant Sep-Feb.", "Hybrid"),
+        ("Bok Choy", "Shanghai Green", "Baby bok choy with pale green stems. Quick crop.", 40, 50, "low", None, "Delicate, mild, tender", "Small (6-8 in)", "Pale green throughout", "Compact rosette", 4, "Quick baby bok choy perfect for stir-fry. Harvest young. Succession plant Oct-Feb.", "Open-pollinated"),
+
+        # ── POTATO varieties ──
+        ("Potato", "Yukon Gold", "Yellow-fleshed all-purpose potato with buttery flavor.", 70, 90, "low", None, "Buttery, creamy, rich", "Medium (5-8 oz)", "Yellow flesh, tan skin", "Bush", 3, "Plant seed potatoes Jan-Feb in AZ for spring harvest. Needs cool soil. Mulch heavily to keep tubers cool.", "Hybrid"),
+        ("Potato", "Red Pontiac", "Red-skinned potato, good heat tolerance for a potato.", 70, 90, "moderate", None, "Mild, waxy, holds shape well", "Medium (5-8 oz)", "Red skin, white flesh", "Bush", 3, "Better heat tolerance than most potatoes. Plant Jan-Feb in AZ. Good for boiling and roasting.", "Open-pollinated"),
+
+        # ── TURNIP varieties ──
+        ("Turnip", "Purple Top White Globe", "Classic bicolor turnip, fast growing.", 45, 55, "low", None, "Mild when young, stronger when mature", "Medium (3-4 in)", "Purple top, white bottom", "Low rosette", 4, "The standard turnip. Quick AZ cool-season crop. Harvest young for mildest flavor. Greens are edible too.", "Open-pollinated"),
+        ("Turnip", "Hakurei", "Japanese baby turnip, incredibly sweet and tender.", 35, 45, "low", None, "Sweet, fruity, eat raw", "Small (2 in)", "Pure white", "Compact rosette", 4, "Best eaten raw — sweet like an apple. Fast crop for AZ cool season. Beautiful white roots.", "Japanese hybrid"),
+
+        # ── PARSNIP varieties ──
+        ("Parsnip", "Hollow Crown", "Classic long parsnip with sweet nutty flavor.", 100, 120, "low", None, "Sweet, nutty, earthy — sweeter after frost", "Long (10-12 in)", "Creamy white", "Upright rosette", 3, "Needs long cool season. Plant Sep in AZ for winter harvest. Sweetens dramatically after frost. Amend clay soil deeply.", "Heirloom"),
+
+        # ── ARTICHOKE varieties ──
+        ("Artichoke", "Imperial Star", "Annual artichoke bred to produce first year from seed.", 150, 180, "moderate", None, "Nutty, buttery heart", "Large globe (3-5 in)", "Green-purple", "Large rosette (4-5 ft)", 3, "Bred to produce globes first year without vernalization. Plant seed Sep for spring harvest in AZ. Needs consistent water.", "Open-pollinated"),
+        ("Artichoke", "Green Globe", "Classic perennial artichoke, needs cold treatment.", 180, 365, "moderate", None, "Classic artichoke, tender heart", "Large globe (3-5 in)", "Green", "Large rosette (4-6 ft)", 3, "Traditional perennial artichoke. In AZ, may need refrigerator vernalization. Can be perennial with summer shade.", "Open-pollinated"),
+
+        # ── ASPARAGUS varieties ──
+        ("Asparagus", "UC 157 F1", "Hybrid bred for mild-winter areas. Best choice for AZ.", 365, 730, "high", "FW, Rust", "Sweet, tender, classic asparagus", "Spears (6-8 in)", "Green", "Ferny perennial (4-5 ft)", 4, "THE asparagus for AZ. Developed by UC for mild-winter/hot-summer climates. Low chill requirement. Plant crowns Dec-Feb. No harvest first 2 years.", "UC Davis"),
+        ("Asparagus", "Jersey Knight", "All-male hybrid, very productive. Adapted to various climates.", 365, 730, "moderate", "FW, Rust, Crown rot", "Tender, mild, sweet", "Thick spears (6-8 in)", "Green", "Ferny perennial (4-5 ft)", 3, "All-male means no seeds — more energy to spears. Good producer but UC 157 is better for AZ specifically.", "Hybrid"),
+
+        # ── CELERY varieties ──
+        ("Celery", "Tall Utah", "Classic green celery, tall thick stalks.", 80, 105, "low", None, "Crisp, mild, classic celery", "Tall (18-24 in)", "Green", "Upright, tight stalks", 2, "Challenging in AZ — needs consistently cool temps and lots of water. Plant transplants Oct for winter harvest. Shade cloth helps.", "Open-pollinated"),
+
+        # ── LEEK varieties ──
+        ("Leek", "American Flag", "Classic American leek, hardy and reliable.", 100, 130, "moderate", None, "Mild, sweet onion flavor", "Medium shaft (6-10 in)", "White shaft, blue-green leaves", "Upright", 3, "Plant transplants Sep-Oct in AZ for winter/spring harvest. Hill soil around stems for longer white portion.", "Heirloom"),
+
+        # ── GREEN ONION varieties ──
+        ("Green Onion", "Evergreen Hardy White", "Classic bunching onion, non-bulbing. Perennial.", 60, 70, "moderate", None, "Mild, fresh onion", "Slim scallion (8-12 in)", "White base, green tops", "Upright clumping", 4, "Perennial bunching onion for AZ. Divide and replant. Year-round harvest in mild AZ winters. Very easy.", "Open-pollinated"),
+        ("Green Onion", "Tokyo Long White", "Japanese bunching onion with long white stems.", 60, 75, "moderate", None, "Mild, sweet, tender", "Long white shaft (10-14 in)", "White shaft, green tops", "Upright", 4, "Long white stems without hilling. Popular in Asian cuisine. Good AZ cool-season performer.", "Japanese"),
+
+        # ── CANTALOUPE varieties ──
+        ("Cantaloupe", "Hales Best Jumbo", "Improved Hales Best with larger fruit. Desert legend.", 80, 90, "excellent", None, "Very sweet, classic cantaloupe", "Medium-large (4-5 lbs)", "Tan netted", "Vine", 5, "Larger version of the desert-bred classic. Outstanding sweetness in AZ heat. The #1 cantaloupe for desert gardens.", "Open-pollinated"),
+        ("Cantaloupe", "Planters Jumbo", "Large, sweet cantaloupe with thick flesh.", 85, 95, "high", None, "Sweet, aromatic, thick flesh", "Large (5-7 lbs)", "Tan netted", "Vigorous vine", 4, "Larger fruit than Hales Best. Thick flesh and small seed cavity. Good desert producer.", "Open-pollinated"),
+
+        # ── PUMPKIN varieties ──
+        ("Pumpkin", "Jack O'Lantern", "Classic carving pumpkin, medium-sized.", 100, 115, "high", None, "Mild, starchy (better for carving than eating)", "Medium (10-18 lbs)", "Orange", "Vigorous vine (15-20 ft)", 3, "Classic carving pumpkin. In AZ, plant July for October harvest — uses monsoon rains. Needs space.", "Open-pollinated"),
+        ("Pumpkin", "Sugar Pie", "Small sweet pumpkin, the best for pies.", 90, 100, "high", None, "Sweet, smooth, rich — the pie pumpkin", "Small (5-8 lbs)", "Deep orange", "Vine (10-15 ft)", 4, "THE pie pumpkin. Small, sweet, smooth flesh. Plant Mar or Jul in AZ. Much better eating than carving types.", "Open-pollinated"),
+
+        # ── WINTER SQUASH varieties ──
+        ("Winter Squash", "Butternut Waltham", "Classic butternut squash, tan skin, orange flesh.", 85, 110, "high", None, "Sweet, nutty, smooth", "Medium (3-5 lbs)", "Tan skin, orange flesh", "Vine (10-15 ft)", 4, "The standard butternut. Good desert producer. Plant Feb-Mar or Jul-Aug in AZ.", "Open-pollinated"),
+        ("Winter Squash", "Spaghetti", "Unique squash with stringy spaghetti-like flesh.", 85, 100, "high", None, "Mild, neutral — takes on sauce flavors", "Medium (4-6 lbs)", "Yellow", "Vine", 4, "Fun pasta alternative. Flesh separates into spaghetti-like strands when cooked. Good AZ heat tolerance.", "Open-pollinated"),
+        ("Winter Squash", "Acorn Table Queen", "Classic dark green acorn squash.", 80, 100, "moderate", None, "Sweet, nutty, slightly dry", "Small (1-2 lbs)", "Dark green with orange spot", "Semi-bush vine", 3, "Individual-serving size squash. Good in AZ spring planting. Compact vines.", "Heirloom"),
+
+        # ── BUTTERNUT SQUASH varieties ──
+        ("Butternut Squash", "Waltham", "THE classic butternut. Tan pear-shaped, sweet orange flesh.", 85, 110, "high", None, "Sweet, nutty, smooth, rich", "Medium (3-5 lbs)", "Tan skin, deep orange flesh", "Vine (10-15 ft)", 4, "The original and still the best butternut. Outstanding keeper — stores 3-6 months. Plant Feb-Mar in AZ for early summer harvest, or Jul for fall harvest.", "Open-pollinated"),
+        ("Butternut Squash", "Honeynut", "Mini butternut, sweeter and more concentrated flavor.", 85, 100, "high", None, "Very sweet, concentrated, honey-like", "Small (1 lb, 4-5 in)", "Deep tan to orange when ripe", "Compact vine", 4, "Personal-size butternut with more concentrated sweetness. Skin turns deep orange when fully ripe. Bred by Cornell. Good AZ performer.", "Cornell/hybrid"),
+
+        # ── ZUCCHINI varieties ──
+        ("Zucchini", "Costata Romanesco", "Ribbed Italian heirloom with outstanding nutty flavor.", 50, 60, "high", None, "Nutty, rich, far superior to standard zucchini", "Medium (6-10 in), ribbed", "Gray-green, ribbed", "Bush", 4, "The best-tasting zucchini. Distinctive ribs. Flowers prized for stuffing. Harvest young for best flavor.", "Italian heirloom"),
+        ("Zucchini", "Dark Green", "Classic dark green zucchini, very productive and easy.", 45, 55, "high", None, "Mild, classic zucchini", "Medium (6-8 in)", "Dark green", "Compact bush", 4, "Standard dark zucchini. Extremely productive in AZ. Harvest at 6-8 inches.", "Open-pollinated"),
+
+        # ── GROUND CHERRY varieties ──
+        ("Ground Cherry", "Aunt Molly's", "Golden berries in papery husks. Sweet and tropical.", 65, 75, "high", None, "Sweet, tropical, pineapple-mango notes", "Small (0.5-0.75 in)", "Golden yellow in papery husk", "Sprawling bush (2-3 ft)", 4, "Delightful sweet berries in paper lantern husks. Self-seeds in AZ. Very heat tolerant. Tomatillo relative.", "Polish heirloom"),
+
+        # ── JALAPENO varieties ──
+        ("Jalapeno", "Early", "Early-maturing jalapeno for shorter seasons.", 55, 65, "excellent", None, "Spicy, bright, classic jalapeno", "Medium (2-3 in)", "Green to red", "Compact bush", 5, "Earlier than standard jalapeno. Perfect for AZ where you want fruit before extreme heat. Very productive.", "Hybrid"),
+
+        # ── HABANERO varieties ──
+        ("Habanero", "Orange", "Classic orange habanero, extremely hot.", 90, 120, "excellent", None, "Fruity, floral, extremely hot (100K-350K SHU)", "Small (1-2 in)", "Orange", "Bushy (2-3 ft)", 5, "The classic habanero. Thrives in AZ extreme heat. Long season — start indoors in Jan.", None),
+        ("Habanero", "Chocolate", "Brown/chocolate colored habanero with smoky heat.", 90, 120, "excellent", None, "Smoky, earthy, very hot", "Small (1-2 in)", "Chocolate brown", "Bushy (2-3 ft)", 5, "Smoky, earthy version. Same extreme heat love as orange. Rich flavor for sauces.", None),
+
+        # ── SERRANO varieties ──
+        ("Serrano", "Tampiqueno", "Classic Mexican serrano from Tampico region.", 70, 80, "excellent", None, "Bright, crisp, medium-hot", "Small (2-3 in)", "Green to red", "Upright bush (2-3 ft)", 5, "The original Mexican serrano. Incredibly productive in AZ heat. Essential for fresh salsa.", "Mexican heirloom"),
+
+        # ── FIG varieties ──
+        ("Fig", "Black Mission", "Classic purple-black fig, rich and sweet.", 365, 730, "excellent", None, "Rich, sweet, jammy, complex", "Medium (2-3 in)", "Purple-black exterior, pink-red interior", "Large tree/shrub (15-25 ft)", 5, "Outstanding AZ performer. Self-fruitful. Two crops: breba (spring) and main (late summer). Very drought tolerant once established.", "Spanish mission/heirloom"),
+        ("Fig", "Kadota", "Honey-sweet green fig, excellent for preserves.", 365, 730, "excellent", None, "Honey-sweet, mild, amber flesh", "Medium (2 in)", "Green-yellow exterior, amber interior", "Large tree/shrub (15-20 ft)", 5, "Green when ripe — honey-sweet amber flesh. Excellent fresh or preserved. Thrives in AZ heat.", "Italian heirloom"),
+        ("Fig", "Desert King", "Large green fig, very reliable in hot climates.", 365, 730, "excellent", None, "Sweet, strawberry-red flesh", "Large (3 in)", "Green exterior, strawberry-red interior", "Medium tree (10-15 ft)", 5, "Named for desert performance. Large sweet fruit. Strong breba crop. Very reliable AZ producer.", None),
+
+        # ── GRAPE varieties ──
+        ("Grape", "Thompson Seedless", "Classic green seedless grape, excellent for desert heat.", 730, 1095, "excellent", None, "Sweet, mild, classic green grape", "Medium clusters", "Green/yellow", "Vigorous vine (needs trellis/arbor)", 5, "THE desert grape. Thrives in AZ heat. Needs strong trellis or arbor. Prune hard in winter. Outstanding producer.", "Open-pollinated"),
+        ("Grape", "Flame Seedless", "Red seedless grape, crunchy and sweet.", 730, 1095, "excellent", None, "Sweet, crunchy, red grape", "Medium clusters", "Red", "Vigorous vine", 5, "Excellent desert red grape. Crunchy texture. Good disease resistance. Perfect for AZ arbors.", "Hybrid"),
+
+        # ── LEMON varieties ──
+        ("Lemon", "Eureka", "Classic supermarket lemon, produces year-round.", 365, 730, "high", None, "Tart, classic lemon", "Medium (2-3 in)", "Yellow", "Medium tree (12-20 ft)", 5, "Year-round lemon production in AZ. Very productive. The classic lemon tree for desert yards.", "Open-pollinated"),
+        ("Lemon", "Meyer", "Sweeter hybrid lemon, thin skin, fragrant flowers.", 365, 730, "moderate", None, "Sweeter, less acid, floral", "Medium (2-3 in)", "Deep yellow-orange", "Small tree (8-12 ft)", 4, "Lemon-orange hybrid. Sweeter and more fragrant than regular lemon. Slightly less heat-tolerant. Protect from frost.", "Hybrid"),
+
+        # ── ORANGE varieties ──
+        ("Orange", "Washington Navel", "Classic seedless eating orange for AZ.", 365, 730, "high", None, "Sweet, seedless, classic orange", "Large (3-4 in)", "Orange", "Medium tree (15-25 ft)", 5, "THE navel orange for AZ. AZ is prime navel orange country. Seedless, sweet, beautiful tree. Harvest Dec-Mar.", "Open-pollinated"),
+        ("Orange", "Valencia", "Classic juice orange, ripens in summer.", 365, 730, "high", None, "Sweet-tart, excellent juice", "Medium (2.5-3 in)", "Orange", "Large tree (20-30 ft)", 4, "The world's juice orange. Ripens summer in AZ (opposite of navels). Good for continuous citrus harvest.", "Open-pollinated"),
+
+        # ── GRAPEFRUIT varieties ──
+        ("Grapefruit", "Rio Red", "Deep red-fleshed grapefruit, AZ's commercial variety.", 365, 730, "high", None, "Sweet-tart, less bitter, deep red flesh", "Large (4-5 in)", "Yellow-blush exterior, deep red flesh", "Large tree (20-30 ft)", 5, "THE AZ grapefruit. Yuma/Phoenix are the US grapefruit capitals. Deep red sweet flesh. AZ grapefruit are world-famous.", "Texas A&M"),
+        ("Grapefruit", "Marsh", "Classic white seedless grapefruit.", 365, 730, "high", None, "Classic grapefruit, balanced sweet-tart", "Large (4-5 in)", "Yellow exterior and flesh", "Large tree (20-30 ft)", 4, "Traditional white grapefruit. Well-adapted to AZ. Slightly more tart than Rio Red.", "Open-pollinated"),
+
+        # ── BLACKBERRY varieties ──
+        ("Blackberry", "Natchez", "Thornless, upright blackberry. Heat-tolerant and productive.", 365, 730, "moderate", None, "Sweet, large, firm berries", "Large (up to 1.5 in)", "Black", "Upright, thornless canes (4-5 ft)", 3, "Best blackberry choice for AZ. Thornless and partially self-supporting. Needs afternoon shade and consistent water. 200-300 chill hours.", "University of Arkansas"),
+        ("Blackberry", "Apache", "Thornless, upright blackberry with very large fruit.", 365, 730, "moderate", None, "Sweet, firm, very large", "Very large", "Black", "Upright, thornless (5-6 ft)", 3, "Very large fruit. Thornless canes. Needs afternoon shade in AZ. Same care as Natchez.", "University of Arkansas"),
+
+        # ── PRICKLY PEAR varieties ──
+        ("Prickly Pear", "Burbank Spineless", "Spineless prickly pear developed by Luther Burbank.", 365, 730, "excellent", None, "Sweet pads (nopales) and tuna fruit", "Large pads (8-12 in)", "Green pads, red/purple fruit", "Large cactus (5-8 ft)", 5, "Spineless! Bred by Luther Burbank. Eat both pads (nopales) and fruit (tuna). Zero water needed. Ultimate AZ edible.", "Heirloom"),
+        ("Prickly Pear", "Santa Rita", "Purple-padded ornamental prickly pear. Stunning color.", 365, 730, "excellent", None, "Edible but grown for ornamental value", "Medium pads", "Purple pads (intensifies in cold/drought)", "Medium cactus (3-5 ft)", 5, "Gorgeous purple pads that intensify in cold weather and drought stress. Edible fruit. Zero irrigation.", "Native"),
+
+        # ── MORINGA varieties ──
+        ("Moringa", "PKM 1", "Indian variety bred for high leaf production.", 180, 365, "excellent", None, "Mild, spinach-like, highly nutritious", "Leaflets on compound leaves", "Green", "Fast-growing tree (15-30 ft)", 5, "Superfood tree that LOVES AZ heat. Fast growing — can reach 15 ft in one season. Harvest leaves continuously. Dies back in frost but regrows.", "Indian agricultural"),
+
+        # ── JUJUBE varieties ──
+        ("Jujube", "Li", "Large jujube fruit, excellent fresh eating.", 730, 1095, "excellent", None, "Apple-like when fresh, date-like when dried", "Large (2-3 in)", "Red-brown", "Small tree (15-25 ft)", 5, "THE best jujube for AZ. Thrives in extreme heat and alkaline soil. Apple-like fresh, date-like dried. Incredibly low-maintenance.", "Chinese"),
+        ("Jujube", "Honey Jar", "Small, extremely sweet jujube. Best fresh-eating flavor.", 730, 1095, "excellent", None, "Honey-sweet, crisp, exceptional fresh", "Small (1-1.5 in)", "Red-brown", "Small tree (10-15 ft)", 5, "Sweetest jujube variety. Small fruit but incredible flavor. Perfect for AZ. Self-fruitful.", "Chinese"),
+
+        # ── DATE PALM varieties ──
+        ("Date Palm", "Medjool", "The king of dates. Large, soft, caramel-sweet.", 1825, 2555, "excellent", None, "Rich, caramel, soft, very sweet", "Large (1.5-2 in)", "Amber to brown", "Tall palm (50-80 ft)", 5, "AZ is one of only a few US date-growing regions. Medjool is the premium variety. Needs extreme heat to ripen. Female trees need male pollinator nearby.", None),
+        ("Date Palm", "Deglet Noor", "Semi-dry date, translucent and honey-sweet.", 1825, 2555, "excellent", None, "Honey-sweet, firm, translucent", "Medium (1-1.5 in)", "Translucent amber", "Tall palm (50-80 ft)", 5, "Most widely grown date worldwide. Semi-dry texture. Ripens well in AZ heat. The 'Date of Light'.", None),
+
+        # ── ARMENIAN CUCUMBER varieties ──
+        ("Armenian Cucumber", "Painted Serpent", "Striped Armenian cucumber with beautiful dark/light green pattern.", 50, 70, "excellent", None, "Mild, sweet, refreshing, never bitter", "Long (18-24 in)", "Dark green and light green striped", "Vigorous vine", 5, "Gorgeous striped version of the classic Armenian. Same incredible heat tolerance. Technically a melon. Never bitter even in extreme heat.", "Heirloom"),
+
+        # ── TEPARY BEAN varieties ──
+        ("Tepary Bean", "White Tepary", "Native Sonoran white tepary bean. Sacred to O'odham peoples.", 55, 75, "excellent", None, "Nutty, creamy, rich protein", "Small dried bean", "White", "Low trailing bush", 5, "The most drought-tolerant bean on Earth. Native to Sonoran Desert. Survives on monsoon rains alone. High protein. Sacred to Tohono O'odham.", "Native heirloom"),
+
+        # ── MALABAR SPINACH varieties ──
+        ("Malabar Spinach", "Red Stem", "Heat-loving vine with red stems. Summer spinach substitute.", 55, 70, "excellent", None, "Mild, mucilaginous, spinach-like", "Thick leaves (2-3 in)", "Green leaves, red stems", "Vine (6-10 ft)", 5, "THE summer spinach for AZ. Vine that LOVES heat. Red stems are ornamental. Needs trellis. Produces all summer when real spinach has long bolted.", None),
+
+        # ── ROSELLE varieties ──
+        ("Roselle", "Thai Red", "Large-calyxed roselle for hibiscus tea. Prolific producer.", 120, 150, "excellent", None, "Tart, cranberry-like, makes hibiscus tea", "Red calyces (1.5-2 in)", "Red calyces, green leaves", "Tall bush (5-7 ft)", 5, "Makes the famous hibiscus tea (agua de jamaica). Thrives in AZ monsoon heat. Plant after last frost, harvest calyces Oct-Nov.", "Thai"),
+
+        # ── CHIVE varieties ──
+        ("Chive", "Common Chive", "Standard onion chive with mild onion flavor.", 75, 90, "moderate", None, "Mild onion, fresh, bright", "Thin hollow leaves (10-12 in)", "Green, purple flowers", "Clumping", 4, "Easy perennial herb for AZ. Purple flowers are edible. Goes semi-dormant in summer heat. Divide clumps every 2-3 years.", "European"),
+        ("Chive", "Garlic Chive", "Flat-leaved chive with garlic flavor.", 75, 90, "moderate", None, "Mild garlic, flat leaves", "Flat leaves (12-18 in)", "Green, white star flowers", "Clumping, can be invasive", 4, "Garlic-flavored flat leaves. White flowers are edible. Can self-seed aggressively in AZ — deadhead flowers.", "Asian"),
+
+        # ── LEMONGRASS varieties ──
+        ("Lemongrass", "East Indian", "Standard culinary lemongrass. Cymbopogon flexuosus.", 75, 120, "high", None, "Bright citrus, lemon, herbal", "Tall grass clump (3-5 ft)", "Green", "Tall ornamental grass clump", 5, "Culinary lemongrass that thrives in AZ heat. Ornamental grass form. Divide clumps annually. Harvest outer stalks. Protect from hard frost.", None),
+
+        # ── MEXICAN TARRAGON varieties ──
+        ("Mexican Tarragon", "Texas Tarragon", "Tagetes lucida — marigold-family tarragon substitute.", 75, 120, "excellent", None, "Anise, tarragon-like, slightly sweet", "Medium (18-24 in)", "Green with small yellow flowers", "Bushy perennial", 5, "French tarragon cannot grow in AZ — this native substitute thrives in desert heat. Same anise flavor. Beautiful yellow fall flowers. Used in Mexican cuisine for centuries.", "Native"),
+
+        # ── ZINNIA varieties ──
+        ("Zinnia", "State Fair Mix", "Tall dahlia-flowered zinnias in mixed colors. AZ classic.", 60, 75, "excellent", None, "N/A (ornamental, cut flower)", "Tall (30-40 in)", "Mixed — red, orange, yellow, pink, white, lavender", "Tall upright", 5, "THE desert annual flower. Thrives in extreme AZ heat. Massive 4-5 inch blooms. Outstanding cut flowers. Direct sow Mar-Aug. Continuous bloom until frost.", "Open-pollinated"),
+        ("Zinnia", "Profusion", "Compact bedding zinnia, disease resistant and compact.", 45, 60, "excellent", None, "N/A (ornamental)", "Compact (12-15 in)", "Orange, cherry, white, fire, yellow", "Compact mound", 5, "AAS winner. Disease resistant. Compact enough for containers. Non-stop bloom through AZ summer. Self-cleaning.", "Hybrid"),
+
+        # ── COSMOS varieties ──
+        ("Cosmos", "Sensation Mix", "Classic tall cosmos mix with large daisy flowers.", 50, 60, "high", None, "N/A (ornamental)", "Tall (3-5 ft)", "Pink, white, crimson, bi-color mix", "Tall, airy", 4, "Effortless tall annual for AZ. Self-seeds prolifically. Attracts butterflies. Direct sow after last frost.", "Open-pollinated"),
+        ("Cosmos", "Cosmic Orange", "Compact orange cosmos, heat loving.", 50, 60, "excellent", None, "N/A (ornamental)", "Compact (12-18 in)", "Bright orange", "Compact mound", 5, "Compact cosmos that LOVES heat. AAS winner. Non-stop orange blooms all summer. Great for borders and containers.", "Hybrid"),
+
+        # ── BORAGE varieties ──
+        ("Borage", "Common Blue", "Classic blue-flowered borage. Cucumber-flavored leaves.", 50, 60, "moderate", None, "Cucumber-flavored leaves, edible blue flowers", "Medium-tall (18-30 in)", "Brilliant blue star flowers", "Bushy, bristly", 4, "Blue star flowers are gorgeous and edible. Leaves taste like cucumber. Self-seeds in AZ. Excellent pollinator plant.", "European heirloom"),
+
+        # ── MARIGOLD varieties ──
+        ("Marigold", "French Dwarf Mix", "Compact French marigold, classic companion plant.", 50, 65, "excellent", None, "N/A (ornamental, companion plant)", "Compact (8-12 in)", "Yellow, orange, red, bicolor", "Compact mound", 5, "THE companion plant. Repels nematodes and many pests. Compact enough for borders and containers. Non-stop bloom in AZ heat.", "Open-pollinated"),
+        ("Marigold", "Signet Lemon Gem", "Tiny edible citrus-scented marigold flowers.", 50, 65, "excellent", None, "Edible flowers with citrus flavor", "Compact (8-12 in)", "Lemon yellow", "Airy, fine-textured mound", 5, "Delicate edible flowers with lemon-citrus flavor. Fine-textured foliage. Perfect for salads. Great AZ heat tolerance.", "Open-pollinated"),
+
+        # ── NASTURTIUM varieties ──
+        ("Nasturtium", "Jewel Mix", "Classic trailing nasturtium in warm jewel tones.", 35, 50, "moderate", None, "Peppery leaves and flowers are edible", "Trailing (12-18 in)", "Red, orange, yellow, cream mix", "Trailing/mounding", 3, "Gorgeous edible flowers and peppery leaves. In AZ, grow as cool-season annual (Oct-Apr). Bolts and dies in heat.", "Open-pollinated"),
+        ("Nasturtium", "Alaska", "Variegated-leaf nasturtium with cream-splashed foliage.", 35, 50, "moderate", None, "Peppery, edible leaves and flowers", "Mounding (12-15 in)", "Orange, red, yellow flowers; cream-variegated leaves", "Compact mound", 3, "Stunning variegated foliage even without flowers. Cool-season AZ annual. Edible and ornamental.", "Open-pollinated"),
+
+        # ── SUNFLOWER varieties ──
+        ("Sunflower", "Mammoth Russian", "Giant sunflower up to 12 feet tall. Huge seed heads.", 70, 90, "excellent", None, "Edible seeds, classic sunflower", "Giant (10-12 ft tall, 12 in heads)", "Yellow petals, brown center", "Single tall stalk", 5, "The classic giant sunflower. Thrives in AZ heat. Seeds attract birds. Kids love growing these. Direct sow Mar-Jul.", "Russian heirloom"),
+        ("Sunflower", "Autumn Beauty", "Multi-branching sunflower with warm autumn colors.", 55, 70, "excellent", None, "N/A (ornamental, smaller seeds)", "Multi-branching (5-7 ft)", "Red, bronze, yellow, orange, burgundy mix", "Multi-branching", 5, "Beautiful multi-colored branching sunflower. Multiple blooms per plant. Gorgeous cut flowers. Great AZ performer.", "Open-pollinated"),
+
+        # ── SWEET ALYSSUM varieties ──
+        ("Sweet Alyssum", "Carpet of Snow", "Classic white alyssum ground cover. Honey-scented.", 40, 55, "low", None, "N/A (ornamental, beneficial insect attractor)", "Low (3-4 in)", "White", "Low spreading mat", 4, "Living mulch for AZ cool season. Attracts beneficial insects. Honey-scented. Self-seeds. Perfect under taller plants.", "Open-pollinated"),
+
+        # ── SNAPDRAGON varieties ──
+        ("Snapdragon", "Rocket Mix", "Tall snapdragons in mixed colors. Great cut flower.", 60, 80, "low", None, "N/A (ornamental)", "Tall (30-36 in)", "Mixed — red, pink, yellow, white, bronze", "Tall spike", 4, "Outstanding AZ cool-season cut flower. Plant transplants Sep-Oct for winter bloom. Handles light frost.", "Hybrid"),
+        ("Snapdragon", "Montego Mix", "Dwarf snapdragon for borders and containers.", 55, 70, "low", None, "N/A (ornamental)", "Compact (8-10 in)", "Mixed colors", "Compact spike", 4, "Compact snapdragons perfect for AZ cool-season borders and containers. Bloom Oct-Apr.", "Hybrid"),
+
+        # ── SNAP PEA varieties ──
+        ("Snap Pea", "Sugar Ann", "Compact snap pea, no trellis needed.", 50, 60, "low", None, "Sweet, crunchy, eat whole pod", "Pods (2.5-3 in)", "Green", "Compact bush (24 in)", 3, "Compact enough to grow without trellis. Sweet snap pea for AZ cool season only. Plant Nov-Jan.", "Hybrid"),
+
+        # ── SNOW PEA varieties ──
+        ("Snow Pea", "Oregon Sugar Pod II", "Improved snow pea, disease resistant and productive.", 60, 70, "low", "PM, FW", "Sweet, tender flat pod", "Flat pods (4-5 in)", "Green", "Bush-vine (24-30 in)", 3, "Best snow pea for AZ cool season. Good disease resistance. Short vines. Plant Nov-Jan.", "Open-pollinated"),
+
+        # ── CHAMOMILE varieties ──
+        ("Chamomile", "German", "Annual chamomile, the tea variety. Apple-scented flowers.", 55, 65, "moderate", None, "Apple-sweet, calming — classic tea herb", "Small (12-24 in)", "White daisy flowers, yellow centers", "Upright, branching", 4, "THE chamomile for tea. Annual that self-seeds in AZ. Plant in fall for winter/spring harvest. Apple-scented flowers.", "European"),
+
+        # ── CATNIP varieties ──
+        ("Catnip", "Common Catnip", "Nepeta cataria — the classic cat-attracting herb.", 60, 90, "moderate", None, "Minty, mild, herbal tea", "Medium (18-36 in)", "Grey-green, small white/lavender flowers", "Bushy, spreading", 4, "Cats love it, bees love it, mosquitoes hate it. Easy perennial in AZ. Drought tolerant. Good herbal tea too.", "European"),
+
+        # ── LEMON BALM varieties ──
+        ("Lemon Balm", "Common", "Melissa officinalis — lemon-scented mint family herb.", 55, 75, "moderate", None, "Bright lemon, calming tea herb", "Medium (12-24 in)", "Green", "Bushy, spreading (can be invasive)", 4, "Wonderful lemon-scented tea herb. Spreads like mint — grow in containers. Calming tea. Attracts bees. Semi-dormant in AZ summer.", "European"),
+
+        # ── BAJA FAIRY DUSTER varieties ──
+        ("Baja Fairy Duster", "Red", "Classic red-flowered Baja fairy duster.", 365, 730, "excellent", None, "N/A (ornamental, hummingbird magnet)", "Large shrub (4-6 ft)", "Bright red puffball flowers", "Rounded evergreen shrub", 5, "Iconic desert ornamental. Red puffball flowers year-round in AZ. Hummingbird magnet. Zero supplemental water once established.", "Native"),
+
+        # ── SPARKY TECOMA varieties ──
+        ("Sparky Tecoma", "Orange Jubilee", "Tecoma x 'Orange Jubilee' — compact orange-flowered shrub.", 365, 730, "excellent", None, "N/A (ornamental, hummingbird plant)", "Medium shrub (6-8 ft)", "Orange trumpet flowers", "Upright shrub", 5, "Non-stop orange trumpet flowers from spring through fall in AZ. Hummingbird favorite. Very low water. Cut back hard in late winter.", None),
+
+        # ── BLACKFOOT DAISY varieties ──
+        ("Blackfoot Daisy", "Standard", "Melampodium leucanthum — native white daisy groundcover.", 90, 365, "excellent", None, "N/A (ornamental, native wildflower)", "Low (6-12 in)", "White daisies with yellow centers", "Low spreading mound", 5, "Charming native daisy that blooms almost year-round in AZ. Extremely drought tolerant. Perfect for rock gardens. Self-seeds.", "Native"),
+
+        # ── MOSS VERBENA varieties ──
+        ("Moss Verbena", "Purple", "Glandularia pulchella — low-growing purple desert verbena.", 60, 180, "excellent", None, "N/A (ornamental, butterfly plant)", "Low groundcover (6-8 in)", "Purple-violet", "Creeping mat", 5, "Low-growing native groundcover with masses of purple flowers. Blooms spring through fall in AZ. Butterfly magnet. No irrigation once established.", "Native"),
+
+        # ── PURPLE TRAILING LANTANA varieties ──
+        ("Purple Trailing Lantana", "Trailing Purple", "Lantana montevidensis — trailing purple lantana groundcover.", 60, 365, "excellent", None, "N/A (ornamental, butterfly plant)", "Low trailing (12-18 in tall, 6-8 ft spread)", "Purple-lavender", "Trailing, spreading", 5, "Ultimate AZ heat-loving groundcover. Purple flowers year-round. Spreads vigorously. Zero water once established. Butterflies love it.", None),
+
+        # ── SOAPTREE YUCCA varieties ──
+        ("Soaptree Yucca", "Standard", "Yucca elata — native Sonoran tree yucca.", 730, 1825, "excellent", None, "N/A (native, ornamental, ethnobotanical)", "Tree form (10-20 ft)", "White flower stalks, sword-like leaves", "Tree-like with rosette top", 5, "Iconic Sonoran Desert tree. Spectacular white flower stalks in spring. Roots produce natural soap (saponins). Extremely drought tolerant.", "Native"),
+
+        # ── BANANA YUCCA varieties ──
+        ("Banana Yucca", "Standard", "Yucca baccata — native yucca with edible banana-like fruit.", 730, 1825, "excellent", None, "Edible fruit — sweet, banana-like when roasted", "Medium (2-3 ft rosette)", "Green sword leaves, white flowers", "Low rosette, no trunk", 5, "Native yucca with edible fruit that tastes like banana when roasted. Used by Indigenous peoples for millennia. Extremely tough.", "Native"),
+
+        # ── MOJAVE YUCCA varieties ──
+        ("Mojave Yucca", "Standard", "Yucca schidigera — native Mojave yucca with medicinal uses.", 730, 1825, "excellent", None, "N/A (ornamental, ethnobotanical)", "Large (6-15 ft)", "Sword-like leaves, white/purple flowers", "Tree-like or multi-trunk", 5, "Tough native yucca. Extract used as natural surfactant and in animal feed. Dramatic landscape specimen. No irrigation needed.", "Native"),
+
+        # ── RED YUCCA varieties ──
+        ("Red Yucca", "Standard", "Hesperaloe parviflora — not a true yucca. Coral flower spikes.", 365, 730, "excellent", None, "N/A (ornamental, hummingbird magnet)", "Medium (3-4 ft foliage, 5 ft flower stalks)", "Coral-red flower spikes", "Grass-like clump with arching flower stalks", 5, "NOT actually a yucca. Coral flower spikes bloom spring through fall, attracting hummingbirds non-stop. Zero water. #1 recommended desert ornamental.", "Native"),
+
+        # ── DESERT MILKWEED varieties ──
+        ("Desert Milkweed", "Standard", "Asclepias subulata — native rush milkweed for monarch butterflies.", 180, 365, "excellent", None, "N/A (monarch butterfly host plant)", "Medium (3-4 ft)", "Cream-white flower clusters", "Upright, rush-like stems (no visible leaves)", 5, "Critical monarch butterfly host plant. Leafless rush-like stems conserve water. Native to Sonoran Desert. Milky sap is toxic — wear gloves.", "Native"),
+
+        # ── PINE-LEAF MILKWEED varieties ──
+        ("Pine-leaf Milkweed", "Standard", "Asclepias linaria — delicate native milkweed with needle-like leaves.", 180, 365, "excellent", None, "N/A (monarch butterfly host plant)", "Medium (2-3 ft)", "White flower clusters", "Upright, fine-textured", 5, "Most ornamental native milkweed. Fine needle-like foliage. Monarch host plant. Less aggressive than tropical milkweed. Native desert species.", "Native"),
+
+        # ── BUTTERFLY WEED varieties ──
+        ("Butterfly Weed", "Standard", "Asclepias tuberosa — classic orange butterfly weed.", 120, 365, "moderate", None, "N/A (butterfly host and nectar plant)", "Medium (18-30 in)", "Brilliant orange flower clusters", "Upright, clumping", 3, "Classic orange milkweed. Monarch host plant. Less drought-tolerant than desert species — needs supplemental water in AZ. Worth growing for butterfly habitat.", "Native"),
+
+        # ── SHOWY MILKWEED varieties ──
+        ("Showy Milkweed", "Standard", "Asclepias speciosa — large pink milkweed, monarch host.", 180, 365, "moderate", None, "N/A (monarch butterfly host plant)", "Tall (2-4 ft)", "Large pink-lavender flower clusters", "Upright, spreading by rhizomes", 3, "Large pink flower heads attract monarchs. Spreads by rhizomes — can be aggressive. Needs supplemental water in AZ. Plant in contained area.", "Native"),
+
+        # ── ARIZONA MILKWEED varieties ──
+        ("Arizona Milkweed", "Standard", "Asclepias angustifolia — native AZ milkweed, narrow leaves.", 180, 365, "excellent", None, "N/A (monarch butterfly host plant)", "Medium (18-36 in)", "White-green flower clusters", "Upright, narrow-leaved", 5, "True Arizona native milkweed. Narrow leaves, greenish-white flowers. Monarch host. More drought-tolerant than non-native milkweeds.", "Native"),
+
+        # ── INDIAN LAUREL varieties ──
+        ("Indian Laurel", "Nitida", "Ficus microcarpa nitida — glossy evergreen hedge/tree.", 730, 1825, "excellent", None, "N/A (ornamental shade tree/hedge)", "Large (25-40 ft if untrimmed)", "Glossy dark green leaves", "Dense, rounded canopy", 5, "Classic AZ shade tree and hedge plant. Dense glossy evergreen foliage. Handles extreme heat. Aggressive roots — keep away from foundations and pipes.", None),
+
+        # ── STAR JASMINE varieties ──
+        ("Star Jasmine", "Standard", "Trachelospermum jasminoides — fragrant evergreen vine.", 365, 730, "moderate", None, "Intensely fragrant white flowers", "Vine (15-25 ft) or groundcover", "White star flowers, glossy dark green leaves", "Twining vine or spreading groundcover", 4, "Incredibly fragrant white flowers in spring. Evergreen in AZ. Can be vine or groundcover. Needs some afternoon shade in peak summer.", None),
+
+        # ── DESERT GOLD PEACH varieties ──
+        ("Desert Gold Peach", "Standard", "Low-chill peach bred for desert Southwest. Only 200 chill hours.", 365, 730, "high", None, "Sweet, classic peach, yellow freestone", "Medium (2.5-3 in)", "Yellow flesh, red-blushed skin", "Medium tree (12-18 ft)", 5, "THE peach for AZ — only 200 chill hours needed. AZ easily meets this. Self-fruitful. Harvest May-Jun. Beautiful pink spring blossoms.", None),
+
+        # ── TANGERINE CROSSVINE varieties ──
+        ("Tangerine Crossvine", "Standard", "Bignonia capreolata 'Tangerine Beauty' — orange trumpet vine.", 365, 730, "high", None, "N/A (ornamental, hummingbird vine)", "Vigorous vine (30-50 ft)", "Tangerine-orange trumpet flowers", "Clinging vine", 4, "Semi-evergreen vine with gorgeous orange trumpets in spring. Hummingbird magnet. Clings to walls and fences. Good AZ performer with some water.", None),
+
+        # ── BARBADOS CHERRY varieties ──
+        ("Barbados Cherry", "Standard", "Malpighia glabra — tropical cherry shrub, vitamin C powerhouse.", 365, 730, "high", None, "Tart, cherry-like, extremely high vitamin C", "Small (0.5-1 in)", "Bright red", "Large shrub/small tree (8-12 ft)", 3, "Each cherry has 65x more vitamin C than an orange. Tropical — needs frost protection in AZ. Grow in container or against south wall. Produces multiple crops per year in warm months.", "Tropical"),
+
+        # ── PARRY'S PENSTEMON varieties ──
+        ("Parry's Penstemon", "Standard", "Penstemon parryi — native Sonoran hot-pink penstemon.", 180, 365, "excellent", None, "N/A (ornamental, hummingbird magnet)", "Tall flower spikes (3-5 ft)", "Hot pink tubular flowers", "Basal rosette with tall flower spikes", 5, "Stunning native penstemon with 3-5 ft spikes of hot pink flowers in spring. Hummingbird magnet. Self-seeds. Zero irrigation. One of AZ's most beautiful native wildflowers.", "Native"),
+
+        # ── SALVIA HOT LIPS varieties ──
+        ("Salvia Hot Lips", "Standard", "Salvia microphylla 'Hot Lips' — bicolor red and white salvia.", 90, 365, "excellent", None, "N/A (ornamental, hummingbird plant)", "Medium shrub (24-36 in)", "Bicolor red and white flowers (color varies with temperature)", "Rounded shrub", 5, "Fascinating — flowers change color with temperature. Cool weather: more white. Hot weather: more red. Medium temps: bicolor. Year-round bloom in AZ. Hummingbird magnet. Very low water.", None),
+    ]
+
+    for v in VARIETIES:
+        plant_name, variety_name, description, dtm_min, dtm_max, heat_tol, disease_res, flavor, size, color, growth, desert_rating, desert_notes, source = v
+        plant_row = db.execute("SELECT id FROM plants WHERE name = ?", (plant_name,)).fetchone()
+        if plant_row:
+            plant_id = plant_row[0]
+            db.execute("""
+                INSERT OR IGNORE INTO varieties
+                (plant_id, name, description, days_to_maturity_min, days_to_maturity_max,
+                 heat_tolerance, disease_resistance, flavor_profile, size, color,
+                 growth_habit, desert_rating, desert_notes, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                plant_id, variety_name, description, dtm_min, dtm_max,
+                heat_tol, disease_res, flavor, size, color,
+                growth, desert_rating, desert_notes, source,
+            ))
+
+    db.commit()
+
+    # ── Seed planter types (GreenStalk product line) ──
+    PLANTER_TYPES = [
+        # (name, brand, form_factor, tiers, pockets_per_tier, total_pockets, pocket_depth_inches, pocket_volume_gallons, footprint_diameter_inches, footprint_width, footprint_depth, height_inches, watering_system, material, indoor_outdoor, url, recommended_plants_json, unsuitable_plants_json, desert_notes)
+        (
+            "GreenStalk Original 3-Tier", "GreenStalk", "vertical_tower", 3, 6, 18, 10.0, 1.33,
+            19.0, None, None, 31.0,
+            "Top-down gravity watering: pour water into the top reservoir and it filters through each tier evenly via internal channels",
+            "Food-grade UV-resistant BPA/BPS/PVC-free plastic", "outdoor",
+            "https://greenstalkgarden.com/products/3-tier-greenstalk-original-vertical-planter-evergreen-basic-texture",
+            json.dumps(["Strawberry", "Lettuce", "Spinach", "Herbs", "Pepper (small)", "Swiss Chard", "Kale"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Potato", "Asparagus", "Artichoke"]),
+            "In desert heat, the elevated pockets dry out faster than ground beds. Water twice daily in summer. Place where it gets afternoon shade or use shade cloth. The gravity watering system helps but may need supplemental hand-watering in 110F+ temps."
+        ),
+        (
+            "GreenStalk Original 5-Tier", "GreenStalk", "vertical_tower", 5, 6, 30, 10.0, 1.33,
+            19.0, None, None, 55.0,
+            "Top-down gravity watering: pour water into the top reservoir and it filters through each tier evenly via internal channels",
+            "Food-grade UV-resistant BPA/BPS/PVC-free plastic", "outdoor",
+            "https://greenstalkgarden.com/products/5-tier-greenstalk-original-vertical-planter-evergreen-basic-texture",
+            json.dumps(["Strawberry", "Lettuce", "Spinach", "Herbs", "Pepper (small)", "Swiss Chard", "Kale", "Tomato (cherry)", "Eggplant (compact)"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Potato", "Asparagus", "Artichoke"]),
+            "Best all-around GreenStalk for desert gardening. 10-inch pocket depth handles most vegetables. Place lower tiers with heat-loving plants (peppers, basil) and upper tiers with greens that benefit from slight shade of above tiers."
+        ),
+        (
+            "GreenStalk Original 7-Tier", "GreenStalk", "vertical_tower", 7, 6, 42, 10.0, 1.33,
+            19.0, None, None, 79.0,
+            "Top-down gravity watering: pour water into the top reservoir and it filters through each tier evenly via internal channels",
+            "Food-grade UV-resistant BPA/BPS/PVC-free plastic", "outdoor",
+            None,
+            json.dumps(["Strawberry", "Lettuce", "Spinach", "Herbs", "Pepper (small)", "Swiss Chard", "Kale", "Tomato (cherry)", "Eggplant (compact)"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Potato", "Asparagus", "Artichoke"]),
+            "Tallest Original model. Top tiers get more sun exposure and dry faster. In desert, reserve top tiers for heat-tolerant herbs and peppers. Bottom tiers stay cooler and moister for greens."
+        ),
+        (
+            "GreenStalk Leaf 3-Tier", "GreenStalk", "vertical_tower", 3, 6, 18, 7.0, 1.0,
+            19.0, None, None, 24.0,
+            "Top-down gravity watering: pour water into the top reservoir and it filters through each tier evenly via internal channels",
+            "Food-grade UV-resistant BPA/BPS/PVC-free plastic", "outdoor",
+            None,
+            json.dumps(["Strawberry", "Lettuce", "Spinach", "Herbs", "Arugula", "Green Onion", "Radish", "Flowers"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Tomato", "Pepper", "Eggplant", "Squash", "Potato"]),
+            "Shallower 7-inch pockets are ideal for leafy greens and herbs but cannot support larger vegetables. In desert, the smaller soil volume dries out even faster than the Original. Best for cool-season greens."
+        ),
+        (
+            "GreenStalk Leaf 5-Tier", "GreenStalk", "vertical_tower", 5, 6, 30, 7.0, 1.0,
+            19.0, None, None, 40.0,
+            "Top-down gravity watering: pour water into the top reservoir and it filters through each tier evenly via internal channels",
+            "Food-grade UV-resistant BPA/BPS/PVC-free plastic", "outdoor",
+            "https://greenstalkgarden.com/collections/vertical-planters",
+            json.dumps(["Strawberry", "Lettuce", "Spinach", "Herbs", "Arugula", "Green Onion", "Radish", "Flowers"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Tomato", "Pepper", "Eggplant", "Squash", "Potato"]),
+            "Great for a vertical herb garden or strawberry tower. In desert, group herbs together: basil, oregano, thyme on sun-facing pockets; cilantro, parsley on shaded side."
+        ),
+        (
+            "GreenStalk Leaf 7-Tier", "GreenStalk", "vertical_tower", 7, 6, 42, 7.0, 1.0,
+            19.0, None, None, 56.0,
+            "Top-down gravity watering: pour water into the top reservoir and it filters through each tier evenly via internal channels",
+            "Food-grade UV-resistant BPA/BPS/PVC-free plastic", "outdoor",
+            "https://greenstalkgarden.com/products/7-tier-greenstalk-leaf-vertical-planter-evergreen-basic-texture",
+            json.dumps(["Strawberry", "Lettuce", "Spinach", "Herbs", "Arugula", "Green Onion", "Radish", "Flowers"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Tomato", "Pepper", "Eggplant", "Squash", "Potato"]),
+            "Maximum pocket count in the Leaf line. 42 pockets of leafy greens or strawberries is impressive production from a 19-inch footprint. In desert, this is a cool-season powerhouse."
+        ),
+        (
+            "GreenStalk Inventor's Bundle", "GreenStalk", "vertical_tower", 6, 6, 36, 8.5, 1.17,
+            19.0, None, None, 55.0,
+            "Top-down gravity watering: pour water into the top reservoir and it filters through each tier evenly via internal channels. Includes 5 watering disks and 1 top reservoir.",
+            "Food-grade UV-resistant BPA/BPS/PVC-free plastic", "outdoor",
+            "https://greenstalkgarden.com/products/inventors-bundle-evergreen-basic-texture",
+            json.dumps(["Strawberry", "Lettuce", "Spinach", "Herbs", "Pepper (small)", "Swiss Chard", "Kale", "Arugula", "Green Onion", "Radish", "Flowers"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Potato", "Asparagus", "Artichoke"]),
+            "The Inventor's Bundle combines 3 Original tiers (10-inch deep pockets for larger plants) and 3 Leaf tiers (7-inch deep pockets for greens/herbs). Also includes the Plant Support system with 6 extenders and ring connectors for climbing plants. In desert, put Original tiers at the bottom for heat-loving peppers and tomatoes, Leaf tiers on top for greens that benefit from slight shade. The mixed depth is ideal for diverse desert planting."
+        ),
+        # ── Vego Garden Rolling / Elevated Planters ──
+        (
+            "Vego Rolling Citrus Tree Planter 30-Gallon", "Vego Garden", "container", None, None, None, 22.0, 30.0,
+            None, 24.0, 24.0, 22.0,
+            "Self-watering wicking chamber with built-in water level gauge; hidden reservoir delivers water directly to roots and prevents overwatering",
+            "Corrosion-resistant galvanized steel with USDA-approved non-toxic powder coat", "both",
+            "https://www.vegogarden.com/products/rolling-planter-twin-pack",
+            json.dumps(["Citrus Trees", "Fig Trees", "Dwarf Fruit Trees", "Blueberry", "Pepper", "Tomato", "Eggplant", "Herbs"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Winter Squash", "Asparagus"]),
+            "Excellent for desert citrus and fruit trees. 30-gallon volume supports deep root systems. Rolling wheels allow moving into shade during 115F+ days or indoors during rare freezes. The wicking reservoir is critical in AZ — reduces watering frequency significantly. Available in Modern Gray, Olive Green, Pearl White, British Green. ~$220 single / ~$430 twin pack."
+        ),
+        (
+            "Vego Self-Watering Rolling Garden Bed 2x4", "Vego Garden", "raised_bed", None, None, None, 10.0, None,
+            None, 24.0, 48.0, 22.0,
+            "3.5-inch wicking cell reservoir collects excess water and redistributes to roots over time; air pruning strips prevent root oversaturation",
+            "Corrosion-resistant galvanized steel with USDA-approved non-toxic powder coat, heavy-duty rolling frame", "both",
+            "https://www.vegogarden.com/products/rolling-self-watering-garden-bed",
+            json.dumps(["Lettuce", "Spinach", "Herbs", "Pepper", "Tomato (compact)", "Strawberry", "Kale", "Swiss Chard", "Radish", "Green Onion", "Arugula"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Winter Squash", "Sweet Potato"]),
+            "Great mobile raised bed for desert patios. 2ft x 4ft footprint fits tight spaces. Roll inside during frost or extreme heat. Wicking cells reduce watering frequency — essential in AZ summers. Air pruning strips keep roots healthy. Available in Pearl White, Olive Green, Modern Gray. ~$250."
+        ),
+        (
+            "Vego Self-Watering Rolling Garden Bed 2x6", "Vego Garden", "raised_bed", None, None, None, 10.0, None,
+            None, 24.0, 72.0, 22.0,
+            "3.5-inch wicking cell reservoir collects excess water and redistributes to roots over time; air pruning strips prevent root oversaturation",
+            "Corrosion-resistant galvanized steel with USDA-approved non-toxic powder coat, heavy-duty rolling frame", "both",
+            "https://www.vegogarden.com/products/self-watering-rolling-garden-bed-2-x-6",
+            json.dumps(["Lettuce", "Spinach", "Herbs", "Pepper", "Tomato", "Strawberry", "Kale", "Swiss Chard", "Cucumber (bush)", "Bean (Bush)", "Radish", "Green Onion"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Winter Squash", "Sweet Potato"]),
+            "Larger 2x6 rolling bed for more growing space. Same wicking cell system as 2x4 model. In desert, the extra length allows succession planting of greens. Roll into shade or indoors as needed. Available in Pearl White, Olive Green, Modern Gray, British Green. ~$330."
+        ),
+        (
+            "Vego Elevated Garden Bed S-Series 2x4 with Wicking", "Vego Garden", "raised_bed", None, None, None, 10.0, 57.0,
+            None, 24.0, 48.0, 39.0,
+            "3.5-inch wicking cell system collects and redistributes water to roots; air pruning strips prevent oversaturation; optional wheels for mobility",
+            "Galvanized steel with Aluzinc coating, USDA-standard powder coat finish", "both",
+            "https://www.amazon.com/Vego-garden-Raised-Garden-Wicking/dp/B0CM8VVMN2",
+            json.dumps(["Lettuce", "Spinach", "Herbs", "Pepper", "Tomato", "Strawberry", "Kale", "Swiss Chard", "Cucumber (bush)", "Bean (Bush)", "Radish", "Carrot", "Beet", "Green Onion"]),
+            json.dumps(["Corn", "Watermelon", "Pumpkin", "Winter Squash", "Sweet Potato"]),
+            "Standing 39 inches tall on legs — no bending over. 700 lb weight capacity. 7.63 cu ft soil (~57 gal). Storage shelf underneath. Wicking cells reduce watering in AZ heat. Elevated design keeps soil cooler than ground-level beds. Optional wheels and mesh cover available. Colors: Olive Green, Modern Gray, Pearl White, British Green. ~$220. 20+ year lifespan."
+        ),
+    ]
+
+    for pt in PLANTER_TYPES:
+        db.execute("""
+            INSERT OR IGNORE INTO planter_types
+            (name, brand, form_factor, tiers, pockets_per_tier, total_pockets,
+             pocket_depth_inches, pocket_volume_gallons, footprint_diameter_inches,
+             footprint_width_inches, footprint_depth_inches, height_inches,
+             watering_system, material, indoor_outdoor, url,
+             recommended_plants, unsuitable_plants, desert_notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, pt)
+
+    db.commit()
+
+    # ── Seed plant-planter compatibility data ──
+    # Map: (plant_name, form_factor, compatibility, notes)
+    COMPAT_DATA = [
+        # Excellent in vertical towers
+        ("Strawberry", "vertical_tower", "excellent", "Runners cascade beautifully over pocket edges. Fruit stays clean and off the ground. Top performer in vertical planters."),
+        ("Basil", "vertical_tower", "excellent", "Compact growth habit fits pockets perfectly. Thrives with good air circulation vertical planters provide."),
+        ("Mint", "vertical_tower", "excellent", "Natural containment prevents invasive spreading. Each pocket isolates the roots. Perfect solution for mint."),
+        ("Oregano", "vertical_tower", "excellent", "Low-growing habit and drought tolerance make it ideal. Trails attractively over pocket edges."),
+        ("Thyme", "vertical_tower", "excellent", "Compact, drought-tolerant, and trails beautifully. One of the best vertical planter herbs."),
+        ("Lettuce", "vertical_tower", "excellent", "Quick crop that thrives in the smaller soil volume. Successive plantings across tiers extend harvest."),
+        ("Arugula", "vertical_tower", "excellent", "Fast-growing, compact, and perfect pocket size. Bolt-prone in heat but great for cool season vertical growing."),
+        ("Cilantro", "vertical_tower", "excellent", "Compact root system fits well. Plant in shaded-side pockets to slow bolting."),
+        ("Parsley", "vertical_tower", "excellent", "Compact growth, long harvest period. Excellent in vertical pockets."),
+        ("Chive", "vertical_tower", "excellent", "Clumping habit is perfect for pockets. Perennial so it comes back each year."),
+        ("Green Onion", "vertical_tower", "excellent", "Shallow roots and upright habit are ideal for vertical pockets. Quick crop."),
+        # Good in vertical towers
+        ("Spinach", "vertical_tower", "good", "Works well in cool season. Pockets provide good drainage spinach prefers. Bolts fast in heat."),
+        ("Kale", "vertical_tower", "good", "Compact varieties work well. Lacinato/Tuscan types fit better than curly. May outgrow pocket in time."),
+        ("Swiss Chard", "vertical_tower", "good", "Colorful and productive in pockets. Harvest outer leaves regularly to keep compact."),
+        ("Radish", "vertical_tower", "good", "Fast crop with shallow roots. Globe varieties work in Original (10-inch) pockets. Too deep for Leaf pockets."),
+        ("Bok Choy", "vertical_tower", "good", "Compact Asian green that works well in vertical pockets, especially baby bok choy varieties."),
+        ("Collard Greens", "vertical_tower", "good", "Compact varieties work. Harvest lower leaves regularly. May get large for upper tiers."),
+        ("Nasturtium", "vertical_tower", "good", "Trails beautifully over edges. Edible flowers and leaves. Good companion plant in vertical setup."),
+        ("Marigold", "vertical_tower", "good", "Compact varieties fit well. Adds pest protection and color to your vertical garden."),
+        ("Sweet Alyssum", "vertical_tower", "good", "Low-growing ground cover that cascades over pocket edges. Attracts beneficial insects."),
+        ("Dill", "vertical_tower", "good", "Young dill works in pockets but gets tall. Harvest frequently to keep compact."),
+        # Possible in vertical towers
+        ("Pepper", "vertical_tower", "possible", "Small/compact varieties only (Shishito, Thai). Use lower tiers for stability. May need staking within the pocket."),
+        ("Tomato", "vertical_tower", "possible", "Cherry/determinate varieties only. Use lowest tier. Will need support. Top-heavy when fruiting."),
+        ("Eggplant", "vertical_tower", "possible", "Only compact varieties like Fairy Tale. Use lowest tier for stability. Limited production."),
+        ("Cucumber", "vertical_tower", "possible", "Bush varieties only. Vining types will overwhelm the planter. Use lowest tier with a small trellis."),
+        ("Zucchini", "vertical_tower", "possible", "Only in the Original (10-inch pockets). Very compact varieties only. Limited production compared to ground."),
+        ("Bean (Bush)", "vertical_tower", "possible", "Bush beans can work in 10-inch Original pockets. Lower tiers only. Moderate production."),
+        ("Pea", "vertical_tower", "possible", "Dwarf varieties can work in cool season. Will need a small support. Lower tiers."),
+        ("Celery", "vertical_tower", "possible", "Can grow in 10-inch Original pockets but needs constant moisture. High maintenance in vertical."),
+        # Poor in vertical towers
+        ("Carrot", "vertical_tower", "poor", "Pocket depth insufficient for most varieties. Only round/short varieties like Paris Market might work in Original model."),
+        ("Beet", "vertical_tower", "poor", "Root needs more depth than most pockets provide. Baby beet varieties might work in Original model."),
+        ("Turnip", "vertical_tower", "poor", "Root vegetable that needs more soil depth. Tokyo turnips (small) might work in Original pockets."),
+        ("Onion", "vertical_tower", "poor", "Bulbing onions need more consistent soil depth. Green onions work but bulb onions do not."),
+        ("Garlic", "vertical_tower", "poor", "Needs deeper soil and longer growing season than vertical pockets typically support."),
+        ("Broccoli", "vertical_tower", "poor", "Plants grow too large and heavy for vertical pockets. Root system needs more space."),
+        ("Cauliflower", "vertical_tower", "poor", "Too large for vertical pockets. Needs deep, consistent root zone that pockets cannot provide."),
+        ("Cabbage", "vertical_tower", "poor", "Heads grow too large and heavy for pocket planters. Needs more root space."),
+        ("Leek", "vertical_tower", "poor", "Needs deep soil for blanching. Pocket depth insufficient for proper leek development."),
+        # Unsuitable for vertical towers
+        ("Corn", "vertical_tower", "unsuitable", "Far too tall and heavy. Needs deep roots and block planting for pollination. Impossible in vertical."),
+        ("Watermelon", "vertical_tower", "unsuitable", "Sprawling vines, heavy fruit, deep roots. Completely incompatible with vertical planters."),
+        ("Pumpkin", "vertical_tower", "unsuitable", "Massive vines and heavy fruit. Cannot be grown vertically."),
+        ("Winter Squash", "vertical_tower", "unsuitable", "Sprawling vines and heavy fruit make vertical growing impossible."),
+        ("Butternut Squash", "vertical_tower", "unsuitable", "Long vines and heavy fruit. Needs ground space."),
+        ("Squash (Summer)", "vertical_tower", "unsuitable", "Plants too large and heavy for vertical pockets. Needs ground space for productive growing."),
+        ("Melon", "vertical_tower", "unsuitable", "Sprawling vines and heavy fruit. Cannot support in vertical pockets."),
+        ("Cantaloupe", "vertical_tower", "unsuitable", "Vining habit and heavy fruit make vertical growing impossible."),
+        ("Sweet Potato", "vertical_tower", "unsuitable", "Sprawling vines and tubers need deep, wide soil. Completely incompatible."),
+        ("Potato", "vertical_tower", "unsuitable", "Needs deep soil for tuber development. Pocket volume far too small."),
+        ("Asparagus", "vertical_tower", "unsuitable", "Perennial with deep root system. Needs permanent ground bed."),
+        ("Artichoke", "vertical_tower", "unsuitable", "Large perennial that grows 4-6 feet. Far too large for vertical pockets."),
+        ("Okra", "vertical_tower", "unsuitable", "Grows 4-6 feet tall with deep taproot. Cannot be contained in vertical pockets."),
+        ("Sunflower", "vertical_tower", "unsuitable", "Too tall and heavy. Deep taproot incompatible with pocket planters."),
+        ("Rosemary", "vertical_tower", "poor", "Grows into a large shrub over time. Can work temporarily but will outgrow pockets quickly."),
+        ("Sage", "vertical_tower", "poor", "Woody perennial that grows too large for pockets over time. Annual use only."),
+        ("Lavender", "vertical_tower", "poor", "Grows into a shrub. Temporarily possible but will outgrow pockets."),
+        ("Lemongrass", "vertical_tower", "unsuitable", "Grows 3-5 feet tall in large clumps. Far too large for vertical pockets."),
+    ]
+
+    for plant_name, ff, compat, notes in COMPAT_DATA:
+        plant_row = db.execute("SELECT id FROM plants WHERE name = ?", (plant_name,)).fetchone()
+        if plant_row:
+            db.execute(
+                "INSERT OR IGNORE INTO plant_planter_compatibility (plant_id, form_factor, compatibility, notes) VALUES (?, ?, ?, ?)",
+                (plant_row[0], ff, compat, notes),
+            )
+
+    # ──────────────── SOIL PRODUCTS ────────────────
+    existing_soil = db.execute("SELECT COUNT(*) FROM soil_products").fetchone()[0]
+    if existing_soil == 0:
+        SOIL_PRODUCTS = [
+            # Raised Bed Mix products
+            ("raised_bed_mix", "Arizona Worm Farm", "Raised Bed Mix",
+             "Blends six-month finished compost with worm castings, coco coir, perlite, and basalt rock dust for optimal nutrients and water retention.",
+             '["finished compost (6-month)", "worm castings", "coco coir", "perlite", "basalt rock dust"]',
+             6.0, 7.0, '["raised beds", "container gardens"]',
+             "https://www.arizonawormfarm.com",
+             "Recommended for all raised beds in AZ. Uses perlite instead of vermiculite due to supply issues."),
+            ("raised_bed_mix", "Kellogg", "Raised Bed & Potting Mix",
+             "All-natural raised bed and potting mix with composted forest products, peat moss, and perlite.",
+             '["composted forest products", "peat moss", "perlite", "fertilizer"]',
+             6.0, 7.0, '["raised beds", "containers"]',
+             "https://www.kellogggarden.com",
+             "Widely available at Home Depot. Decent budget option."),
+            ("raised_bed_mix", "Dr. Earth", "Raised Bed Mix",
+             "Premium organic raised bed mix with pro-biotic seven champion strains of beneficial soil microbes.",
+             '["fir bark", "peat moss", "perlite", "earthworm castings", "bat guano", "kelp meal"]',
+             6.0, 7.0, '["raised beds", "vegetable gardens"]',
+             "https://www.drearth.com",
+             "Organic and pre-fertilized. Good for vegetable gardens."),
+            ("raised_bed_mix", "FoxFarm", "Ocean Forest",
+             "Powerfully rich ocean-based potting soil with earthworm castings, bat guano, and Pacific Northwest sea-going fish and crab meal.",
+             '["earthworm castings", "bat guano", "fish meal", "crab meal", "peat moss", "forest humus", "perlite"]',
+             6.3, 6.8, '["raised beds", "containers", "indoor plants"]',
+             "https://www.foxfarm.com",
+             "Premium and pricey but great for high-value crops. Can run hot for seedlings."),
+            # Potting Mix products
+            ("potting_mix", "Miracle-Gro", "Potting Mix",
+             "All-purpose potting mix with continuous release plant food. Feeds up to 6 months.",
+             '["sphagnum peat moss", "perlite", "coir", "fertilizer"]',
+             5.5, 6.5, '["containers", "hanging baskets", "indoor plants"]',
+             "https://www.miraclegro.com",
+             "Most widely available. Contains slow-release synthetic fertilizer."),
+            ("potting_mix", "FoxFarm", "Happy Frog Potting Soil",
+             "pH-adjusted potting soil with mycorrhizal fungi and humic acid for strong branching roots.",
+             '["composted forest humus", "sphagnum peat moss", "perlite", "earthworm castings", "bat guano", "mycorrhizae"]',
+             6.0, 6.8, '["containers", "potted plants"]',
+             "https://www.foxfarm.com",
+             "Gentler than Ocean Forest. Good for seedlings and transplants."),
+            ("potting_mix", "Black Gold", "All Purpose Potting Mix",
+             "Rich, loamy potting mix with Canadian sphagnum peat moss, earthworm castings, and perlite.",
+             '["sphagnum peat moss", "earthworm castings", "perlite", "pumice"]',
+             5.5, 6.5, '["containers", "general purpose"]',
+             "https://www.sungro.com",
+             "Solid all-purpose choice. Widely available at nurseries."),
+            # Cactus/Succulent Mix products
+            ("cactus_succulent_mix", "Bonsai Jack", "Succulent & Cactus Soil",
+             "100% mineral gritty mix specifically designed for succulents and cacti. Ultra fast draining.",
+             '["calcined clay", "pine bark fines", "monto clay"]',
+             5.5, 6.5, '["succulents", "cacti", "bonsai"]',
+             "https://www.bonsaijack.com",
+             "Premium gritty mix. Zero organic material means no fungus gnats, no root rot. Expensive but lasts forever."),
+            ("cactus_succulent_mix", "Miracle-Gro", "Cactus, Palm & Citrus Potting Mix",
+             "Fast-draining formula with sand and perlite for cacti, palms, citruses, and succulents.",
+             '["sphagnum peat moss", "sand", "perlite", "forest products"]',
+             5.5, 6.5, '["cacti", "succulents", "palms", "citrus"]',
+             "https://www.miraclegro.com",
+             "Budget-friendly cactus mix. Adequate drainage for most desert plants."),
+        ]
+        for soil_type, brand, product_name, desc, comp, ph_min, ph_max, best, url, notes in SOIL_PRODUCTS:
+            db.execute(
+                "INSERT INTO soil_products (soil_type, brand, product_name, description, composition, ph_range_min, ph_range_max, best_for, url, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (soil_type, brand, product_name, desc, comp, ph_min, ph_max, best, url, notes),
+            )
+
+    db.commit()
+
+    count = db.execute("SELECT COUNT(*) FROM plants").fetchone()[0]
+    companions_count = db.execute("SELECT COUNT(*) FROM companions").fetchone()[0]
+    varieties_count = db.execute("SELECT COUNT(*) FROM varieties").fetchone()[0]
+    planter_count = db.execute("SELECT COUNT(*) FROM planter_types").fetchone()[0]
+    compat_count = db.execute("SELECT COUNT(*) FROM plant_planter_compatibility").fetchone()[0]
+    soil_product_count = db.execute("SELECT COUNT(*) FROM soil_products").fetchone()[0]
+    print(f"Database initialized: {count} plants, {companions_count} companion relationships, {varieties_count} varieties, {planter_count} planter types, {compat_count} plant-planter compatibilities, {soil_product_count} soil products")
+    print(f"Database path: {DB_PATH}")
+    db.close()
+
+
+if __name__ == "__main__":
+    init_db()

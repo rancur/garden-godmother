@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  garden-api:
+    build: ./garden-api
+    container_name: garden-api
+    ports:
+      - "3402:3402"
+    volumes:
+      - garden-data:/app/data
+      - ./.git:/app/.git:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - HA_TOKEN=${HA_TOKEN}
+      - HA_URL=${HA_URL:-http://homeassistant.local:8123}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3400}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN}
+    restart: unless-stopped
+
+  garden-web:
+    build:
+      context: ./garden-web
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3402}
+    container_name: garden-web
+    ports:
+      - "3400:3401"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3402}
+    depends_on:
+      - garden-api
+    restart: unless-stopped
+
+volumes:
+  garden-data:

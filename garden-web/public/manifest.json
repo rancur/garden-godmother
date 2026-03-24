@@ -1,0 +1,19 @@
+{
+  "name": "Garden Godmother",
+  "short_name": "Godmother",
+  "description": "Your personal garden management system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf5f0",
+  "theme_color": "#2d6a4f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "scope": "/"
+}
