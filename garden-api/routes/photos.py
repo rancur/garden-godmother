@@ -116,6 +116,73 @@ def list_recent_photos(limit: int = Query(50, ge=1, le=200)):
         return [dict(r) for r in rows]
 
 
+@router.post("/api/photos/health-check")
+async def run_health_check(request: Request):
+    """Analyze recent unanalyzed photos for plant health issues."""
+    require_admin(request)
+    openai_key = get_openai_key()
+    if not openai_key:
+        raise HTTPException(400, "OpenAI not configured")
+    with get_db() as db:
+        photos = db.execute("""
+            SELECT pp.id, pp.filename, pp.planting_id, pl.plant_id,
+                   p.name as plant_name, gb.name as bed_name
+            FROM planting_photos pp
+            LEFT JOIN plantings pl ON pp.planting_id = pl.id
+            LEFT JOIN plants p ON pl.plant_id = p.id
+            LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
+            WHERE pp.id NOT IN (SELECT photo_id FROM photo_analyses WHERE photo_id IS NOT NULL)
+            AND pp.created_at > datetime('now', '-7 days')
+            LIMIT 10
+        """).fetchall()
+    results = []
+    for photo in photos:
+        photo_dict = dict(photo)
+        try:
+            analysis = await _analyze_photo_health(openai_key, photo_dict)
+            results.append(analysis)
+            health_status = analysis.get("health_status", "healthy")
+            if health_status in ("poor", "critical"):
+                with get_db() as db:
+                    admins = db.execute("SELECT id FROM users WHERE role = 'admin' AND is_active = 1").fetchall()
+                    for admin in admins:
+                        await send_notification(admin["id"], "plant_health",
+                            f"Plant Health Alert: {photo_dict.get('plant_name', 'Unknown')}",
+                            f"{analysis.get('summary', 'Health issue detected')} -- {photo_dict.get('bed_name') or 'Unknown location'}")
+        except Exception as e:
+            logger.error(f"Health check failed for photo {photo_dict['id']}: {e}")
+            results.append({"photo_id": photo_dict["id"], "error": str(e)[:200]})
+    return {"analyzed": len(results), "results": results}
+
+
+@router.get("/api/photos/health-summary")
+def get_health_summary(request: Request):
+    """Get a summary of recent plant health analyses."""
+    require_user(request)
+    with get_db() as db:
+        recent = db.execute("""
+            SELECT pa.id, pa.photo_id, pa.plant_identified, pa.growth_stage,
+                   pa.health, pa.issues, pa.recommendations, pa.confidence,
+                   pa.summary, pa.model, pa.analyzed_at,
+                   pp.filename, pp.planting_id,
+                   pl.plant_id, p.name as plant_name, gb.name as bed_name
+            FROM photo_analyses pa
+            JOIN planting_photos pp ON pa.photo_id = pp.id
+            LEFT JOIN plantings pl ON pp.planting_id = pl.id
+            LEFT JOIN plants p ON pl.plant_id = p.id
+            LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
+            ORDER BY pa.analyzed_at DESC LIMIT 50
+        """).fetchall()
+        results = []
+        for r in recent:
+            row = dict(r)
+            row["issues"] = json.loads(row["issues"]) if row["issues"] else []
+            row["recommendations"] = json.loads(row["recommendations"]) if row["recommendations"] else []
+            row["health_status"] = _map_health_to_status(row.get("health", ""))
+            results.append(row)
+        return results
+
+
 @router.get("/api/photos/{photo_id}")
 def serve_photo(photo_id: int):
     """Serve a photo file."""
@@ -417,81 +484,3 @@ async def _analyze_photo_health(openai_key: str, photo: dict) -> dict:
     }
 
 
-@router.post("/api/photos/health-check")
-async def run_health_check(request: Request):
-    """Analyze recent unanalyzed photos for plant health issues."""
-    require_admin(request)
-
-    openai_key = get_openai_key()
-    if not openai_key:
-        raise HTTPException(400, "OpenAI not configured")
-
-    with get_db() as db:
-        # Find photos without analysis from the last 7 days
-        photos = db.execute("""
-            SELECT pp.id, pp.filename, pp.planting_id, pl.plant_id,
-                   p.name as plant_name, gb.name as bed_name
-            FROM planting_photos pp
-            LEFT JOIN plantings pl ON pp.planting_id = pl.id
-            LEFT JOIN plants p ON pl.plant_id = p.id
-            LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
-            WHERE pp.id NOT IN (SELECT photo_id FROM photo_analyses WHERE photo_id IS NOT NULL)
-            AND pp.created_at > datetime('now', '-7 days')
-            LIMIT 10
-        """).fetchall()
-
-    results = []
-    for photo in photos:
-        photo_dict = dict(photo)
-        try:
-            analysis = await _analyze_photo_health(openai_key, photo_dict)
-            results.append(analysis)
-
-            # If health issues detected, send notification to admins
-            health_status = analysis.get("health_status", "healthy")
-            if health_status in ("poor", "critical"):
-                with get_db() as db:
-                    admins = db.execute(
-                        "SELECT id FROM users WHERE role = 'admin' AND is_active = 1"
-                    ).fetchall()
-                    for admin in admins:
-                        await send_notification(
-                            admin["id"],
-                            "plant_health",
-                            f"Plant Health Alert: {photo_dict.get('plant_name', 'Unknown')}",
-                            f"{analysis.get('summary', 'Health issue detected')} -- {photo_dict.get('bed_name') or 'Unknown location'}",
-                        )
-        except Exception as e:
-            logger.error(f"Health check failed for photo {photo_dict['id']}: {e}")
-            results.append({"photo_id": photo_dict["id"], "error": str(e)[:200]})
-
-    return {"analyzed": len(results), "results": results}
-
-
-@router.get("/api/photos/health-summary")
-def get_health_summary(request: Request):
-    """Get a summary of recent plant health analyses for the health dashboard."""
-    require_user(request)
-    with get_db() as db:
-        recent = db.execute("""
-            SELECT pa.id, pa.photo_id, pa.plant_identified, pa.growth_stage,
-                   pa.health, pa.issues, pa.recommendations, pa.confidence,
-                   pa.summary, pa.model, pa.analyzed_at,
-                   pp.filename, pp.planting_id,
-                   pl.plant_id, p.name as plant_name, gb.name as bed_name
-            FROM photo_analyses pa
-            JOIN planting_photos pp ON pa.photo_id = pp.id
-            LEFT JOIN plantings pl ON pp.planting_id = pl.id
-            LEFT JOIN plants p ON pl.plant_id = p.id
-            LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
-            ORDER BY pa.analyzed_at DESC
-            LIMIT 50
-        """).fetchall()
-        results = []
-        for r in recent:
-            row = dict(r)
-            row["issues"] = json.loads(row["issues"]) if row["issues"] else []
-            row["recommendations"] = json.loads(row["recommendations"]) if row["recommendations"] else []
-            row["health_status"] = _map_health_to_status(row.get("health", ""))
-            results.append(row)
-        return results
