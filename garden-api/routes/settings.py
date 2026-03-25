@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from db import get_db
-from auth import require_user, require_admin, audit_log
+from auth import require_user, require_admin, audit_log, get_current_user
 from models import IntegrationUpdate, FrostDateUpdate, UsdaZoneUpdate
 from constants import get_frost_dates_from_property, DEFAULT_SOIL_PROFILE
 from services.integrations import INTEGRATION_TYPES, get_integration_config, get_ha_config

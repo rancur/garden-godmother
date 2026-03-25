@@ -40,16 +40,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await getMe();
       setUser(me);
-      // After successful auth, check if setup is needed
+      // After successful auth, check if setup is needed (only if not already completed)
       if (me && me.role === 'admin' && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
-        try {
-          const setupData = await getSetupStatus();
-          if (setupData && !setupData.setup_complete) {
-            window.location.href = '/setup';
-            return;
+        const setupDone = localStorage.getItem('gg-setup-complete');
+        if (!setupDone) {
+          try {
+            const setupData = await getSetupStatus();
+            if (setupData && setupData.setup_complete) {
+              localStorage.setItem('gg-setup-complete', '1');
+            } else if (setupData && !setupData.setup_complete) {
+              window.location.href = '/setup';
+              return;
+            }
+          } catch {
+            // Setup check failed — don't block normal flow
           }
-        } catch {
-          // Setup check failed — don't block normal flow
         }
       }
     } catch {
