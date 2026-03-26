@@ -24,9 +24,14 @@ from constants import (
     _get_harvest_flags, CURRENT_YEAR, HARVEST_FLAG_MAP, HARVEST_FLAG_DEFAULTS,
     get_frost_dates_from_property, _get_configured_timezone, _get_configured_zone,
     create_undo_action, AMENDMENT_TYPES,
-    SOIL_TYPES, DEFAULT_SOIL_PROFILE,
+    SOIL_TYPES, DEFAULT_SOIL_PROFILE, parse_md,
 )
 from services.integrations import get_openai_key, get_ha_config, get_plantbook_config, get_integration_config
+from routes.calendar import whats_plantable_now
+from routes.sensors import (
+    _ha_is_configured, _ha_get_states_bulk, _safe_float,
+    WEATHER_SENSORS, WEATHER_ENTITY, MOISTURE_SENSORS,
+)
 
 router = APIRouter()
 
