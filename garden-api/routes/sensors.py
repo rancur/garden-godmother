@@ -1903,5 +1903,126 @@ async def get_sensor_history_summary():
         }
 
 
+# ──────────────── SENSOR ASSIGNMENTS ────────────────
+
+VALID_TARGET_TYPES = ('bed', 'ground_plant', 'tray', 'area')
+
+
+@router.get("/api/sensors/available")
+async def get_available_sensors(request: Request):
+    """Return known HA sensor entities that can be assigned to planters."""
+    require_user(request)
+    sensors = []
+    for location, entity_map in MOISTURE_SENSORS.items():
+        for metric, entity_id in entity_map.items():
+            sensors.append({
+                "entity_id": entity_id,
+                "location": location.replace("_", " ").title(),
+                "metric": metric,
+                "friendly_name": f"{location.replace('_', ' ').title()} - {metric.replace('_', ' ').title()}",
+            })
+    return {"sensors": sensors}
+
+
+@router.get("/api/sensors/assignments")
+def list_sensor_assignments(request: Request):
+    """List all sensor-to-planter assignments."""
+    require_user(request)
+    with get_db() as db:
+        rows = db.execute("SELECT * FROM sensor_assignments ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+@router.put("/api/sensors/assignments")
+async def upsert_sensor_assignment(request: Request):
+    """Assign a HA sensor entity to a planter/ground plant/tray/area."""
+    require_user(request)
+    body = await request.json()
+    entity_id = body.get("entity_id", "").strip()
+    entity_friendly_name = body.get("entity_friendly_name", "").strip() or None
+    target_type = body.get("target_type", "").strip()
+    target_id = body.get("target_id")
+    sensor_role = body.get("sensor_role", "soil_moisture").strip()
+
+    if not entity_id:
+        raise HTTPException(status_code=400, detail="entity_id is required")
+    if target_type not in VALID_TARGET_TYPES:
+        raise HTTPException(status_code=400, detail=f"target_type must be one of {VALID_TARGET_TYPES}")
+    if not target_id:
+        raise HTTPException(status_code=400, detail="target_id is required")
+
+    with get_db() as db:
+        # Upsert: replace on conflict
+        db.execute("""
+            INSERT INTO sensor_assignments (entity_id, entity_friendly_name, target_type, target_id, sensor_role)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(entity_id, target_type, target_id) DO UPDATE SET
+                entity_friendly_name = excluded.entity_friendly_name,
+                sensor_role = excluded.sensor_role
+        """, (entity_id, entity_friendly_name, target_type, int(target_id), sensor_role))
+        db.commit()
+        row = db.execute(
+            "SELECT * FROM sensor_assignments WHERE entity_id = ? AND target_type = ? AND target_id = ?",
+            (entity_id, target_type, int(target_id))
+        ).fetchone()
+        return dict(row)
+
+
+@router.delete("/api/sensors/assignments/{assignment_id}")
+def delete_sensor_assignment(assignment_id: int, request: Request):
+    """Remove a sensor assignment."""
+    require_user(request)
+    with get_db() as db:
+        existing = db.execute("SELECT id FROM sensor_assignments WHERE id = ?", (assignment_id,)).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        db.execute("DELETE FROM sensor_assignments WHERE id = ?", (assignment_id,))
+        db.commit()
+        return {"ok": True}
+
+
+@router.get("/api/sensors/readings/{target_type}/{target_id}")
+async def get_sensor_readings_for_target(target_type: str, target_id: int, request: Request):
+    """Get live sensor readings for a specific planter/ground plant/tray/area."""
+    require_user(request)
+    if target_type not in VALID_TARGET_TYPES:
+        raise HTTPException(status_code=400, detail=f"target_type must be one of {VALID_TARGET_TYPES}")
+
+    with get_db() as db:
+        assignments = db.execute(
+            "SELECT * FROM sensor_assignments WHERE target_type = ? AND target_id = ?",
+            (target_type, target_id)
+        ).fetchall()
+
+    if not assignments:
+        return {"assignments": [], "readings": []}
+
+    # Fetch live state from HA for each assigned sensor
+    entity_ids = [a["entity_id"] for a in assignments]
+    states = await _ha_get_states_bulk(entity_ids)
+
+    readings = []
+    for assignment in assignments:
+        a = dict(assignment)
+        state = states.get(a["entity_id"])
+        reading = {
+            "assignment_id": a["id"],
+            "entity_id": a["entity_id"],
+            "entity_friendly_name": a["entity_friendly_name"],
+            "sensor_role": a["sensor_role"],
+            "state": None,
+            "unit": None,
+            "last_updated": None,
+        }
+        if state:
+            reading["state"] = _safe_float(state.get("state")) if state.get("state") not in ("unavailable", "unknown") else None
+            reading["unit"] = state.get("attributes", {}).get("unit_of_measurement")
+            reading["last_updated"] = state.get("last_updated")
+            reading["friendly_name"] = state.get("attributes", {}).get("friendly_name")
+        readings.append(reading)
+
+    return {"assignments": [dict(a) for a in assignments], "readings": readings}
+
+
 # ──────────────── SHOPPING LIST ────────────────
 

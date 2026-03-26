@@ -57,6 +57,8 @@ export const navGroups: NavGroup[] = [
       { href: '/alerts', label: 'Alerts', description: 'Notifications and warnings', emoji: '\u{1F514}' },
       { href: '/analytics', label: 'Analytics', description: 'Yield comparison, water & season reviews', emoji: '\u{1F4CA}' },
       { href: '/health', label: 'Plant Health', description: 'AI health monitoring', emoji: '\u{1F3E5}' },
+      { href: '/pests', label: 'Pest Tracker', description: 'Pest & disease outbreak tracking', emoji: '\u{1F41B}' },
+      { href: '/patterns', label: 'Patterns', description: 'Seasonal pattern recognition', emoji: '\u{1F52C}' },
     ],
   },
   {

@@ -345,6 +345,10 @@ export function getSensorMoisture() {
   return apiFetch('/api/sensors/moisture');
 }
 
+export function getSensorAvailable() {
+  return apiFetch('/api/sensors/available');
+}
+
 export function getSensorSummary() {
   return apiFetch('/api/sensors/summary');
 }
@@ -1012,6 +1016,15 @@ export function undoAction(actionId: string) {
   return apiFetch(`/api/undo/${actionId}`, { method: 'POST' });
 }
 
+// Seasonal Patterns
+export function getSeasonalPatterns() {
+  return apiFetch('/api/patterns/seasonal');
+}
+
+export function getAiInsights() {
+  return apiFetch('/api/patterns/ai-insights', { method: 'POST' });
+}
+
 // Analytics
 export function getYieldComparison() {
   return apiFetch('/api/analytics/yield-comparison');
@@ -1243,4 +1256,87 @@ export function applyTemplate(bedId: number, templateId: string) {
     method: 'POST',
     body: JSON.stringify({ template_id: templateId }),
   });
+}
+
+// ── Sensor Assignments ──
+export function getSensorAssignments() {
+  return apiFetch('/api/sensors/assignments');
+}
+
+export function upsertSensorAssignment(data: {
+  entity_id: string;
+  entity_friendly_name?: string;
+  target_type: string;
+  target_id: number;
+  sensor_role?: string;
+}) {
+  return apiFetch('/api/sensors/assignments', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteSensorAssignment(assignmentId: number) {
+  return apiFetch(`/api/sensors/assignments/${assignmentId}`, { method: 'DELETE' });
+}
+
+export function getSensorReadingsForTarget(targetType: string, targetId: number) {
+  return apiFetch(`/api/sensors/readings/${targetType}/${targetId}`);
+}
+
+// ── Pest / Disease Tracking ──
+export function getPestIncidents(params?: {
+  status?: string;
+  severity?: string;
+  pest_type?: string;
+  plant_id?: number;
+  bed_id?: number;
+  ground_plant_id?: number;
+  date_from?: string;
+  date_to?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.severity) qs.set('severity', params.severity);
+  if (params?.pest_type) qs.set('pest_type', params.pest_type);
+  if (params?.plant_id) qs.set('plant_id', String(params.plant_id));
+  if (params?.bed_id) qs.set('bed_id', String(params.bed_id));
+  if (params?.ground_plant_id) qs.set('ground_plant_id', String(params.ground_plant_id));
+  if (params?.date_from) qs.set('date_from', params.date_from);
+  if (params?.date_to) qs.set('date_to', params.date_to);
+  const query = qs.toString();
+  return apiFetch(`/api/pests${query ? `?${query}` : ''}`);
+}
+
+export function createPestIncident(data: {
+  pest_type: string;
+  pest_name: string;
+  detected_date: string;
+  severity?: string;
+  status?: string;
+  plant_id?: number | null;
+  bed_id?: number | null;
+  ground_plant_id?: number | null;
+  treatment?: string;
+  notes?: string;
+}) {
+  return apiFetch('/api/pests', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updatePestIncident(id: number, data: Record<string, unknown>) {
+  return apiFetch(`/api/pests/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deletePestIncident(id: number) {
+  return apiFetch(`/api/pests/${id}`, { method: 'DELETE' });
+}
+
+export function getPestPatterns() {
+  return apiFetch('/api/pests/patterns');
 }

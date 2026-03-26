@@ -941,4 +941,41 @@ def startup_run_migrations():
             })
         run_migration(db, 39, "journal_adaptive_fields", [], callback=_journal_adaptive_fields)
 
+        # ── Migration 040: sensor_assignments table ──
+        run_migration(db, 40, "sensor_assignments", [
+            """CREATE TABLE IF NOT EXISTS sensor_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_id TEXT NOT NULL,
+                entity_friendly_name TEXT,
+                target_type TEXT NOT NULL CHECK(target_type IN ('bed', 'ground_plant', 'tray', 'area')),
+                target_id INTEGER NOT NULL,
+                sensor_role TEXT NOT NULL DEFAULT 'soil_moisture',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(entity_id, target_type, target_id)
+            )"""
+        ])
+
+        # ── Migration 041: pest_incidents table ──
+        run_migration(db, 41, "pest_tracking", [
+            """CREATE TABLE IF NOT EXISTS pest_incidents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_id INTEGER,
+                bed_id INTEGER,
+                ground_plant_id INTEGER,
+                pest_type TEXT NOT NULL,
+                pest_name TEXT NOT NULL,
+                severity TEXT NOT NULL DEFAULT 'low' CHECK(severity IN ('low', 'medium', 'high', 'critical')),
+                status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'monitoring', 'treated', 'resolved')),
+                treatment TEXT,
+                notes TEXT,
+                detected_date TEXT NOT NULL,
+                resolved_date TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (plant_id) REFERENCES plants(id),
+                FOREIGN KEY (bed_id) REFERENCES garden_beds(id),
+                FOREIGN KEY (ground_plant_id) REFERENCES ground_plants(id)
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_pest_incidents_date ON pest_incidents(detected_date)",
+        ])
+
         logger.info("Migration system: all migrations checked/applied")

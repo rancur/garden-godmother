@@ -7,6 +7,7 @@ import { getGroundPlant, updateGroundPlant, getIrrigationZones, getJournalEntrie
 import SoilAmendments from '../../components/SoilAmendments';
 import IrrigationSettings from '../../components/IrrigationSettings';
 import RelatedTasks from '../../components/RelatedTasks';
+import SensorReadings from '../../components/SensorReadings';
 import { getPlantIcon } from '../../plant-icons';
 import { useToast } from '../../toast';
 import { useModal } from '../../confirm-modal';
@@ -512,6 +513,9 @@ export default function GroundPlantDetailPage() {
           <div className="text-xs text-earth-400 dark:text-gray-500 text-center py-2">No observations yet.</div>
         )}
       </div>
+
+      {/* Sensors */}
+      <SensorReadings targetType="ground_plant" targetId={gp.id} />
 
       {/* Related Tasks Section */}
       <RelatedTasks entityType="ground_plant" entityId={gp.id} entityName={displayName} />

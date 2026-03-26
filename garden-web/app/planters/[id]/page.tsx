@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate } from '../../api';
 import SoilAmendments from '../../components/SoilAmendments';
+import SensorReadings from '../../components/SensorReadings';
 import { getPlantIcon } from '../../plant-icons';
 import { useToast } from '../../toast';
 import { useModal } from '../../confirm-modal';
@@ -2551,6 +2552,9 @@ export default function BedDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Sensors */}
+      <SensorReadings targetType="bed" targetId={bed.id} />
 
       {/* Soil Amendments (collapsible) */}
       <SoilAmendments entityType="bed" entityId={bed.id} entityName={bed.name} />

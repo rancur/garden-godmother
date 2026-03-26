@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getTrayGrid, getPlants, getBeds, seedTrayCell, updateTrayCell, transplantTrayCell, updateTray, clearTrayCell, duplicateTray, getIrrigationZones, getAreas, getZoneSchedule, getJournalEntries, deleteTray, moveTrayCellToPlanter, undoAction } from '../../api';
 import SoilAmendments from '../../components/SoilAmendments';
+import SensorReadings from '../../components/SensorReadings';
 import { useToast } from '../../toast';
 import { useModal } from '../../confirm-modal';
 import { getGardenToday, formatGardenDateTime, formatGardenDate } from '../../timezone';
@@ -1015,6 +1016,9 @@ export default function TrayDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Sensors */}
+      {data?.tray && <SensorReadings targetType="tray" targetId={data.tray.id} />}
 
       {/* Soil Amendments (collapsible) */}
       {data?.tray && <SoilAmendments entityType="tray" entityId={data.tray.id} entityName={data.tray.name} />}
