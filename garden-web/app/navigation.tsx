@@ -22,7 +22,6 @@ export const navGroups: NavGroup[] = [
     label: 'Garden',
     emoji: '\u{1F331}',
     items: [
-      { href: '/my-plantings', label: 'My Plantings', description: 'All active plantings in one view', emoji: '\u{1F33B}' },
       { href: '/map', label: 'Map', description: 'Visual garden layout', emoji: '\u{1F5FA}' },
       { href: '/planters', label: 'Planters', description: 'Manage planter layouts', emoji: '\u{1FAB4}' },
       { href: '/ground-plants', label: 'Ground', description: 'Trees, shrubs, and vines planted in the ground', emoji: '\u{1F333}' },
@@ -44,6 +43,7 @@ export const navGroups: NavGroup[] = [
     label: 'Plants',
     emoji: '\u{1F33F}',
     items: [
+      { href: '/my-plantings', label: 'My Plantings', description: 'All active plantings in one view', emoji: '\u{1F33B}' },
       { href: '/plants', label: 'Plant Library', description: 'Browse all plant varieties', emoji: '\u{1F4D6}' },
       { href: '/seeds', label: 'Seeds Inventory', description: 'Track your seed collection', emoji: '\u{1FAB4}' },
     ],
