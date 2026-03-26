@@ -58,21 +58,21 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
 
         # Tray cells with plants
         tray_cells = db.execute("""
-            SELECT stc.id, stc.plant_id, stc.status, stc.seeded_date as planted_date,
-                   stc.cell_label,
+            SELECT stc.id, stc.plant_id, stc.status, stc.seed_date as planted_date,
+                   (stc.row || '-' || stc.col) as cell_label,
                    pl.name as plant_name, pl.category,
-                   st.name as container_name, 'tray' as container_type, st.id as container_id,
-                   v.name as variety_name
+                   st.name as container_name, 'tray' as container_type, st.id as container_id
             FROM seed_tray_cells stc
             JOIN plants pl ON stc.plant_id = pl.id
             LEFT JOIN seed_trays st ON stc.tray_id = st.id
-            LEFT JOIN varieties v ON stc.variety_id = v.id
             WHERE stc.status IN ('seeded', 'germinated')
+            AND stc.plant_id IS NOT NULL
         """).fetchall()
         for r in tray_cells:
             d = dict(r)
             d["cell_x"] = None
             d["cell_y"] = None
+            d["variety_name"] = None
             d["link"] = f"/trays/{d['container_id']}"
             results.append(d)
 
