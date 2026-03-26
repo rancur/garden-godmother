@@ -978,4 +978,121 @@ def startup_run_migrations():
             "CREATE INDEX IF NOT EXISTS idx_pest_incidents_date ON pest_incidents(detected_date)",
         ])
 
+        # ── Migration 042: plant_instances and plant_instance_locations tables ──
+        run_migration(db, 42, "plant_instances", [
+            """CREATE TABLE IF NOT EXISTS plant_instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_id INTEGER NOT NULL,
+                variety_id INTEGER,
+                label TEXT,
+                status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN (
+                    'planned', 'seeded', 'sprouted', 'growing', 'flowering',
+                    'fruiting', 'harvested', 'established', 'dormant', 'removed', 'died'
+                )),
+                planted_date TEXT,
+                notes TEXT,
+                created_by INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (plant_id) REFERENCES plants(id),
+                FOREIGN KEY (variety_id) REFERENCES varieties(id)
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_plant_instances_plant ON plant_instances(plant_id)",
+            "CREATE INDEX IF NOT EXISTS idx_plant_instances_status ON plant_instances(status)",
+            """CREATE TABLE IF NOT EXISTS plant_instance_locations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instance_id INTEGER NOT NULL,
+                location_type TEXT NOT NULL CHECK(location_type IN ('planter', 'ground', 'tray')),
+                bed_id INTEGER,
+                cell_x INTEGER,
+                cell_y INTEGER,
+                ground_plant_id INTEGER,
+                tray_id INTEGER,
+                tray_row INTEGER,
+                tray_col INTEGER,
+                placed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                removed_at TIMESTAMP,
+                is_current INTEGER DEFAULT 1,
+                FOREIGN KEY (instance_id) REFERENCES plant_instances(id),
+                FOREIGN KEY (bed_id) REFERENCES garden_beds(id),
+                FOREIGN KEY (ground_plant_id) REFERENCES ground_plants(id),
+                FOREIGN KEY (tray_id) REFERENCES seed_trays(id)
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_pil_instance ON plant_instance_locations(instance_id)",
+            "CREATE INDEX IF NOT EXISTS idx_pil_current ON plant_instance_locations(is_current)",
+        ])
+
+        # ── Migration 043: add instance_id columns to existing tables ──
+        def _add_instance_id_columns(db):
+            _migration_add_columns_if_missing(db, "plantings", {"instance_id": "INTEGER REFERENCES plant_instances(id)"})
+            _migration_add_columns_if_missing(db, "ground_plants", {"instance_id": "INTEGER REFERENCES plant_instances(id)"})
+        run_migration(db, 43, "add_instance_id_columns", [], callback=_add_instance_id_columns)
+
+        # ── Migration 044: migrate existing data to plant_instances ──
+        def _migrate_existing_to_instances(db):
+            """Migrate existing plantings, ground_plants, and tray cells to plant_instances."""
+            count = db.execute("SELECT COUNT(*) FROM plant_instances").fetchone()[0]
+            if count > 0:
+                return
+
+            # Migrate bed plantings
+            for p in db.execute("SELECT * FROM plantings WHERE plant_id IS NOT NULL").fetchall():
+                p = dict(p)
+                # Map planting statuses to instance statuses
+                status = p.get("status") or "planned"
+                if status not in ('planned', 'seeded', 'sprouted', 'growing', 'flowering',
+                                  'fruiting', 'harvested', 'established', 'dormant', 'removed', 'died'):
+                    status = 'growing'
+                cursor = db.execute(
+                    "INSERT INTO plant_instances (plant_id, variety_id, status, planted_date, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+                    (p["plant_id"], p.get("variety_id"), status, p.get("planted_date"), p.get("notes"), p.get("created_by"))
+                )
+                instance_id = cursor.lastrowid
+                db.execute("UPDATE plantings SET instance_id = ? WHERE id = ?", (instance_id, p["id"]))
+                if p.get("bed_id"):
+                    db.execute(
+                        "INSERT INTO plant_instance_locations (instance_id, location_type, bed_id, cell_x, cell_y) VALUES (?, 'planter', ?, ?, ?)",
+                        (instance_id, p["bed_id"], p.get("cell_x"), p.get("cell_y"))
+                    )
+
+            # Migrate ground plants
+            for gp in db.execute("SELECT * FROM ground_plants WHERE plant_id IS NOT NULL").fetchall():
+                gp = dict(gp)
+                status = gp.get("status") or "growing"
+                if status == "dead":
+                    status = "died"
+                elif status not in ('planned', 'seeded', 'sprouted', 'growing', 'flowering',
+                                    'fruiting', 'harvested', 'established', 'dormant', 'removed', 'died'):
+                    status = 'growing'
+                cursor = db.execute(
+                    "INSERT INTO plant_instances (plant_id, variety_id, label, status, planted_date, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (gp["plant_id"], gp.get("variety_id"), gp.get("name"), status, gp.get("planted_date"), gp.get("notes"), gp.get("created_by"))
+                )
+                instance_id = cursor.lastrowid
+                db.execute("UPDATE ground_plants SET instance_id = ? WHERE id = ?", (instance_id, gp["id"]))
+                db.execute(
+                    "INSERT INTO plant_instance_locations (instance_id, location_type, ground_plant_id) VALUES (?, 'ground', ?)",
+                    (instance_id, gp["id"])
+                )
+
+            # Migrate tray cells
+            for tc in db.execute("SELECT * FROM seed_tray_cells WHERE plant_id IS NOT NULL").fetchall():
+                tc = dict(tc)
+                status = tc.get("status") or "seeded"
+                if status == "germinated":
+                    status = "sprouted"
+                elif status not in ('planned', 'seeded', 'sprouted', 'growing', 'flowering',
+                                    'fruiting', 'harvested', 'established', 'dormant', 'removed', 'died'):
+                    status = 'seeded'
+                cursor = db.execute(
+                    "INSERT INTO plant_instances (plant_id, status, planted_date) VALUES (?, ?, ?)",
+                    (tc["plant_id"], status, tc.get("seed_date"))
+                )
+                instance_id = cursor.lastrowid
+                db.execute(
+                    "INSERT INTO plant_instance_locations (instance_id, location_type, tray_id, tray_row, tray_col) VALUES (?, 'tray', ?, ?, ?)",
+                    (instance_id, tc.get("tray_id"), tc.get("row"), tc.get("col"))
+                )
+
+        run_migration(db, 44, "migrate_to_plant_instances", [], callback=_migrate_existing_to_instances)
+
         logger.info("Migration system: all migrations checked/applied")

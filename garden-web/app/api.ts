@@ -1357,3 +1357,45 @@ export function deletePestIncident(id: number) {
 export function getPestPatterns() {
   return apiFetch('/api/pests/patterns');
 }
+
+// ── Plant Instances ──
+
+export function getPlantInstances(params?: { status?: string; location_type?: string; plant_id?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.location_type) qs.set('location_type', params.location_type);
+  if (params?.plant_id) qs.set('plant_id', String(params.plant_id));
+  const query = qs.toString();
+  return apiFetch(`/api/plant-instances${query ? `?${query}` : ''}`);
+}
+
+export function getPlantInstance(id: number) {
+  return apiFetch(`/api/plant-instances/${id}`);
+}
+
+export function updatePlantInstance(id: number, data: { status?: string; label?: string; notes?: string; planted_date?: string }) {
+  return apiFetch(`/api/plant-instances/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function transplantInstance(id: number, data: {
+  location_type: string;
+  bed_id?: number;
+  cell_x?: number;
+  cell_y?: number;
+  ground_plant_id?: number;
+  tray_id?: number;
+  tray_row?: number;
+  tray_col?: number;
+}) {
+  return apiFetch(`/api/plant-instances/${id}/transplant`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function getPlantInstanceTimeline(id: number) {
+  return apiFetch(`/api/plant-instances/${id}/timeline`);
+}

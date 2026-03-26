@@ -24,6 +24,7 @@ interface Planting {
   cell_y: number | null;
   cell_label?: string;
   link: string;
+  instance_id?: number | null;
 }
 
 const containerTypeBadge: Record<string, string> = {

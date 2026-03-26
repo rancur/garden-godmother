@@ -24,6 +24,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
         # Bed plantings
         bed_plantings = db.execute("""
             SELECT p.id, p.plant_id, p.status, p.planted_date, p.cell_x, p.cell_y,
+                   p.instance_id,
                    pl.name as plant_name, pl.category,
                    gb.name as container_name, 'planter' as container_type, gb.id as container_id,
                    v.name as variety_name
@@ -35,13 +36,16 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
         """).fetchall()
         for r in bed_plantings:
             d = dict(r)
-            d["link"] = f"/planters/{d['container_id']}"
+            if d.get("instance_id"):
+                d["link"] = f"/plant/{d['instance_id']}"
+            else:
+                d["link"] = f"/planters/{d['container_id']}"
             results.append(d)
 
         # Ground plants
         ground_plants = db.execute("""
             SELECT gp.id, gp.plant_id, gp.status, gp.planted_date,
-                   gp.name as custom_name,
+                   gp.name as custom_name, gp.instance_id,
                    pl.name as plant_name, pl.category,
                    a.name as container_name, 'ground' as container_type, gp.id as container_id
             FROM ground_plants gp
@@ -54,7 +58,10 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
             d["variety_name"] = None
             d["cell_x"] = None
             d["cell_y"] = None
-            d["link"] = f"/ground-plants/{d['container_id']}"
+            if d.get("instance_id"):
+                d["link"] = f"/plant/{d['instance_id']}"
+            else:
+                d["link"] = f"/ground-plants/{d['container_id']}"
             if d.get("custom_name"):
                 d["plant_name"] = d["custom_name"]
             results.append(d)
