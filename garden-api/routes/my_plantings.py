@@ -21,7 +21,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
         # Bed plantings
         bed_plantings = db.execute("""
             SELECT p.id, p.plant_id, p.status, p.planted_date, p.cell_x, p.cell_y,
-                   pl.name as plant_name, pl.category, pl.emoji,
+                   pl.name as plant_name, pl.category,
                    gb.name as container_name, 'planter' as container_type, gb.id as container_id,
                    v.name as variety_name
             FROM plantings p
@@ -39,7 +39,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
         ground_plants = db.execute("""
             SELECT gp.id, gp.plant_id, gp.status, gp.planted_date,
                    gp.name as custom_name,
-                   pl.name as plant_name, pl.category, pl.emoji,
+                   pl.name as plant_name, pl.category,
                    a.name as container_name, 'ground' as container_type, gp.id as container_id
             FROM ground_plants gp
             JOIN plants pl ON gp.plant_id = pl.id
@@ -60,7 +60,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
         tray_cells = db.execute("""
             SELECT stc.id, stc.plant_id, stc.status, stc.seeded_date as planted_date,
                    stc.cell_label,
-                   pl.name as plant_name, pl.category, pl.emoji,
+                   pl.name as plant_name, pl.category,
                    st.name as container_name, 'tray' as container_type, st.id as container_id,
                    v.name as variety_name
             FROM seed_tray_cells stc
