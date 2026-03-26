@@ -57,11 +57,19 @@ def _attach_reference_db(db: sqlite3.Connection) -> None:
                 (table,),
             ).fetchone()[0]
             if exists:
-                # Temp views take priority over permanent tables in SQLite, so
-                # even if the main DB has a legacy copy of this table (from
-                # before the split), the view transparently redirects reads to
-                # the reference DB.
-                db.execute(f"CREATE TEMP VIEW IF NOT EXISTS {table} AS SELECT * FROM ref.{table}")
+                # Only create a view if the main DB doesn't have this table,
+                # or if the main DB table is empty (fresh deployment).
+                # This preserves data in existing deployments that migrated from
+                # the single-DB architecture.
+                local_exists = db.execute(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,),
+                ).fetchone()[0]
+                local_count = 0
+                if local_exists:
+                    local_count = db.execute(f"SELECT COUNT(*) FROM main.{table}").fetchone()[0]
+                if not local_exists or local_count == 0:
+                    db.execute(f"CREATE TEMP VIEW IF NOT EXISTS {table} AS SELECT * FROM ref.{table}")
         except Exception as exc:
             logger.debug("Could not create view for %s: %s", table, exc)
 

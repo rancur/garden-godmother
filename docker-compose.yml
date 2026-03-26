@@ -15,6 +15,7 @@ services:
       - HA_URL=${HA_URL:-http://homeassistant.local:8123}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3400}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN}
+      - GG_DB_PATH=/app/data/garden.db
     restart: unless-stopped
 
   garden-web:
