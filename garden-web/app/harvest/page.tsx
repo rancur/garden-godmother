@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantings, getExportUrl, undoAction } from '../api';
+import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantings, getUpcomingHarvests, getExportUrl, undoAction } from '../api';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { useModal } from '../confirm-modal';
 import { useToast } from '../toast';
@@ -36,12 +36,41 @@ interface HarvestSummary {
   by_month: { month: string; harvest_count: number; total_weight_oz: number }[];
 }
 
+interface UpcomingHarvest {
+  id: number;
+  plant_id: number;
+  bed_id: number | null;
+  status: string;
+  planted_date: string;
+  plant_name: string;
+  category: string;
+  bed_name: string | null;
+  expected_harvest_date: string;
+  days_until_harvest: number;
+}
+
+function getDaysBadgeColor(days: number): string {
+  if (days < 0) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
+  if (days < 7) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
+  if (days < 14) return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300';
+  return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
+}
+
+function getDaysLabel(days: number): string {
+  if (days < 0) return `${Math.abs(days)}d overdue`;
+  if (days === 0) return 'Today!';
+  if (days === 1) return '1 day';
+  return `${days} days`;
+}
+
 export default function HarvestPage() {
   const { showConfirm } = useModal();
   const { toast } = useToast();
   const [harvests, setHarvests] = useState<Harvest[]>([]);
   const [plantings, setPlantings] = useState<Planting[]>([]);
   const [summary, setSummary] = useState<HarvestSummary | null>(null);
+  const [upcomingHarvests, setUpcomingHarvests] = useState<UpcomingHarvest[]>([]);
+  const [upcomingExpanded, setUpcomingExpanded] = useState(true);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,11 +88,12 @@ export default function HarvestPage() {
   const [formData, setFormData] = useState(emptyForm);
 
   const loadData = () => {
-    Promise.all([getHarvests(), getHarvestSummary(), getPlantings()])
-      .then(([harvestData, summaryData, plantingData]) => {
+    Promise.all([getHarvests(), getHarvestSummary(), getPlantings(), getUpcomingHarvests()])
+      .then(([harvestData, summaryData, plantingData, upcomingData]) => {
         setHarvests(harvestData);
         setSummary(summaryData);
         setPlantings(plantingData);
+        setUpcomingHarvests(upcomingData);
       })
       .catch(() => setError('Failed to load data'))
       .finally(() => setLoading(false));
@@ -122,12 +152,6 @@ export default function HarvestPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl sm:text-3xl font-bold text-garden-800 dark:text-garden-400">Harvest Tracker</h1>
         <div className="flex items-center gap-2">
-          <Link
-            href="/harvest/upcoming"
-            className="px-3 py-2 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-800/50 transition-colors text-sm font-medium"
-          >
-            Upcoming
-          </Link>
           <a
             href={getExportUrl('harvests')}
             download
@@ -240,6 +264,70 @@ export default function HarvestPage() {
             {submitting ? 'Saving...' : 'Save Harvest'}
           </button>
         </form>
+      )}
+
+      {/* Upcoming Harvests - collapsible section */}
+      {upcomingHarvests.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-amber-200 dark:border-amber-800/50 overflow-hidden">
+          <button
+            onClick={() => setUpcomingExpanded(!upcomingExpanded)}
+            className="w-full flex items-center justify-between p-4 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{'\u{1F33E}'}</span>
+              <h2 className="text-base font-semibold text-earth-800 dark:text-gray-200">
+                Upcoming Harvests ({upcomingHarvests.length})
+              </h2>
+            </div>
+            <svg
+              className={`w-5 h-5 text-earth-400 dark:text-gray-500 transition-transform ${upcomingExpanded ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {upcomingExpanded && (
+            <div className="border-t border-amber-200 dark:border-amber-800/50">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-earth-200 dark:border-gray-700 text-earth-600 dark:text-gray-400">
+                      <th className="text-left p-3 font-medium">Plant</th>
+                      <th className="text-left p-3 font-medium">Bed</th>
+                      <th className="text-left p-3 font-medium">Expected Date</th>
+                      <th className="text-right p-3 font-medium">Time Left</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {upcomingHarvests.map((uh) => (
+                      <tr key={uh.id} className="border-b border-earth-100 dark:border-gray-700/50 hover:bg-amber-50/50 dark:hover:bg-amber-900/5">
+                        <td className="p-3 font-medium text-earth-800 dark:text-gray-200">
+                          <span className="mr-1.5">{getPlantIcon(uh.plant_name)}</span>
+                          {uh.plant_name}
+                        </td>
+                        <td className="p-3 text-earth-600 dark:text-gray-300">
+                          {uh.bed_name ? (
+                            <Link href={`/planters/${uh.bed_id}`} className="hover:text-garden-600 dark:hover:text-garden-400 hover:underline">
+                              {uh.bed_name}
+                            </Link>
+                          ) : (
+                            <span className="text-earth-400 dark:text-gray-500">--</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-earth-600 dark:text-gray-300">{uh.expected_harvest_date}</td>
+                        <td className="p-3 text-right">
+                          <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${getDaysBadgeColor(uh.days_until_harvest)}`}>
+                            {getDaysLabel(uh.days_until_harvest)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Summary Cards */}

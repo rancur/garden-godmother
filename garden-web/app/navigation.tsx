@@ -22,9 +22,10 @@ export const navGroups: NavGroup[] = [
     label: 'Garden',
     emoji: '\u{1F331}',
     items: [
+      { href: '/my-plantings', label: 'My Plantings', description: 'All active plantings in one view', emoji: '\u{1F33B}' },
       { href: '/map', label: 'Map', description: 'Visual garden layout', emoji: '\u{1F5FA}' },
       { href: '/planters', label: 'Planters', description: 'Manage planter layouts', emoji: '\u{1FAB4}' },
-      { href: '/ground-plants', label: 'Ground Plants', description: 'Trees, vines & landscaping', emoji: '\u{1F333}' },
+      { href: '/ground-plants', label: 'Ground', description: 'Trees, shrubs, and vines planted in the ground', emoji: '\u{1F333}' },
       { href: '/trays', label: 'Trays', description: 'Seed starting trays', emoji: '\u{1F33F}' },
       { href: '/areas', label: 'Areas', description: 'Unified area zones', emoji: '\u{1F4CD}' },
     ],

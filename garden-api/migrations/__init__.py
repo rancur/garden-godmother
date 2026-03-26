@@ -932,4 +932,13 @@ def startup_run_migrations():
                                ("home_assistant", json.dumps({"url": os.environ.get("HA_URL", "http://homeassistant.local:8123"), "token": ha_token})))
         run_migration(db, 38, "seed_integration_settings", [], callback=_seed_integrations)
 
+        # ── Migration 039: journal adaptive fields (severity, milestone_type, tray_cell_id) ──
+        def _journal_adaptive_fields(db):
+            _migration_add_columns_if_missing(db, "journal_entries", {
+                "severity": "TEXT",
+                "milestone_type": "TEXT",
+                "tray_cell_id": "INTEGER",
+            })
+        run_migration(db, 39, "journal_adaptive_fields", [], callback=_journal_adaptive_fields)
+
         logger.info("Migration system: all migrations checked/applied")

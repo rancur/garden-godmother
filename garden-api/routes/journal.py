@@ -26,16 +26,37 @@ router = APIRouter()
 
 
 def _enrich_journal_entry(db, entry: dict) -> dict:
-    """Add plant_name, bed_name, tray_name, ground_plant_name to a journal entry dict."""
-    if entry.get("plant_id"):
+    """Add plant_name, bed_name, tray_name, ground_plant_name, planting info to a journal entry dict."""
+    # Enrich from planting_id (bed planting)
+    if entry.get("planting_id"):
+        pl_row = db.execute("""
+            SELECT p.name as plant_name, p.id as plant_id, gb.name as bed_name, gb.id as bed_id
+            FROM plantings pl
+            JOIN plants p ON pl.plant_id = p.id
+            LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
+            WHERE pl.id = ?
+        """, (entry["planting_id"],)).fetchone()
+        if pl_row:
+            entry.setdefault("plant_name", pl_row["plant_name"])
+            entry.setdefault("bed_name", pl_row["bed_name"])
+            if not entry.get("plant_name"):
+                entry["plant_name"] = pl_row["plant_name"]
+            if not entry.get("bed_name"):
+                entry["bed_name"] = pl_row["bed_name"]
+            if not entry.get("plant_id"):
+                entry["plant_id"] = pl_row["plant_id"]
+            if not entry.get("bed_id"):
+                entry["bed_id"] = pl_row["bed_id"]
+
+    if entry.get("plant_id") and not entry.get("plant_name"):
         p = db.execute("SELECT name FROM plants WHERE id = ?", (entry["plant_id"],)).fetchone()
         entry["plant_name"] = p["name"] if p else None
-    else:
+    elif not entry.get("plant_name"):
         entry["plant_name"] = None
-    if entry.get("bed_id"):
+    if entry.get("bed_id") and not entry.get("bed_name"):
         b = db.execute("SELECT name FROM garden_beds WHERE id = ?", (entry["bed_id"],)).fetchone()
         entry["bed_name"] = b["name"] if b else None
-    else:
+    elif not entry.get("bed_name"):
         entry["bed_name"] = None
     if entry.get("tray_id"):
         t = db.execute("SELECT name FROM seed_trays WHERE id = ?", (entry["tray_id"],)).fetchone()
@@ -43,10 +64,18 @@ def _enrich_journal_entry(db, entry: dict) -> dict:
     else:
         entry["tray_name"] = None
     if entry.get("ground_plant_id"):
-        gp = db.execute("SELECT gp.name as gp_name, pl.name as plant_name FROM ground_plants gp JOIN plants pl ON gp.plant_id = pl.id WHERE gp.id = ?", (entry["ground_plant_id"],)).fetchone()
+        gp = db.execute("""
+            SELECT gp.name as gp_name, pl.name as plant_name, a.name as area_name
+            FROM ground_plants gp
+            JOIN plants pl ON gp.plant_id = pl.id
+            LEFT JOIN areas a ON gp.area_id = a.id
+            WHERE gp.id = ?
+        """, (entry["ground_plant_id"],)).fetchone()
         entry["ground_plant_name"] = (gp["gp_name"] or gp["plant_name"]) if gp else None
+        entry["area_name"] = gp["area_name"] if gp else None
     else:
         entry["ground_plant_name"] = None
+        entry["area_name"] = None
     # Parse tags JSON
     if entry.get("tags"):
         try:
@@ -113,15 +142,22 @@ def create_journal_entry(entry: JournalEntryCreate):
     valid_moods = ('great', 'good', 'okay', 'concerned', 'bad')
     if entry.mood and entry.mood not in valid_moods:
         raise HTTPException(400, f"Invalid mood. Must be one of: {', '.join(valid_moods)}")
+    valid_severities = ('low', 'medium', 'high', 'critical')
+    if entry.severity and entry.severity not in valid_severities:
+        raise HTTPException(400, f"Invalid severity. Must be one of: {', '.join(valid_severities)}")
+    valid_milestones = ('sprouted', 'flowering', 'fruiting', 'first_harvest', 'established')
+    if entry.milestone_type and entry.milestone_type not in valid_milestones:
+        raise HTTPException(400, f"Invalid milestone_type. Must be one of: {', '.join(valid_milestones)}")
 
     tags_json = json.dumps(entry.tags) if entry.tags else None
 
     with get_db() as db:
         cursor = db.execute(
-            """INSERT INTO journal_entries (entry_type, title, content, plant_id, planting_id, bed_id, tray_id, ground_plant_id, photo_id, mood, tags)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO journal_entries (entry_type, title, content, plant_id, planting_id, bed_id, tray_id, tray_cell_id, ground_plant_id, photo_id, mood, tags, severity, milestone_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (entry.entry_type, entry.title, entry.content, entry.plant_id, entry.planting_id,
-             entry.bed_id, entry.tray_id, entry.ground_plant_id, entry.photo_id, entry.mood, tags_json),
+             entry.bed_id, entry.tray_id, entry.tray_cell_id, entry.ground_plant_id, entry.photo_id,
+             entry.mood, tags_json, entry.severity, entry.milestone_type),
         )
         db.commit()
         row = db.execute("SELECT * FROM journal_entries WHERE id = ?", (cursor.lastrowid,)).fetchone()
@@ -177,6 +213,21 @@ def update_journal_entry(entry_id: int, data: JournalEntryUpdate):
         if data.tags is not None:
             fields.append("tags = ?")
             params.append(json.dumps(data.tags))
+        if data.tray_cell_id is not None:
+            fields.append("tray_cell_id = ?")
+            params.append(data.tray_cell_id)
+        if data.severity is not None:
+            valid_severities = ('low', 'medium', 'high', 'critical')
+            if data.severity and data.severity not in valid_severities:
+                raise HTTPException(400, f"Invalid severity. Must be one of: {', '.join(valid_severities)}")
+            fields.append("severity = ?")
+            params.append(data.severity)
+        if data.milestone_type is not None:
+            valid_milestones = ('sprouted', 'flowering', 'fruiting', 'first_harvest', 'established')
+            if data.milestone_type and data.milestone_type not in valid_milestones:
+                raise HTTPException(400, f"Invalid milestone_type. Must be one of: {', '.join(valid_milestones)}")
+            fields.append("milestone_type = ?")
+            params.append(data.milestone_type)
 
         if not fields:
             raise HTTPException(400, "No fields to update")

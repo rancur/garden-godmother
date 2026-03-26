@@ -953,14 +953,14 @@ export function getJournalEntries(params?: { entry_type?: string; plant_id?: num
   return apiFetch(`/api/journal${query ? `?${query}` : ''}`);
 }
 
-export function createJournalEntry(data: { entry_type: string; title?: string; content: string; plant_id?: number; planting_id?: number; bed_id?: number; tray_id?: number; ground_plant_id?: number; photo_id?: number; mood?: string; tags?: string[] }) {
+export function createJournalEntry(data: { entry_type: string; title?: string; content: string; plant_id?: number; planting_id?: number; bed_id?: number; tray_id?: number; tray_cell_id?: number; ground_plant_id?: number; photo_id?: number; mood?: string; tags?: string[]; severity?: string; milestone_type?: string }) {
   return apiFetch('/api/journal', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export function updateJournalEntry(id: number, data: { entry_type?: string; title?: string; content?: string; plant_id?: number; planting_id?: number; bed_id?: number; tray_id?: number; ground_plant_id?: number; photo_id?: number; mood?: string; tags?: string[] }) {
+export function updateJournalEntry(id: number, data: { entry_type?: string; title?: string; content?: string; plant_id?: number; planting_id?: number; bed_id?: number; tray_id?: number; tray_cell_id?: number; ground_plant_id?: number; photo_id?: number; mood?: string; tags?: string[]; severity?: string; milestone_type?: string }) {
   return apiFetch(`/api/journal/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
@@ -1225,6 +1225,12 @@ export function updateUsdaZone(zone: string) {
 // Journal AI Summary
 export function generateJournalSummary(days: number = 7) {
   return apiFetch(`/api/journal/ai-summary?days=${days}`, { method: 'POST' });
+}
+
+// My Plantings (unified view)
+export function getMyPlantings(status?: string) {
+  const params = status ? `?status=${status}` : '';
+  return apiFetch(`/api/my-plantings${params}`);
 }
 
 // Garden Bed Templates

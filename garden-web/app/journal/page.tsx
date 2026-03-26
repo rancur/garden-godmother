@@ -9,6 +9,7 @@ import {
   deleteJournalEntry,
   getPhotoUrl,
   getPlants,
+  getPlantings,
   getBeds,
   getTrays,
   getGroundPlants,
@@ -59,6 +60,8 @@ interface FeedEntry {
   source: string;
   category?: string;
   severity?: string;
+  milestone_type?: string;
+  area_name?: string;
   note_type?: string;
   photos?: JournalPhoto[];
   photo_count?: number;
@@ -85,13 +88,28 @@ interface PhotoAnalysis {
 // -- Constants --
 
 const ENTRY_TYPES = [
-  { value: 'note', label: 'Note', icon: '\u{1F4DD}' },
-  { value: 'observation', label: 'Observation', icon: '\u{1F440}' },
-  { value: 'milestone', label: 'Milestone', icon: '\u{1F389}' },
-  { value: 'problem', label: 'Problem', icon: '\u26A0\uFE0F' },
-  { value: 'weather', label: 'Weather', icon: '\u{1F324}\uFE0F' },
-  { value: 'harvest', label: 'Harvest', icon: '\u{1F33E}' },
-  { value: 'photo', label: 'Photo', icon: '\u{1F4F7}' },
+  { value: 'observation', label: 'Observation', icon: '\u{1F440}', description: 'General note' },
+  { value: 'harvest', label: 'Harvest', icon: '\u{1F9FA}', description: 'Record a harvest' },
+  { value: 'problem', label: 'Problem', icon: '\u26A0\uFE0F', description: 'Issue or concern' },
+  { value: 'milestone', label: 'Milestone', icon: '\u{1F389}', description: 'Growth milestone' },
+  { value: 'note', label: 'Note', icon: '\u{1F4DD}', description: 'Quick note' },
+  { value: 'weather', label: 'Weather', icon: '\u{1F324}\uFE0F', description: 'Weather event' },
+  { value: 'photo', label: 'Photo', icon: '\u{1F4F7}', description: 'Photo only' },
+];
+
+const SEVERITY_OPTIONS = [
+  { value: 'low', label: 'Low', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700' },
+  { value: 'medium', label: 'Medium', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300 border-orange-300 dark:border-orange-700' },
+  { value: 'high', label: 'High', color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 border-red-300 dark:border-red-700' },
+  { value: 'critical', label: 'Critical', color: 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-200 border-red-400 dark:border-red-600' },
+];
+
+const MILESTONE_OPTIONS = [
+  { value: 'sprouted', label: 'Sprouted', icon: '\u{1F331}' },
+  { value: 'flowering', label: 'Flowering', icon: '\u{1F33C}' },
+  { value: 'fruiting', label: 'Fruiting', icon: '\u{1F345}' },
+  { value: 'first_harvest', label: 'First Harvest', icon: '\u{1F389}' },
+  { value: 'established', label: 'Established', icon: '\u{1F333}' },
 ];
 
 const MOODS = [
@@ -147,7 +165,7 @@ export default function JournalPage() {
 
   // Add entry form state
   const [showForm, setShowForm] = useState(false);
-  const [formType, setFormType] = useState('note');
+  const [formType, setFormType] = useState('observation');
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formMood, setFormMood] = useState('');
@@ -155,6 +173,10 @@ export default function JournalPage() {
   const [formBedId, setFormBedId] = useState('');
   const [formTrayId, setFormTrayId] = useState('');
   const [formGroundPlantId, setFormGroundPlantId] = useState('');
+  const [formPlantingId, setFormPlantingId] = useState('');
+  const [formPlantingType, setFormPlantingType] = useState<'planting' | 'ground_plant' | ''>('');
+  const [formSeverity, setFormSeverity] = useState('');
+  const [formMilestoneType, setFormMilestoneType] = useState('');
   const [formPhotos, setFormPhotos] = useState<File[]>([]);
   const [formPhotoPreviews, setFormPhotoPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -172,6 +194,7 @@ export default function JournalPage() {
   const [bedOptions, setBedOptions] = useState<TypeaheadOption[]>([]);
   const [trayOptions, setTrayOptions] = useState<TypeaheadOption[]>([]);
   const [groundPlantOptions, setGroundPlantOptions] = useState<TypeaheadOption[]>([]);
+  const [allPlantingOptions, setAllPlantingOptions] = useState<TypeaheadOption[]>([]);
 
   // Photo lightbox
   const [lightboxPhotoId, setLightboxPhotoId] = useState<number | null>(null);
@@ -220,6 +243,33 @@ export default function JournalPage() {
       .then((gps: { id: number; name: string; plant_name: string }[]) =>
         setGroundPlantOptions(gps.map((g) => ({ value: String(g.id), label: g.name || g.plant_name, icon: '\u{1F333}' })))
       )
+      .catch(() => {});
+
+    // Build unified planting selector: bed plantings + ground plants
+    Promise.all([getPlantings(), getGroundPlants()])
+      .then(([plantings, groundPlants]: [
+        { id: number; plant_name: string; bed_name?: string; status: string }[],
+        { id: number; name: string; plant_name: string; area_name?: string }[]
+      ]) => {
+        const options: TypeaheadOption[] = [
+          { value: 'general', label: 'General (no specific plant)' },
+        ];
+        for (const p of plantings) {
+          options.push({
+            value: `planting:${p.id}`,
+            label: `${p.plant_name}${p.bed_name ? ` (${p.bed_name})` : ''} - ${p.status}`,
+            icon: getPlantIcon(p.plant_name),
+          });
+        }
+        for (const g of groundPlants) {
+          options.push({
+            value: `ground:${g.id}`,
+            label: `${g.name || g.plant_name}${(g as Record<string, unknown>).area_name ? ` (${(g as Record<string, unknown>).area_name})` : ''} [ground]`,
+            icon: '\u{1F333}',
+          });
+        }
+        setAllPlantingOptions(options);
+      })
       .catch(() => {});
   }, []);
 
@@ -284,24 +334,38 @@ export default function JournalPage() {
   };
 
   const handleSubmit = async () => {
-    if (!formContent.trim()) return;
+    if (!formContent.trim() && !formTitle.trim()) return;
     setSubmitting(true);
     try {
+      // Resolve unified planting selector
+      let planting_id: number | undefined;
+      let ground_plant_id: number | undefined;
+      if (formPlantingId && formPlantingId !== 'general') {
+        if (formPlantingId.startsWith('planting:')) {
+          planting_id = Number(formPlantingId.split(':')[1]);
+        } else if (formPlantingId.startsWith('ground:')) {
+          ground_plant_id = Number(formPlantingId.split(':')[1]);
+        }
+      }
+
       const entry = await createJournalEntry({
         entry_type: formType,
         title: formTitle.trim() || undefined,
         content: formContent.trim(),
         mood: formMood || undefined,
+        planting_id,
+        ground_plant_id,
         plant_id: formPlantId ? Number(formPlantId) : undefined,
         bed_id: formBedId ? Number(formBedId) : undefined,
         tray_id: formTrayId ? Number(formTrayId) : undefined,
-        ground_plant_id: formGroundPlantId ? Number(formGroundPlantId) : undefined,
+        severity: formSeverity || undefined,
+        milestone_type: formMilestoneType || undefined,
       });
       // Upload photos if any
       if (formPhotos.length > 0 && entry.id) {
         await uploadJournalPhotos(entry.id, formPhotos);
       }
-      setFormType('note');
+      setFormType('observation');
       setFormTitle('');
       setFormContent('');
       setFormMood('');
@@ -309,6 +373,10 @@ export default function JournalPage() {
       setFormBedId('');
       setFormTrayId('');
       setFormGroundPlantId('');
+      setFormPlantingId('');
+      setFormPlantingType('');
+      setFormSeverity('');
+      setFormMilestoneType('');
       formPhotoPreviews.forEach((url) => URL.revokeObjectURL(url));
       setFormPhotos([]);
       setFormPhotoPreviews([]);
@@ -474,21 +542,34 @@ export default function JournalPage() {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 space-y-4 shadow-sm">
           <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-300 uppercase tracking-wide">New Journal Entry</h2>
 
-          {/* Entry type selector */}
-          <div className="flex flex-wrap gap-2">
+          {/* Entry type selector - visual cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {ENTRY_TYPES.filter((t) => t.value !== 'photo').map((t) => (
               <button
                 key={t.value}
                 onClick={() => setFormType(t.value)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
                   formType === t.value
-                    ? 'bg-garden-100 dark:bg-garden-900/40 border-garden-400 dark:border-garden-600 text-garden-700 dark:text-garden-300'
+                    ? 'bg-garden-50 dark:bg-garden-900/30 border-garden-500 dark:border-garden-500 text-garden-700 dark:text-garden-300 shadow-sm'
                     : 'bg-white dark:bg-gray-700 border-earth-200 dark:border-gray-600 text-earth-600 dark:text-gray-400 hover:border-garden-300 dark:hover:border-garden-600'
                 }`}
               >
-                {t.icon} {t.label}
+                <span className="text-lg">{t.icon}</span>
+                <span className="text-xs font-semibold">{t.label}</span>
+                <span className="text-[10px] text-earth-400 dark:text-gray-500">{t.description}</span>
               </button>
             ))}
+          </div>
+
+          {/* What plant is this about? - Unified planting selector */}
+          <div>
+            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">What plant is this about?</label>
+            <TypeaheadSelect
+              options={allPlantingOptions}
+              value={formPlantingId}
+              onChange={(val) => setFormPlantingId(val)}
+              placeholder="Search plantings, ground plants..."
+            />
           </div>
 
           {/* Title (optional) */}
@@ -500,54 +581,65 @@ export default function JournalPage() {
             className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm"
           />
 
+          {/* Adaptive fields based on entry_type */}
+
+          {/* Problem: severity selector */}
+          {formType === 'problem' && (
+            <div>
+              <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1.5 block">Severity</label>
+              <div className="flex flex-wrap gap-2">
+                {SEVERITY_OPTIONS.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => setFormSeverity(formSeverity === s.value ? '' : s.value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      formSeverity === s.value
+                        ? `${s.color} border-current shadow-sm`
+                        : 'bg-white dark:bg-gray-700 border-earth-200 dark:border-gray-600 text-earth-600 dark:text-gray-400 hover:border-earth-300'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Milestone: type selector */}
+          {formType === 'milestone' && (
+            <div>
+              <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1.5 block">Milestone Type</label>
+              <div className="flex flex-wrap gap-2">
+                {MILESTONE_OPTIONS.map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => setFormMilestoneType(formMilestoneType === m.value ? '' : m.value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      formMilestoneType === m.value
+                        ? 'bg-garden-100 dark:bg-garden-900/40 border-garden-400 dark:border-garden-600 text-garden-700 dark:text-garden-300 shadow-sm'
+                        : 'bg-white dark:bg-gray-700 border-earth-200 dark:border-gray-600 text-earth-600 dark:text-gray-400 hover:border-earth-300'
+                    }`}
+                  >
+                    {m.icon} {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           <textarea
             value={formContent}
             onChange={(e) => setFormContent(e.target.value)}
-            placeholder="What's happening in the garden?"
-            rows={4}
+            placeholder={
+              formType === 'problem' ? 'Describe the issue...' :
+              formType === 'harvest' ? 'Harvest notes (amounts tracked in Harvest Log)...' :
+              formType === 'milestone' ? 'Describe the milestone...' :
+              "What's happening in the garden?"
+            }
+            rows={3}
             className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm resize-y"
           />
-
-          {/* Link selectors */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Link to Plant</label>
-              <TypeaheadSelect
-                options={plantOptions}
-                value={formPlantId}
-                onChange={setFormPlantId}
-                placeholder="Search plants..."
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Link to Planter</label>
-              <TypeaheadSelect
-                options={bedOptions}
-                value={formBedId}
-                onChange={setFormBedId}
-                placeholder="Search planters..."
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Link to Tray</label>
-              <TypeaheadSelect
-                options={trayOptions}
-                value={formTrayId}
-                onChange={setFormTrayId}
-                placeholder="Search trays..."
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Link to Ground Plant</label>
-              <TypeaheadSelect
-                options={groundPlantOptions}
-                value={formGroundPlantId}
-                onChange={setFormGroundPlantId}
-                placeholder="Search ground plants..."
-              />
-            </div>
-          </div>
 
           {/* Mood selector */}
           <div>
@@ -605,7 +697,7 @@ export default function JournalPage() {
           <div className="flex justify-end">
             <button
               onClick={handleSubmit}
-              disabled={submitting || !formContent.trim()}
+              disabled={submitting || (!formContent.trim() && !formTitle.trim())}
               className="px-5 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? 'Saving...' : 'Add Entry'}
@@ -854,10 +946,18 @@ export default function JournalPage() {
                     {entry.severity && (
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         entry.severity === 'critical' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
+                        entry.severity === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
+                        entry.severity === 'medium' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
+                        entry.severity === 'low' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
                         entry.severity === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
                         'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
                       }`}>
                         {entry.severity}
+                      </span>
+                    )}
+                    {entry.milestone_type && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
+                        {MILESTONE_OPTIONS.find(m => m.value === entry.milestone_type)?.icon || '\u{1F389}'} {entry.milestone_type.replace('_', ' ')}
                       </span>
                     )}
                     {entry.tags && entry.tags.length > 0 && entry.tags.map((tag: string) => (

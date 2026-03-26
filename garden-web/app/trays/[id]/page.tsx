@@ -4,10 +4,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getTrayGrid, getPlants, getBeds, seedTrayCell, updateTrayCell, transplantTrayCell, updateTray, clearTrayCell, duplicateTray, getIrrigationZones, getAreas, getZoneSchedule, getJournalEntries, deleteTray, moveTrayCellToPlanter, undoAction, getAmendments, createAmendment, deleteAmendment } from '../../api';
+import { getTrayGrid, getPlants, getBeds, seedTrayCell, updateTrayCell, transplantTrayCell, updateTray, clearTrayCell, duplicateTray, getIrrigationZones, getAreas, getZoneSchedule, getJournalEntries, deleteTray, moveTrayCellToPlanter, undoAction } from '../../api';
+import SoilAmendments from '../../components/SoilAmendments';
 import { useToast } from '../../toast';
 import { useModal } from '../../confirm-modal';
-import { getGardenToday, getGardenDateOffset, formatGardenDateTime, formatGardenDate } from '../../timezone';
+import { getGardenToday, formatGardenDateTime, formatGardenDate } from '../../timezone';
 
 interface Plant {
   id: number;
@@ -148,17 +149,7 @@ export default function TrayDetailPage() {
   const [traySchedule, setTraySchedule] = useState<any>(null);
   const [trayScheduleLoading, setTrayScheduleLoading] = useState(false);
 
-  // Soil amendments state
-  const [showAmendments, setShowAmendments] = useState(false);
-  const [amendments, setAmendments] = useState<any[]>([]);
-  const [amendmentForm, setAmendmentForm] = useState({
-    amendment_type: 'compost', product_name: '', amount: '', applied_date: getGardenToday(), next_due_date: '', notes: '',
-  });
-  const [savingAmendment, setSavingAmendment] = useState(false);
-
-  const loadAmendments = useCallback(() => {
-    getAmendments({ tray_id: trayId }).then(setAmendments).catch(() => setAmendments([]));
-  }, [trayId]);
+  // Soil amendments handled by SoilAmendments component
 
   const loadData = useCallback(() => {
     getTrayGrid(trayId)
@@ -1026,135 +1017,7 @@ export default function TrayDetailPage() {
       </div>
 
       {/* Soil Amendments (collapsible) */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <button
-          className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-earth-50 dark:hover:bg-gray-750 transition-colors"
-          onClick={() => {
-            const next = !showAmendments;
-            setShowAmendments(next);
-            if (next) loadAmendments();
-          }}
-        >
-          <span className="font-semibold text-earth-700 dark:text-gray-200 flex items-center gap-2">
-            {'🧪'} Soil Amendments
-            {amendments.some(a => a.next_due_date && a.next_due_date <= getGardenDateOffset(14)) && (
-              <span className="inline-block px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] font-medium">Due soon</span>
-            )}
-          </span>
-          <svg className={`w-5 h-5 text-earth-400 transition-transform ${showAmendments ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {showAmendments && (
-          <div className="px-5 pb-5 space-y-4 border-t border-earth-100 dark:border-gray-700 pt-4">
-            {/* Log new amendment form */}
-            <div className="bg-earth-50 dark:bg-gray-750 rounded-lg p-3 space-y-2">
-              <div className="text-xs font-medium text-earth-600 dark:text-gray-300 mb-1">Log Amendment</div>
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={amendmentForm.amendment_type}
-                  onChange={(e) => setAmendmentForm(f => ({ ...f, amendment_type: e.target.value }))}
-                  className="px-2 py-1 text-sm rounded border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-200"
-                >
-                  <option value="compost">Compost</option>
-                  <option value="fertilizer">Fertilizer</option>
-                  <option value="sulfur">Sulfur</option>
-                  <option value="gypsum">Gypsum</option>
-                  <option value="mulch">Mulch</option>
-                  <option value="worm_castings">Worm Castings</option>
-                  <option value="bone_meal">Bone Meal</option>
-                  <option value="fish_emulsion">Fish Emulsion</option>
-                  <option value="other">Other</option>
-                </select>
-                <input type="text" placeholder="Product name" value={amendmentForm.product_name}
-                  onChange={(e) => setAmendmentForm(f => ({ ...f, product_name: e.target.value }))}
-                  className="px-2 py-1 text-sm rounded border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-200" />
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <input type="text" placeholder="Amount (e.g. 2 cups)" value={amendmentForm.amount}
-                  onChange={(e) => setAmendmentForm(f => ({ ...f, amount: e.target.value }))}
-                  className="px-2 py-1 text-sm rounded border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-200" />
-                <div>
-                  <label className="block text-[10px] text-earth-400 dark:text-gray-500">Applied</label>
-                  <input type="date" value={amendmentForm.applied_date}
-                    onChange={(e) => setAmendmentForm(f => ({ ...f, applied_date: e.target.value }))}
-                    className="w-full px-2 py-1 text-sm rounded border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-200" />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-earth-400 dark:text-gray-500">Next due</label>
-                  <input type="date" value={amendmentForm.next_due_date}
-                    onChange={(e) => setAmendmentForm(f => ({ ...f, next_due_date: e.target.value }))}
-                    className="w-full px-2 py-1 text-sm rounded border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-200" />
-                </div>
-              </div>
-              <input type="text" placeholder="Notes (optional)" value={amendmentForm.notes}
-                onChange={(e) => setAmendmentForm(f => ({ ...f, notes: e.target.value }))}
-                className="w-full px-2 py-1 text-sm rounded border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-200" />
-              <button
-                disabled={savingAmendment || !amendmentForm.applied_date}
-                onClick={async () => {
-                  setSavingAmendment(true);
-                  try {
-                    await createAmendment({
-                      tray_id: trayId,
-                      amendment_type: amendmentForm.amendment_type,
-                      product_name: amendmentForm.product_name || undefined,
-                      amount: amendmentForm.amount || undefined,
-                      applied_date: amendmentForm.applied_date,
-                      next_due_date: amendmentForm.next_due_date || undefined,
-                      notes: amendmentForm.notes || undefined,
-                    });
-                    setAmendmentForm({ amendment_type: 'compost', product_name: '', amount: '', applied_date: getGardenToday(), next_due_date: '', notes: '' });
-                    loadAmendments();
-                    toast('Amendment recorded');
-                  } catch { toast('Failed to save amendment', 'error'); }
-                  setSavingAmendment(false);
-                }}
-                className="w-full px-3 py-1.5 text-sm font-medium rounded-lg bg-garden-600 hover:bg-garden-700 text-white disabled:opacity-50 transition-colors"
-              >
-                {savingAmendment ? 'Saving...' : 'Log Amendment'}
-              </button>
-            </div>
-
-            {/* Amendment history */}
-            {amendments.length > 0 ? (
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-earth-600 dark:text-gray-300">History</div>
-                {amendments.map((a: any) => {
-                  const isDueSoon = a.next_due_date && a.next_due_date <= getGardenDateOffset(14);
-                  return (
-                    <div key={a.id} className="flex items-start justify-between gap-2 text-sm border border-earth-100 dark:border-gray-700 rounded-lg p-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-medium text-earth-700 dark:text-gray-200 capitalize">{a.amendment_type.replace('_', ' ')}</span>
-                          {a.product_name && <span className="text-earth-400 dark:text-gray-500 text-xs">({a.product_name})</span>}
-                          {a.amount && <span className="text-earth-500 dark:text-gray-400 text-xs">{a.amount}</span>}
-                          {isDueSoon && (
-                            <span className="inline-block px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] font-medium">Due soon</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-earth-400 dark:text-gray-500 mt-0.5">
-                          Applied {a.applied_date}
-                          {a.next_due_date && <> &middot; Next: {a.next_due_date}</>}
-                        </div>
-                        {a.notes && <div className="text-xs text-earth-400 dark:text-gray-500 mt-0.5 italic">{a.notes}</div>}
-                      </div>
-                      <button
-                        onClick={async () => { await deleteAmendment(a.id); loadAmendments(); }}
-                        className="text-red-400 hover:text-red-600 text-xs shrink-0" title="Delete"
-                      >x</button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-xs text-earth-400 dark:text-gray-500 text-center py-2">
-                No amendments logged yet. Add compost, fertilizer, or other soil treatments above.
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {data?.tray && <SoilAmendments entityType="tray" entityId={data.tray.id} entityName={data.tray.name} />}
 
       {/* Transplant modal */}
       {showTransplant && (

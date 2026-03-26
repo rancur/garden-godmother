@@ -422,15 +422,18 @@ class GroundPlantReorder(BaseModel):
 class JournalEntryCreate(BaseModel):
     entry_type: str = "note"
     title: Optional[str] = None
-    content: str
+    content: str = ""
     plant_id: Optional[int] = None
     planting_id: Optional[int] = None
     bed_id: Optional[int] = None
     tray_id: Optional[int] = None
+    tray_cell_id: Optional[int] = None
     ground_plant_id: Optional[int] = None
     photo_id: Optional[int] = None
     mood: Optional[str] = None
     tags: Optional[list[str]] = None
+    severity: Optional[str] = None  # for problem type: low, medium, high, critical
+    milestone_type: Optional[str] = None  # sprouted, flowering, fruiting, first_harvest, established
 
 class JournalEntryUpdate(BaseModel):
     entry_type: Optional[str] = None
@@ -440,10 +443,13 @@ class JournalEntryUpdate(BaseModel):
     planting_id: Optional[int] = None
     bed_id: Optional[int] = None
     tray_id: Optional[int] = None
+    tray_cell_id: Optional[int] = None
     ground_plant_id: Optional[int] = None
     photo_id: Optional[int] = None
     mood: Optional[str] = None
     tags: Optional[list[str]] = None
+    severity: Optional[str] = None
+    milestone_type: Optional[str] = None
 
 
 # ──── Amendment Models ────

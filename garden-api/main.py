@@ -20,7 +20,7 @@ from routes import (
     plants, beds, plantings, trays, seeds, tasks,
     calendar, sensors, journal, harvest, expenses, photos,
     map as map_routes, admin, notifications, settings,
-    ground_plants, misc,
+    ground_plants, misc, my_plantings,
 )
 
 logger = logging.getLogger(__name__)
@@ -111,6 +111,7 @@ app.include_router(admin.router)
 app.include_router(notifications.router)
 app.include_router(settings.router)
 app.include_router(misc.router)
+app.include_router(my_plantings.router)
 
 
 if __name__ == "__main__":
