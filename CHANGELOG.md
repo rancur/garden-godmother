@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.0.0 (2026-03-26)
+
+### Plant Instance Model
+- **Unified plant identity** — every physical plant gets its own persistent ID and detail page (`/plant/{id}`)
+- **Location tracking** — tracks where each plant lives (planter cell, ground spot, tray cell) with full transplant history
+- **Automatic migration** — all existing plantings, ground plants, and tray cells converted to instances
+- **My Plantings links to instance pages** — click any plant for the unified detail view
+
+### v1.9 — Polish & Refinement
+- **Tempest local UDP receiver** — real-time weather data from your Tempest station via LAN broadcast, zero cloud dependency
+- **Enhanced journal** — plant timeline on detail pages, quick-add journal from planter/ground detail, plant context in journal form
+- **My Plantings history toggle** — show/hide completed, removed, and harvested plants
+
+### v1.8 — Quality & Testing
+- **82 automated tests** — pytest suite covering auth, plants, beds, tasks, journal, harvest, settings
+- **Plant data separation** — reference DB (`plants_reference.db`) vs user DB (`garden.db`) with transparent ATTACH+VIEW
+- **Proper migration system** — 44 numbered migrations, never re-run
+
+### v1.7 — Sensor Intelligence
+- **Per-planter moisture sensors** — assign HA sensor entities to specific planters/ground plants/trays
+- **Pest & disease tracker** — log incidents, track patterns, treatment history
+- **AI seasonal patterns** — garden analytics with GPT-4o-mini insights, success rates, monthly trends
+
+### v1.6 — UX Overhaul
+- **Shared detail components** — SoilAmendments, IrrigationSettings, RelatedTasks, AuditHistory, EntityPhotos
+- **"Ground Plants" → "Ground"** — cleaner naming
+- **My Plantings** — unified view of all plantings across planters, ground, and trays
+- **Adaptive journal** — planting-centric with entry type cards (observation, harvest, problem, milestone)
+- **Upcoming harvests inline** — collapsible section on the harvest page with countdown badges
+
 ## v1.5.0 (2026-03-24)
 
 ### Weather & Monitoring
