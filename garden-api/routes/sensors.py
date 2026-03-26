@@ -625,6 +625,18 @@ async def get_weather_forecast_endpoint():
     return {"forecast": forecast}
 
 
+@router.get("/api/sensors/tempest-local")
+def get_tempest_local(request: Request):
+    """Get the latest observation from the local Tempest UDP listener."""
+    require_user(request)
+    from services.tempest_udp import get_latest_observation, is_receiving
+    obs = get_latest_observation()
+    return {
+        "receiving": is_receiving(),
+        "observation": obs,
+    }
+
+
 @router.get("/api/sensors/rachio")
 async def get_rachio_sensors():
     """Pull Rachio irrigation data from HA."""

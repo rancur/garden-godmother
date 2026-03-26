@@ -35,6 +35,7 @@ const FIELD_LABELS: Record<string, { label: string; type: string; placeholder: s
   client_id: { label: 'Client ID', type: 'text', placeholder: 'Client ID' },
   client_secret: { label: 'Client Secret', type: 'password', placeholder: 'Client secret' },
   station_id: { label: 'Station ID', type: 'text', placeholder: 'Weather station ID' },
+  local_udp: { label: 'Local UDP', type: 'toggle', placeholder: '' },
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -229,6 +230,23 @@ export default function IntegrationsPage() {
                     <div className="grid grid-cols-2 gap-3">
                       {int_.fields.map(field => {
                         const meta = FIELD_LABELS[field] || { label: field, type: 'text', placeholder: '' };
+                        if (meta.type === 'toggle') {
+                          return (
+                            <div key={field} className="col-span-2 flex items-center gap-3">
+                              <label className="text-xs font-medium text-earth-500 dark:text-gray-400">{meta.label}</label>
+                              <button
+                                type="button"
+                                onClick={() => setConfigForm(f => ({ ...f, [field]: f[field] === 'true' ? 'false' : 'true' }))}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${configForm[field] === 'true' ? 'bg-garden-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                              >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${configForm[field] === 'true' ? 'translate-x-6' : 'translate-x-1'}`} />
+                              </button>
+                              <span className="text-xs text-earth-400 dark:text-gray-500">
+                                {configForm[field] === 'true' ? 'Receive real-time data from Tempest on local network (UDP 50222)' : 'Disabled'}
+                              </span>
+                            </div>
+                          );
+                        }
                         return (
                           <div key={field} className={int_.fields.length === 1 ? 'col-span-2' : ''}>
                             <label className="block text-xs font-medium text-earth-500 dark:text-gray-400 mb-1">{meta.label}</label>

@@ -10,4 +10,5 @@ RUN mkdir -p /app/data
 # Build the read-only plant reference database (ships with the image)
 RUN python3 create_reference_db.py
 EXPOSE 3402
+EXPOSE 50222/udp
 ENTRYPOINT ["./entrypoint.sh"]

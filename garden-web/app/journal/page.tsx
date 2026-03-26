@@ -22,6 +22,7 @@ import {
   getExportUrl,
   undoAction,
   generateJournalSummary,
+  getPlantTimeline,
 } from '../api';
 import { getPlantIcon } from '../plant-icons';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
@@ -196,6 +197,9 @@ export default function JournalPage() {
   const [groundPlantOptions, setGroundPlantOptions] = useState<TypeaheadOption[]>([]);
   const [allPlantingOptions, setAllPlantingOptions] = useState<TypeaheadOption[]>([]);
 
+  // Plant context (shown when a plant is selected in the form)
+  const [plantContext, setPlantContext] = useState<{ entries: FeedEntry[]; loading: boolean }>({ entries: [], loading: false });
+
   // Photo lightbox
   const [lightboxPhotoId, setLightboxPhotoId] = useState<number | null>(null);
   const [lightboxEntry, setLightboxEntry] = useState<FeedEntry | null>(null);
@@ -272,6 +276,28 @@ export default function JournalPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Load plant context when a plant is selected in the form
+  useEffect(() => {
+    if (!formPlantingId || formPlantingId === 'general') {
+      setPlantContext({ entries: [], loading: false });
+      return;
+    }
+    let plantType = '';
+    let plantId = 0;
+    if (formPlantingId.startsWith('planting:')) {
+      plantType = 'planting';
+      plantId = Number(formPlantingId.split(':')[1]);
+    } else if (formPlantingId.startsWith('ground:')) {
+      plantType = 'ground_plant';
+      plantId = Number(formPlantingId.split(':')[1]);
+    }
+    if (!plantType || !plantId) return;
+    setPlantContext({ entries: [], loading: true });
+    getPlantTimeline(plantType, plantId)
+      .then((data: FeedEntry[]) => setPlantContext({ entries: data.slice(0, 3), loading: false }))
+      .catch(() => setPlantContext({ entries: [], loading: false }));
+  }, [formPlantingId]);
 
   // Load cached analysis when lightbox opens (only for planting photos)
   useEffect(() => {
@@ -571,6 +597,30 @@ export default function JournalPage() {
               placeholder="Search plantings, ground plants..."
             />
           </div>
+
+          {/* Plant context card — shows recent history for the selected plant */}
+          {formPlantingId && formPlantingId !== 'general' && (
+            <div className="bg-earth-50 dark:bg-gray-700/50 rounded-lg border border-earth-200 dark:border-gray-600 p-3">
+              {plantContext.loading ? (
+                <div className="text-xs text-earth-400 dark:text-gray-500">Loading plant history...</div>
+              ) : plantContext.entries.length > 0 ? (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-wider font-medium text-earth-400 dark:text-gray-500 mb-1">Recent History</div>
+                  {plantContext.entries.map((e: FeedEntry, i: number) => (
+                    <div key={i} className="flex items-start gap-2 text-xs">
+                      <span className="shrink-0">{typeIcon(e.entry_type || ((e as unknown as Record<string, unknown>).timeline_type as string) || 'note')}</span>
+                      <span className="text-earth-600 dark:text-gray-400 truncate flex-1">
+                        {e.title || (e.content ? (e.content.length > 60 ? e.content.slice(0, 60) + '...' : e.content) : 'Entry')}
+                      </span>
+                      <span className="text-earth-300 dark:text-gray-600 shrink-0">{formatDate(e.created_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-earth-400 dark:text-gray-500">No previous entries for this plant.</div>
+              )}
+            </div>
+          )}
 
           {/* Title (optional) */}
           <input

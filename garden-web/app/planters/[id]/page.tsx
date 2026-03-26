@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate } from '../../api';
 import SoilAmendments from '../../components/SoilAmendments';
 import SensorReadings from '../../components/SensorReadings';
+import PlantTimeline from '../../components/PlantTimeline';
 import { getPlantIcon } from '../../plant-icons';
 import { useToast } from '../../toast';
 import { useModal } from '../../confirm-modal';
@@ -1441,6 +1442,11 @@ export default function BedDetailPage() {
                       </div>
                     </div>
                   )}
+                  {/* Plant Timeline */}
+                  <div className="mt-4">
+                    <PlantTimeline plantType="planting" plantId={planting.id} plantName={planting.plant_name} />
+                  </div>
+
                   {/* Actions */}
                   <div className="mt-4 pt-4 border-t border-earth-100 dark:border-gray-700 flex items-center gap-3">
                     <Link href={`/plants?highlight=${planting.plant_id}`} className="text-xs text-garden-600 dark:text-garden-400 hover:underline font-medium">View in Library</Link>
@@ -2044,6 +2050,11 @@ export default function BedDetailPage() {
                     {submittingNote ? 'Adding...' : 'Add Note'}
                   </button>
                 </div>
+              </div>
+
+              {/* Plant Timeline */}
+              <div className="mt-3">
+                <PlantTimeline plantType="planting" plantId={selectedPlanting.id} plantName={selectedPlanting.plant_name} />
               </div>
 
               <div className="mt-3 flex items-center gap-3">

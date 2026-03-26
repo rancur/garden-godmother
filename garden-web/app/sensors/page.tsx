@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { getSensorWeather, getSensorRachio, getSensorMoisture, getSensorSummary, getSensorHistoryChart, getIrrigationSummary, getIrrigationSchedules, getIrrigationScheduleHistory, getIrrigationZones } from '../api';
+import { getSensorWeather, getSensorRachio, getSensorMoisture, getSensorSummary, getSensorHistoryChart, getIrrigationSummary, getIrrigationSchedules, getIrrigationScheduleHistory, getIrrigationZones, getTempestLocal } from '../api';
 import { CardSkeleton } from '../skeleton';
 import { formatGardenTime, formatGardenDate, formatGardenDateTime, formatGardenTimeFromDate, getGardenToday } from '../timezone';
 
@@ -391,10 +391,11 @@ export default function SensorsPage() {
   const [scheduleData, setScheduleData] = useState<any>(null);
   const [wateringHistory, setWateringHistory] = useState<any>(null);
   const [zonesData, setZonesData] = useState<any>(null);
+  const [tempestLocal, setTempestLocal] = useState<{ receiving: boolean; observation: Record<string, any> } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [w, r, m, s, irr, sched, hist, zones] = await Promise.all([
+      const [w, r, m, s, irr, sched, hist, zones, tl] = await Promise.all([
         getSensorWeather().catch(() => null),
         getSensorRachio().catch(() => null),
         getSensorMoisture().catch(() => null),
@@ -403,6 +404,7 @@ export default function SensorsPage() {
         getIrrigationSchedules().catch(() => null),
         getIrrigationScheduleHistory(7).catch(() => null),
         getIrrigationZones().catch(() => null),
+        getTempestLocal().catch(() => null),
       ]);
       setWeather(w);
       setRachio(r);
@@ -412,6 +414,7 @@ export default function SensorsPage() {
       setScheduleData(sched);
       setWateringHistory(hist);
       setZonesData(zones);
+      setTempestLocal(tl);
       setError(null);
       setLastUpdated(new Date());
 
@@ -676,6 +679,88 @@ export default function SensorsPage() {
           )}
         </div>
       </div>
+
+      {/* ===== LOCAL TEMPEST UDP ===== */}
+      {tempestLocal?.receiving && tempestLocal.observation && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-earth-200 dark:border-gray-700 overflow-hidden">
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              {'\uD83D\uDCE1'} Local Tempest (UDP)
+            </h2>
+            <p className="text-emerald-100 text-sm">Real-time data from local network — no cloud</p>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {tempestLocal.observation.temperature_f != null && (
+                <div className="text-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                  <div className="text-3xl font-bold text-orange-700 dark:text-orange-300">
+                    {tempestLocal.observation.temperature_f}<span className="text-lg">&deg;F</span>
+                  </div>
+                  <div className="text-sm text-orange-500 dark:text-orange-400 mt-1">Temperature</div>
+                </div>
+              )}
+              {tempestLocal.observation.humidity != null && (
+                <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">
+                    {tempestLocal.observation.humidity}<span className="text-lg">%</span>
+                  </div>
+                  <div className="text-sm text-blue-500 dark:text-blue-400 mt-1">Humidity</div>
+                </div>
+              )}
+              {tempestLocal.observation.uv_index != null && (
+                <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <div className={`text-3xl font-bold ${uvLevel(tempestLocal.observation.uv_index).color}`}>
+                    {tempestLocal.observation.uv_index}
+                  </div>
+                  <div className="text-sm text-purple-500 dark:text-purple-400 mt-1">UV Index</div>
+                  <div className={`text-xs font-medium ${uvLevel(tempestLocal.observation.uv_index).color}`}>
+                    {uvLevel(tempestLocal.observation.uv_index).label}
+                  </div>
+                </div>
+              )}
+              {tempestLocal.observation.wind_avg_mph != null && (
+                <div className="text-center p-3 bg-teal-50 dark:bg-teal-900/20 rounded-lg">
+                  <div className="text-3xl font-bold text-teal-700 dark:text-teal-300">
+                    {tempestLocal.observation.wind_avg_mph}
+                  </div>
+                  <div className="text-sm text-teal-500 dark:text-teal-400 mt-1">
+                    Wind (mph) {tempestLocal.observation.wind_direction != null ? windDirection(tempestLocal.observation.wind_direction) : ''}
+                  </div>
+                  {tempestLocal.observation.wind_gust_mph != null && (
+                    <div className="text-xs text-teal-400 dark:text-teal-500">Gusts: {tempestLocal.observation.wind_gust_mph} mph</div>
+                  )}
+                </div>
+              )}
+              {tempestLocal.observation.daily_rain_in != null && (
+                <div className="text-center p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                  <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">
+                    {tempestLocal.observation.daily_rain_in}<span className="text-lg">in</span>
+                  </div>
+                  <div className="text-sm text-indigo-500 dark:text-indigo-400 mt-1">Rain Today</div>
+                </div>
+              )}
+              {tempestLocal.observation.solar_radiation != null && (
+                <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                  <div className="text-3xl font-bold text-yellow-700 dark:text-yellow-300">
+                    {tempestLocal.observation.solar_radiation}
+                  </div>
+                  <div className="text-sm text-yellow-500 dark:text-yellow-400 mt-1">Solar (W/m2)</div>
+                  {tempestLocal.observation.illuminance != null && (
+                    <div className="text-xs text-yellow-400 dark:text-yellow-500">{tempestLocal.observation.illuminance.toLocaleString()} lux</div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="mt-3 flex items-center gap-2 text-xs text-earth-400 dark:text-gray-500">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Receiving via UDP
+              {tempestLocal.observation.serial && <span>from {tempestLocal.observation.serial}</span>}
+              {tempestLocal.observation.battery_volts != null && <span>| Battery: {tempestLocal.observation.battery_volts}V</span>}
+              {tempestLocal.observation.pressure_inhg != null && <span>| Pressure: {tempestLocal.observation.pressure_inhg} inHg</span>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== SECTION 2: SOIL MOISTURE ===== */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-earth-200 dark:border-gray-700 overflow-hidden">

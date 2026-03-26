@@ -90,6 +90,16 @@ async def startup_sensor_recording():
     await sensors.startup_sensor_recording()
 
 
+@app.on_event("startup")
+async def startup_tempest_udp():
+    """Start Tempest UDP listener if local_udp is enabled."""
+    from services.integrations import get_integration_config
+    from services.tempest_udp import start_udp_listener
+    config = get_integration_config("weather_tempest")
+    if config and config.get("local_udp"):
+        await start_udp_listener()
+
+
 # ──── Register routers ────
 
 app.include_router(auth_router)

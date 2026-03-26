@@ -337,6 +337,10 @@ export function getSensorForecast() {
   return apiFetch('/api/sensors/forecast');
 }
 
+export function getTempestLocal() {
+  return apiFetch('/api/sensors/tempest-local');
+}
+
 export function getSensorRachio() {
   return apiFetch('/api/sensors/rachio');
 }
@@ -1240,10 +1244,23 @@ export function generateJournalSummary(days: number = 7) {
   return apiFetch(`/api/journal/ai-summary?days=${days}`, { method: 'POST' });
 }
 
+// Plant Timeline (per-plant journal + harvests + milestones)
+export function getPlantTimeline(plantType: string, plantId: number) {
+  return apiFetch(`/api/journal/plant-timeline/${plantType}/${plantId}`);
+}
+
+// Quick-add journal entry (auto-generates title from planting context)
+export function quickAddJournal(data: { planting_id?: number; ground_plant_id?: number; entry_type: string; content: string; severity?: string; milestone_type?: string }) {
+  return apiFetch('/api/journal/quick-add', { method: 'POST', body: JSON.stringify(data) });
+}
+
 // My Plantings (unified view)
-export function getMyPlantings(status?: string) {
-  const params = status ? `?status=${status}` : '';
-  return apiFetch(`/api/my-plantings${params}`);
+export function getMyPlantings(status?: string, includeHistorical?: boolean) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (includeHistorical) params.set('include_historical', 'true');
+  const qs = params.toString();
+  return apiFetch(`/api/my-plantings${qs ? '?' + qs : ''}`);
 }
 
 // Garden Bed Templates

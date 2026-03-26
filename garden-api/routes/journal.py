@@ -21,6 +21,99 @@ router = APIRouter()
 # ──────────────── JOURNAL ────────────────
 
 
+@router.get("/api/journal/plant-timeline/{plant_type}/{plant_id}")
+def get_plant_timeline(plant_type: str, plant_id: int, request: Request):
+    """Get all journal entries, harvests, and milestones for a specific planting."""
+    require_user(request)
+    with get_db() as db:
+        entries = []
+
+        if plant_type == "planting":
+            # Journal entries for this bed planting
+            journal = db.execute("""
+                SELECT je.id, je.title, je.content, je.entry_type, je.severity,
+                       je.milestone_type, je.created_at, 'journal' as timeline_type
+                FROM journal_entries je
+                WHERE je.planting_id = ?
+                ORDER BY je.created_at DESC
+            """, (plant_id,)).fetchall()
+            entries.extend([dict(r) for r in journal])
+
+            # Harvests for this planting
+            harvests = db.execute("""
+                SELECT h.id, h.amount, h.unit, h.quality_rating, h.harvested_date as created_at,
+                       h.notes as content, 'harvest' as timeline_type,
+                       'Harvested ' || COALESCE(h.amount, '') || ' ' || COALESCE(h.unit, '') as title
+                FROM harvests h
+                WHERE h.planting_id = ?
+                ORDER BY h.harvested_date DESC
+            """, (plant_id,)).fetchall()
+            entries.extend([dict(r) for r in harvests])
+
+        elif plant_type == "ground_plant":
+            # Journal entries for this ground plant
+            journal = db.execute("""
+                SELECT je.id, je.title, je.content, je.entry_type, je.severity,
+                       je.milestone_type, je.created_at, 'journal' as timeline_type
+                FROM journal_entries je
+                WHERE je.ground_plant_id = ?
+                ORDER BY je.created_at DESC
+            """, (plant_id,)).fetchall()
+            entries.extend([dict(r) for r in journal])
+
+        # Sort by date descending
+        entries.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return entries
+
+
+@router.post("/api/journal/quick-add")
+async def quick_add_journal(request: Request):
+    """Create a journal entry with minimal input - pre-fills from planting context."""
+    require_user(request)
+    body = await request.json()
+
+    planting_id = body.get("planting_id")
+    ground_plant_id = body.get("ground_plant_id")
+    entry_type = body.get("entry_type", "observation")
+    content = body.get("content", "")
+    severity = body.get("severity")
+    milestone_type = body.get("milestone_type")
+
+    # Auto-generate title from context
+    with get_db() as db:
+        title = ""
+        if planting_id:
+            row = db.execute("""
+                SELECT p.name as plant_name, gb.name as bed_name
+                FROM plantings pl JOIN plants p ON pl.plant_id = p.id
+                LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
+                WHERE pl.id = ?
+            """, (planting_id,)).fetchone()
+            if row:
+                plant_name = row["plant_name"]
+                title = f"{entry_type.title()}: {plant_name}"
+        elif ground_plant_id:
+            row = db.execute("""
+                SELECT gp.name, p.name as plant_name
+                FROM ground_plants gp JOIN plants p ON gp.plant_id = p.id
+                WHERE gp.id = ?
+            """, (ground_plant_id,)).fetchone()
+            if row:
+                plant_name = row["name"] or row["plant_name"]
+                title = f"{entry_type.title()}: {plant_name}"
+
+        if not title:
+            title = f"{entry_type.title()} entry"
+
+        cursor = db.execute(
+            """INSERT INTO journal_entries (title, content, entry_type, planting_id, ground_plant_id, severity, milestone_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (title, content, entry_type, planting_id, ground_plant_id, severity, milestone_type)
+        )
+        db.commit()
+        return {"ok": True, "id": cursor.lastrowid, "title": title}
+
+
 
 
 

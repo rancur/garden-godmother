@@ -45,13 +45,15 @@ export default function MyPlantingsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [showHistorical, setShowHistorical] = useState(false);
 
   useEffect(() => {
-    getMyPlantings()
+    setLoading(true);
+    getMyPlantings(undefined, showHistorical)
       .then((data) => setPlantings(Array.isArray(data) ? data : []))
       .catch(() => setError('Failed to load plantings. Is the API running?'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [showHistorical]);
 
   const filtered = useMemo(() => {
     let result = plantings;
@@ -178,12 +180,21 @@ export default function MyPlantingsPage() {
           <option value="ground">Ground</option>
           <option value="tray">Trays</option>
         </select>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showHistorical}
+            onChange={(e) => setShowHistorical(e.target.checked)}
+            className="w-4 h-4 rounded border-earth-300 dark:border-gray-600 text-garden-600 focus:ring-garden-500"
+          />
+          <span className="text-sm text-earth-600 dark:text-gray-300 whitespace-nowrap">Show history</span>
+        </label>
       </div>
 
       {/* Results count */}
-      {(statusFilter !== 'all' || typeFilter !== 'all' || search.trim()) && (
+      {(statusFilter !== 'all' || typeFilter !== 'all' || search.trim() || showHistorical) && (
         <p className="text-sm text-earth-400 dark:text-gray-500">
-          Showing {filtered.length} of {stats.total} plantings
+          Showing {filtered.length} of {stats.total} plantings{showHistorical ? ' (including completed/removed)' : ''}
         </p>
       )}
 

@@ -6,6 +6,7 @@ services:
     container_name: garden-api
     ports:
       - "3402:3402"
+      - "50222:50222/udp"
     volumes:
       - garden-data:/app/data
       - ./.git:/app/.git:ro

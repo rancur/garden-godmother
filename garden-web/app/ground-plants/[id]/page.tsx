@@ -8,6 +8,7 @@ import SoilAmendments from '../../components/SoilAmendments';
 import IrrigationSettings from '../../components/IrrigationSettings';
 import RelatedTasks from '../../components/RelatedTasks';
 import SensorReadings from '../../components/SensorReadings';
+import PlantTimeline from '../../components/PlantTimeline';
 import { getPlantIcon } from '../../plant-icons';
 import { useToast } from '../../toast';
 import { useModal } from '../../confirm-modal';
@@ -421,10 +422,13 @@ export default function GroundPlantDetailPage() {
       {/* Soil Amendments Section */}
       <SoilAmendments entityType="ground_plant" entityId={gp.id} entityName={displayName} alwaysOpen />
 
+      {/* Plant Timeline (journal + harvests + milestones) */}
+      <PlantTimeline plantType="ground_plant" plantId={gp.id} plantName={displayName} />
+
       {/* Journal / Observations Section */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4">
         <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-200 mb-3 flex items-center gap-1.5">
-          <span className="text-green-600">{'📝'}</span> Observations & Photos
+          <span className="text-green-600">{'\u{1F4DD}'}</span> Observations & Photos
         </h2>
 
         {/* Add observation */}

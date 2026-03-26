@@ -12,8 +12,11 @@ router = APIRouter()
 
 
 @router.get("/api/my-plantings")
-def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
-    """Unified view of all plantings across beds, ground, and trays."""
+def get_all_plantings(request: Request, status: Optional[str] = Query(None), include_historical: bool = Query(False)):
+    """Unified view of all plantings across beds, ground, and trays.
+
+    By default excludes removed/died/harvested. Set include_historical=true to see everything.
+    """
     require_user(request)
     with get_db() as db:
         results = []
@@ -28,7 +31,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
             JOIN plants pl ON p.plant_id = pl.id
             LEFT JOIN garden_beds gb ON p.bed_id = gb.id
             LEFT JOIN varieties v ON p.variety_id = v.id
-            WHERE p.status NOT IN ('removed', 'died')
+            {'' if include_historical else "WHERE p.status NOT IN ('removed', 'died', 'harvested')"}
         """).fetchall()
         for r in bed_plantings:
             d = dict(r)
@@ -44,7 +47,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
             FROM ground_plants gp
             JOIN plants pl ON gp.plant_id = pl.id
             LEFT JOIN areas a ON gp.area_id = a.id
-            WHERE gp.status NOT IN ('removed', 'dead')
+            {'' if include_historical else "WHERE gp.status NOT IN ('removed', 'dead')"}
         """).fetchall()
         for r in ground_plants:
             d = dict(r)
@@ -65,8 +68,8 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None)):
             FROM seed_tray_cells stc
             JOIN plants pl ON stc.plant_id = pl.id
             LEFT JOIN seed_trays st ON stc.tray_id = st.id
-            WHERE stc.status IN ('seeded', 'germinated')
-            AND stc.plant_id IS NOT NULL
+            WHERE stc.plant_id IS NOT NULL
+            {"" if include_historical else "AND stc.status IN ('seeded', 'germinated')"}
         """).fetchall()
         for r in tray_cells:
             d = dict(r)

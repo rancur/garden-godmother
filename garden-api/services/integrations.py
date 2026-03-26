@@ -13,7 +13,7 @@ INTEGRATION_TYPES = {
     'rachio': {'name': 'Rachio Controller', 'description': 'Smart irrigation controller', 'fields': ['api_key', 'person_id']},
     'rachio_hose_timer': {'name': 'Rachio Hose Timer', 'description': 'Smart hose timer', 'fields': ['base_station_id', 'valve_id']},
     'openplantbook': {'name': 'OpenPlantBook', 'description': 'Plant species data', 'fields': ['token', 'client_id', 'client_secret']},
-    'weather_tempest': {'name': 'Tempest WeatherFlow', 'description': 'Personal weather station data', 'fields': ['api_token', 'station_id']},
+    'weather_tempest': {'name': 'Tempest WeatherFlow', 'description': 'Personal weather station data', 'fields': ['api_token', 'station_id', 'local_udp']},
     'weather_openmeteo': {'name': 'Open-Meteo', 'description': 'Free weather data (no API key needed)', 'fields': []},
     'weather_openweathermap': {'name': 'OpenWeatherMap', 'description': 'Weather data with API key', 'fields': ['api_key']},
     'weather_nws': {'name': 'National Weather Service', 'description': 'Free US weather data', 'fields': []},
