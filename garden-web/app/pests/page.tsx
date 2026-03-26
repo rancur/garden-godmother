@@ -216,7 +216,7 @@ export default function PestsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    const confirmed = await showConfirm('Delete this pest incident?');
+    const confirmed = await showConfirm({ title: 'Delete Incident', message: 'Delete this pest incident?', confirmText: 'Delete', destructive: true });
     if (!confirmed) return;
     try {
       await deletePestIncident(id);
