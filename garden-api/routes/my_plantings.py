@@ -22,7 +22,8 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
         results = []
 
         # Bed plantings
-        bed_plantings = db.execute("""
+        bed_where = "" if include_historical else "WHERE p.status NOT IN ('removed', 'died', 'harvested')"
+        bed_plantings = db.execute(f"""
             SELECT p.id, p.plant_id, p.status, p.planted_date, p.cell_x, p.cell_y,
                    p.instance_id,
                    pl.name as plant_name, pl.category,
@@ -32,7 +33,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
             JOIN plants pl ON p.plant_id = pl.id
             LEFT JOIN garden_beds gb ON p.bed_id = gb.id
             LEFT JOIN varieties v ON p.variety_id = v.id
-            {'' if include_historical else "WHERE p.status NOT IN ('removed', 'died', 'harvested')"}
+            {bed_where}
         """).fetchall()
         for r in bed_plantings:
             d = dict(r)
@@ -43,7 +44,8 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
             results.append(d)
 
         # Ground plants
-        ground_plants = db.execute("""
+        ground_where = "" if include_historical else "WHERE gp.status NOT IN ('removed', 'dead')"
+        ground_plants = db.execute(f"""
             SELECT gp.id, gp.plant_id, gp.status, gp.planted_date,
                    gp.name as custom_name, gp.instance_id,
                    pl.name as plant_name, pl.category,
@@ -51,7 +53,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
             FROM ground_plants gp
             JOIN plants pl ON gp.plant_id = pl.id
             LEFT JOIN areas a ON gp.area_id = a.id
-            {'' if include_historical else "WHERE gp.status NOT IN ('removed', 'dead')"}
+            {ground_where}
         """).fetchall()
         for r in ground_plants:
             d = dict(r)
@@ -67,7 +69,8 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
             results.append(d)
 
         # Tray cells with plants
-        tray_cells = db.execute("""
+        tray_status_filter = "" if include_historical else "AND stc.status IN ('seeded', 'germinated')"
+        tray_cells = db.execute(f"""
             SELECT stc.id, stc.plant_id, stc.status, stc.seed_date as planted_date,
                    (stc.row || '-' || stc.col) as cell_label,
                    pl.name as plant_name, pl.category,
@@ -76,7 +79,7 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
             JOIN plants pl ON stc.plant_id = pl.id
             LEFT JOIN seed_trays st ON stc.tray_id = st.id
             WHERE stc.plant_id IS NOT NULL
-            {"" if include_historical else "AND stc.status IN ('seeded', 'germinated')"}
+            {tray_status_filter}
         """).fetchall()
         for r in tray_cells:
             d = dict(r)

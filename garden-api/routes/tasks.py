@@ -16,6 +16,7 @@ from constants import (
     _get_configured_timezone,
 )
 from services.integrations import get_ha_config
+from routes.sensors import _fetch_forecast_sync, _analyze_forecast_weather
 
 router = APIRouter()
 

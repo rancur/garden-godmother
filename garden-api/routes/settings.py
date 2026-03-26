@@ -42,7 +42,7 @@ def list_integrations(request: Request):
                 masked = {}
                 for field in info["fields"]:
                     val = config.get(field, "")
-                    if val and field in ('api_key', 'token', 'client_secret', 'password'):
+                    if val and any(s in field for s in ('key', 'token', 'secret', 'password')):
                         masked[field] = val[:4] + "..." + val[-4:] if len(val) > 8 else "***"
                     else:
                         masked[field] = val

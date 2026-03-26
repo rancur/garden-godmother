@@ -40,7 +40,22 @@ def list_notification_channels(request: Request):
     user = require_user(request)
     with get_db() as db:
         rows = db.execute("SELECT * FROM notification_channels WHERE user_id = ?", (user["id"],)).fetchall()
-        return [dict(r) for r in rows]
+        results = []
+        for r in rows:
+            d = dict(r)
+            # Mask sensitive fields in config
+            if d.get("config"):
+                try:
+                    config = json.loads(d["config"]) if isinstance(d["config"], str) else d["config"]
+                    for key in list(config.keys()):
+                        val = config[key]
+                        if isinstance(val, str) and any(s in key.lower() for s in ('pass', 'secret', 'token', 'webhook_url')):
+                            config[key] = val[:8] + "..." + val[-4:] if len(val) > 12 else "***"
+                    d["config"] = json.dumps(config)
+                except Exception:
+                    pass
+            results.append(d)
+        return results
 
 
 
