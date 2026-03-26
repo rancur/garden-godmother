@@ -7,5 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN chmod +x entrypoint.sh
 RUN mkdir -p /app/data
+# Build the read-only plant reference database (ships with the image)
+RUN python3 create_reference_db.py
 EXPOSE 3402
 ENTRYPOINT ["./entrypoint.sh"]

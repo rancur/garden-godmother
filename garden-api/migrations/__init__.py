@@ -16,7 +16,7 @@ ph = PasswordHasher()
 
 def startup_run_migrations():
     """Run all pending database migrations in order."""
-    with get_db() as db:
+    with get_db(attach_ref=False) as db:
         # Ensure migration tracking table exists
         db.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (

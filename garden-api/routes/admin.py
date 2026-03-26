@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import shutil
 import subprocess
@@ -113,10 +114,10 @@ BACKUP_DIR = Path("/app/data/backups")
 BACKUP_RETENTION_DAYS = 14
 
 
-def _create_backup(prefix: str = "plants") -> dict | None:
+def _create_backup(prefix: str = "garden") -> dict | None:
     """Create a backup of the SQLite database using the SQLite backup API."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    src = Path("/app/data/plants.db")
+    src = Path(os.environ.get("GG_DB_PATH", "/app/data/garden.db"))
     if not src.exists():
         return None
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -134,23 +135,24 @@ def _create_backup(prefix: str = "plants") -> dict | None:
 def _cleanup_old_backups():
     """Delete backups older than retention period."""
     cutoff = datetime.now() - timedelta(days=BACKUP_RETENTION_DAYS)
-    for f in BACKUP_DIR.glob("plants_*.db"):
-        try:
-            ts_str = f.stem.replace("plants_", "").replace("plants_predeploy_", "")
-            file_time = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
-            if file_time < cutoff:
-                f.unlink()
-        except Exception:
-            pass
-    # Also clean predeploy backups
-    for f in BACKUP_DIR.glob("plants_predeploy_*.db"):
-        try:
-            ts_str = f.stem.replace("plants_predeploy_", "")
-            file_time = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
-            if file_time < cutoff:
-                f.unlink()
-        except Exception:
-            pass
+    # Clean both legacy "plants_*" and new "garden_*" backup files
+    for pattern in ("garden_*.db", "plants_*.db"):
+        for f in BACKUP_DIR.glob(pattern):
+            try:
+                # Strip known prefixes to extract timestamp
+                stem = f.stem
+                for prefix in ("garden_prerestore_", "garden_predeploy_", "garden_",
+                               "plants_prerestore_", "plants_predeploy_", "plants_"):
+                    if stem.startswith(prefix):
+                        ts_str = stem[len(prefix):]
+                        break
+                else:
+                    continue
+                file_time = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+                if file_time < cutoff:
+                    f.unlink()
+            except Exception:
+                pass
 
 
 async def _backup_loop():
@@ -158,7 +160,7 @@ async def _backup_loop():
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     while True:
         try:
-            _create_backup("plants")
+            _create_backup("garden")
             _cleanup_old_backups()
         except Exception as e:
             logger.error(f"Backup error: {e}")
@@ -174,7 +176,7 @@ async def list_backups():
     """List all backups with timestamps and sizes."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     backups = []
-    for f in sorted(BACKUP_DIR.glob("plants*.db"), reverse=True):
+    for f in sorted(list(BACKUP_DIR.glob("garden*.db")) + list(BACKUP_DIR.glob("plants*.db")), key=lambda p: p.stat().st_mtime, reverse=True):
         try:
             stat = f.stat()
             backups.append({
@@ -190,7 +192,7 @@ async def list_backups():
 @router.post("/api/backups/create")
 async def create_backup_now():
     """Create a manual backup immediately."""
-    result = _create_backup("plants")
+    result = _create_backup("garden")
     if result is None:
         raise HTTPException(status_code=404, detail="No database found to back up")
     return {"ok": True, "backup": result}
@@ -208,9 +210,9 @@ async def restore_backup(filename: str, body: dict | None = None):
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     # Create a pre-restore backup first
-    _create_backup("plants_prerestore")
+    _create_backup("garden_prerestore")
     # Restore
-    target = Path("/app/data/plants.db")
+    target = Path(os.environ.get("GG_DB_PATH", "/app/data/garden.db"))
     source_db = sqlite3.connect(str(backup_path))
     target_db = sqlite3.connect(str(target))
     source_db.backup(target_db)
