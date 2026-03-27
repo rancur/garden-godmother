@@ -205,7 +205,7 @@ def get_area_contents(area_id: int):
 
         beds = db.execute("""
             SELECT gb.*, a.name as area_name, a.color as area_color,
-                   (SELECT COUNT(*) FROM plantings WHERE bed_id = gb.id AND status NOT IN ('removed', 'harvested', 'died', 'failed', 'planned')) as active_plantings
+                   (SELECT COUNT(*) FROM plantings WHERE bed_id = gb.id AND status NOT IN ('removed', 'harvested', 'died', 'failed')) as active_plantings
             FROM garden_beds gb
             LEFT JOIN areas a ON gb.area_id = a.id
             WHERE gb.area_id = ?
@@ -264,7 +264,7 @@ def list_beds():
                    pt.tiers as planter_tiers, pt.pockets_per_tier as planter_pockets_per_tier,
                    pt.total_pockets as planter_total_pockets, pt.form_factor as planter_form_factor,
                    sp.brand as soil_product_brand, sp.product_name as soil_product_name,
-                   (SELECT COUNT(*) FROM plantings WHERE bed_id = gb.id AND status NOT IN ('removed', 'harvested', 'died', 'failed', 'planned')) as active_plantings
+                   (SELECT COUNT(*) FROM plantings WHERE bed_id = gb.id AND status NOT IN ('removed', 'harvested', 'died', 'failed')) as active_plantings
             FROM garden_beds gb
             LEFT JOIN areas a ON gb.area_id = a.id
             LEFT JOIN planter_types pt ON gb.planter_type_id = pt.id
