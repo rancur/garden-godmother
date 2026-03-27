@@ -226,6 +226,7 @@ class HarvestCreate(BaseModel):
     quality: Optional[str] = None
     notes: Optional[str] = None
     create_journal_entry: Optional[bool] = None
+    final_harvest: bool = False
 
 class ExpenseCreate(BaseModel):
     category: str

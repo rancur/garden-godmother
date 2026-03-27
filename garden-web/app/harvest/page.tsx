@@ -84,6 +84,7 @@ export default function HarvestPage() {
     quality: '' as string,
     notes: '',
     create_journal_entry: true,
+    final_harvest: false,
   };
   const [formData, setFormData] = useState(emptyForm);
 
@@ -114,6 +115,7 @@ export default function HarvestPage() {
         quality: formData.quality || undefined,
         notes: formData.notes || undefined,
         create_journal_entry: formData.create_journal_entry || undefined,
+        final_harvest: formData.final_harvest || undefined,
       });
       setFormData(emptyForm);
       setShowForm(false);
@@ -244,16 +246,27 @@ export default function HarvestPage() {
               />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="create_journal_entry"
-              checked={formData.create_journal_entry}
-              onChange={e => setFormData({ ...formData, create_journal_entry: e.target.checked })}
-              className="w-4 h-4 text-garden-600 border-earth-300 dark:border-gray-600 rounded focus:ring-garden-500"
-            />
-            <label htmlFor="create_journal_entry" className="text-sm text-earth-700 dark:text-gray-300">
-              Add journal entry
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="create_journal_entry"
+                checked={formData.create_journal_entry}
+                onChange={e => setFormData({ ...formData, create_journal_entry: e.target.checked })}
+                className="w-4 h-4 text-garden-600 border-earth-300 dark:border-gray-600 rounded focus:ring-garden-500"
+              />
+              <label htmlFor="create_journal_entry" className="text-sm text-earth-700 dark:text-gray-300">
+                Add journal entry
+              </label>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.final_harvest}
+                onChange={(e) => setFormData({ ...formData, final_harvest: e.target.checked })}
+                className="w-4 h-4 rounded border-earth-300 dark:border-gray-600 text-garden-600 focus:ring-garden-500"
+              />
+              <span className="text-sm text-earth-600 dark:text-gray-300">Final harvest — mark plant as fully harvested</span>
             </label>
           </div>
           <button

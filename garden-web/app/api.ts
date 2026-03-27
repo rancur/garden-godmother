@@ -418,7 +418,7 @@ export function getHarvests(plantingId?: number) {
   return apiFetch(`/api/harvests${qs}`);
 }
 
-export function createHarvest(data: { planting_id: number; harvest_date: string; weight_oz?: number; quantity?: number; quality?: string; notes?: string; create_journal_entry?: boolean }) {
+export function createHarvest(data: { planting_id: number; harvest_date: string; weight_oz?: number; quantity?: number; quality?: string; notes?: string; create_journal_entry?: boolean; final_harvest?: boolean }) {
   return apiFetch('/api/harvests', {
     method: 'POST',
     body: JSON.stringify(data),

@@ -89,6 +89,14 @@ def create_harvest(harvest: HarvestCreate):
         harvest_id = cur.lastrowid
         db.commit()
 
+        # If final harvest, mark planting (and plant instance) as harvested
+        if harvest.final_harvest and harvest.planting_id:
+            db.execute("UPDATE plantings SET status = 'harvested' WHERE id = ?", (harvest.planting_id,))
+            instance = db.execute("SELECT instance_id FROM plantings WHERE id = ?", (harvest.planting_id,)).fetchone()
+            if instance and instance["instance_id"]:
+                db.execute("UPDATE plant_instances SET status = 'harvested' WHERE id = ?", (instance["instance_id"],))
+            db.commit()
+
         row = db.execute("""
             SELECT h.*, p.plant_id, pl.name as plant_name
             FROM harvests h
