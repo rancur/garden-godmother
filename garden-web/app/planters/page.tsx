@@ -562,7 +562,24 @@ export default function BedsPage() {
                   {bed.depth_inches && <span>{bed.depth_inches}&quot; deep</span>}
                 </>
               )}
-              <span className="text-garden-600 font-bold ml-auto">{bed.active_plantings || 0} plantings</span>
+              {(() => {
+                const totalCells = bed.width_cells * bed.height_cells;
+                const planted = bed.active_plantings || 0;
+                const vacant = totalCells - planted;
+                const pct = totalCells > 0 ? planted / totalCells : 0;
+                const colorClass = pct > 0.75
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                  : pct > 0.25
+                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                    : planted === 0
+                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800'
+                      : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300';
+                return (
+                  <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${colorClass}`}>
+                    {planted} of {totalCells} planted{vacant > 0 ? ` (${vacant} vacant)` : ''}
+                  </span>
+                );
+              })()}
             </div>
             {bed.soil_type && (
               <div className="mt-1.5 text-xs text-earth-400 dark:text-gray-500">

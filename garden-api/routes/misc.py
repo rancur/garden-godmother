@@ -2478,10 +2478,10 @@ def dashboard_stats():
     with get_db() as db:
         # Active plantings count (planters + ground plants)
         active_planter_plants = db.execute(
-            "SELECT COUNT(*) as c FROM plantings WHERE status IN ('seeded','sprouted','growing','flowering','fruiting','established')"
+            "SELECT COUNT(*) as c FROM plantings WHERE status NOT IN ('removed', 'harvested', 'died', 'failed', 'planned')"
         ).fetchone()["c"]
         active_ground_plants = db.execute(
-            "SELECT COUNT(*) as c FROM ground_plants WHERE status IN ('planted','growing','established')"
+            "SELECT COUNT(*) as c FROM ground_plants WHERE status NOT IN ('removed', 'dormant')"
         ).fetchone()["c"]
         active_plants = active_planter_plants + active_ground_plants
 
@@ -2492,7 +2492,7 @@ def dashboard_stats():
         for bed in beds:
             total_bed_cells += bed["width_cells"] * bed["height_cells"]
             occ = db.execute(
-                "SELECT COUNT(*) as c FROM plantings WHERE bed_id = ? AND status IN ('seeded','sprouted','growing','flowering','fruiting','established')",
+                "SELECT COUNT(*) as c FROM plantings WHERE bed_id = ? AND status NOT IN ('removed', 'harvested', 'died', 'failed', 'planned')",
                 (bed["id"],)
             ).fetchone()["c"]
             occupied_bed_cells += occ
@@ -2512,7 +2512,7 @@ def dashboard_stats():
                FROM plantings p
                JOIN plants pl ON p.plant_id = pl.id
                LEFT JOIN garden_beds b ON p.bed_id = b.id
-               WHERE p.status IN ('seeded','sprouted','growing','flowering','fruiting','established')
+               WHERE p.status NOT IN ('removed', 'harvested', 'died', 'failed', 'planned')
                AND p.expected_harvest_date IS NOT NULL
                AND p.expected_harvest_date >= ?
                ORDER BY p.expected_harvest_date ASC""",

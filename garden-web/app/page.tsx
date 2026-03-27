@@ -317,9 +317,22 @@ export default function Dashboard() {
                 <p className="text-sm text-earth-400 dark:text-gray-500 mt-1">
                   {bed.width_cells} x {bed.height_cells} cells &middot; {bed.cell_size_inches}&quot; spacing
                 </p>
-                <p className="text-sm text-garden-600 dark:text-garden-400 mt-2 font-medium">
-                  {bed.active_plantings || 0} active plantings
-                </p>
+                {(() => {
+                  const totalCells = bed.width_cells * bed.height_cells;
+                  const planted = bed.active_plantings || 0;
+                  const vacant = totalCells - planted;
+                  const pct = totalCells > 0 ? planted / totalCells : 0;
+                  const colorClass = pct > 0.75
+                    ? 'text-green-600 dark:text-green-400'
+                    : pct > 0.25
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-red-500 dark:text-red-400';
+                  return (
+                    <p className={`text-sm mt-2 font-medium ${colorClass}`}>
+                      {planted} of {totalCells} planted{vacant > 0 ? ` (${vacant} vacant)` : ''}
+                    </p>
+                  );
+                })()}
               </Link>
             ))}
           </div>
