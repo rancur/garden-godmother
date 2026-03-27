@@ -1010,6 +1010,11 @@ export function getDashboardStats() {
   return apiFetch('/api/dashboard/stats');
 }
 
+// Aggregated Dashboard (new)
+export function getDashboard() {
+  return apiFetch('/api/dashboard');
+}
+
 // Global Search
 export function globalSearch(query: string) {
   return apiFetch(`/api/search?q=${encodeURIComponent(query)}`);
