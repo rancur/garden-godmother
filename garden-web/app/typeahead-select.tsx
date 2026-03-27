@@ -82,7 +82,7 @@ export function TypeaheadSelect({
         className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm"
       />
       {dropdownOpen && search && filteredOptions.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto">
           {filteredOptions.map((option) => (
             <button
               key={option.value}
@@ -91,7 +91,7 @@ export function TypeaheadSelect({
                 setSearch('');
                 setDropdownOpen(false);
               }}
-              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-garden-50 dark:hover:bg-gray-700 text-sm text-earth-700 dark:text-gray-200 text-left"
+              className="w-full flex items-center gap-2 px-3 py-3 min-h-[48px] hover:bg-garden-50 dark:hover:bg-gray-700 text-sm text-earth-700 dark:text-gray-200 text-left"
             >
               {option.icon && <span>{option.icon}</span>}
               <span>{option.label}</span>

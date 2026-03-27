@@ -1095,4 +1095,70 @@ def startup_run_migrations():
 
         run_migration(db, 44, "migrate_to_plant_instances", [], callback=_migrate_existing_to_instances)
 
+        # ── Migration 045: add requested plants and Zinnia varieties ──
+        def _add_requested_plants(db):
+            """Add plants requested by users: Mini Carnation, Sweet Banana Pepper, Pinto Bean, Zinnia varieties."""
+            new_plants = [
+                # (name, category, subcategory, dtm_min, dtm_max, spacing, sun, water, heat_tol, cold_tol, desert_seasons, sow_indoor, sow_outdoor, transplant, harvest, notes)
+                ("Mini Carnation", "flower", "annual flower", 60, 90, 6, "full", "moderate", "high", "moderate",
+                 '["cool","warm"]', None, '["10-01","03-15"]', '["10-15","03-31"]', None,
+                 "Compact dwarf carnations with frilly blooms. Heat tolerant, great for borders and containers. Attracts butterflies."),
+                ("Sweet Banana Pepper", "vegetable", "pepper", 65, 75, 18, "full", "moderate", "high", "moderate",
+                 '["warm"]', 6, '["02-15","04-01"]', '["03-01","04-15"]', '["05-15","10-31"]',
+                 "Sweet, mild banana-shaped peppers. Excellent heat tolerance. Great for salads, frying, and pickling."),
+                ("Pinto Bean", "vegetable", "legume", 80, 100, 6, "full", "moderate", "high", "moderate",
+                 '["warm","monsoon"]', None, '["03-01","08-15"]', None, '["06-01","11-15"]',
+                 "Classic dried bean variety. Bush type, heat tolerant, nitrogen fixer. Great for desert gardens."),
+            ]
+            for p in new_plants:
+                existing = db.execute("SELECT id FROM plants WHERE name = ?", (p[0],)).fetchone()
+                if not existing:
+                    db.execute(
+                        """INSERT INTO plants (name, category, subcategory, days_to_maturity_min, days_to_maturity_max,
+                           spacing_inches, sun, water, heat_tolerance, cold_tolerance, desert_seasons,
+                           sow_indoor_weeks_before_transplant, desert_sow_outdoor, desert_transplant,
+                           desert_harvest, notes)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        p
+                    )
+
+            # Add Zinnia varieties
+            zinnia = db.execute("SELECT id FROM plants WHERE name = 'Zinnia'").fetchone()
+            if zinnia:
+                zinnia_id = zinnia[0]
+                new_varieties = [
+                    # (name, description, dtm_min, dtm_max, heat_tol, disease_res, flavor, size, color, growth, desert_rating, desert_notes, source)
+                    ("Profusion Orange", "Outstanding heat and disease resistance. Compact mounds of single orange blooms all season. Zinnia marylandica hybrid.",
+                     45, 60, "excellent", None, "N/A (ornamental)", "Compact (12-15 in)", "Orange", "Compact mound", 5,
+                     "Specific color selection from the Profusion series. Brilliant orange single blooms non-stop through AZ summer.", "Hybrid"),
+                    ("Profusion Cherry", "Same tough Profusion series in cherry red. Non-stop blooms, no deadheading needed.",
+                     45, 60, "excellent", None, "N/A (ornamental)", "Compact (12-15 in)", "Cherry red", "Compact mound", 5,
+                     "Cherry red selection. Same bulletproof disease resistance and heat tolerance as all Profusion types.", "Hybrid"),
+                    ("Profusion Double Mix", "Double-flowered Profusion in mixed colors. Same bulletproof performance.",
+                     45, 60, "excellent", None, "N/A (ornamental)", "Compact (12-15 in)", "Mixed — orange, cherry, white, yellow", "Compact mound", 5,
+                     "Double-flowered version of the Profusion series. Fuller blooms, same tough performance.", "Hybrid"),
+                    ("Benary's Giant", "Premier cut flower zinnia. 4-5 inch fully double blooms on long stems.",
+                     75, 90, "high", None, "N/A (ornamental, cut flower)", "Tall (40-50 in)", "Mixed — many colors available", "Tall upright", 3,
+                     "The gold standard cut flower zinnia. Massive fully double blooms. Needs more care in extreme desert heat — afternoon shade helps.", "Open-pollinated"),
+                    ("Zahara Double Fire", "Compact, disease-resistant. Bicolor red and yellow double blooms.",
+                     45, 60, "excellent", None, "N/A (ornamental)", "Compact (12-18 in)", "Bicolor red and yellow", "Compact mound", 5,
+                     "Stunning bicolor flowers. Disease resistant like Profusion. Great for borders and containers in AZ heat.", "Hybrid"),
+                    ("Cut and Come Again", "Medium height, prolific bloomer. The more you cut, the more it blooms.",
+                     60, 75, "high", None, "N/A (ornamental, cut flower)", "Medium (18-24 in)", "Mixed colors", "Bushy, branching", 4,
+                     "Classic cottage garden zinnia. Branching habit means more blooms per plant. Good cut flower. Reliable in AZ.", "Open-pollinated"),
+                ]
+                for v in new_varieties:
+                    existing = db.execute("SELECT id FROM varieties WHERE name = ? AND plant_id = ?", (v[0], zinnia_id)).fetchone()
+                    if not existing:
+                        db.execute(
+                            """INSERT INTO varieties (plant_id, name, description, days_to_maturity_min, days_to_maturity_max,
+                               heat_tolerance, disease_resistance, flavor_profile, size, color,
+                               growth_habit, desert_rating, desert_notes, source)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (zinnia_id, *v)
+                        )
+            db.commit()
+
+        run_migration(db, 45, "add_requested_plants", [], callback=_add_requested_plants)
+
         logger.info("Migration system: all migrations checked/applied")

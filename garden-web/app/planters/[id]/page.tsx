@@ -275,6 +275,7 @@ export default function BedDetailPage() {
   const [yieldWeight, setYieldWeight] = useState('');
   const [yieldQuantity, setYieldQuantity] = useState('');
   const [removeStep, setRemoveStep] = useState<'choose' | 'harvest-details' | 'died-details'>('choose');
+  const [diedReason, setDiedReason] = useState('');
 
   // Move dialog state
   const [showMoveDialog, setShowMoveDialog] = useState(false);
@@ -902,11 +903,8 @@ export default function BedDetailPage() {
     }
 
     if (selectedPlant) {
-      // Check for varieties before placing
-      const hasVarieties = await checkVarietiesBeforePlacing(selectedPlant, x, y);
-      if (!hasVarieties) {
-        await placeWithVariety(selectedPlant, x, y);
-      }
+      // Place immediately — no variety gate
+      await placeWithVariety(selectedPlant, x, y);
     } else {
       // Select empty cell to prompt plant picker
       setSelectedCell({ x, y });
@@ -969,6 +967,7 @@ export default function BedDetailPage() {
     setShowRemoveDialog(true);
     setRemoveStep('choose');
     setRemoveNote('');
+    setDiedReason('');
     setYieldWeight('');
     setYieldQuantity('');
   };
@@ -1045,7 +1044,10 @@ export default function BedDetailPage() {
           return;
         }
         const updateData: any = { status: 'failed' };
-        if (removeNote.trim()) updateData.notes = removeNote.trim();
+        const noteParts: string[] = [];
+        if (diedReason) noteParts.push(`Cause: ${diedReason}`);
+        if (removeNote.trim()) noteParts.push(removeNote.trim());
+        if (noteParts.length > 0) updateData.notes = noteParts.join('. ');
         await updatePlanting(plantingId, updateData);
       } else if (reason === 'transplanted') {
         await updatePlanting(plantingId, { status: 'removed', notes: removeNote.trim() || 'Transplanted to another location' });
@@ -1451,7 +1453,8 @@ export default function BedDetailPage() {
                   <div className="mt-4 pt-4 border-t border-earth-100 dark:border-gray-700 flex items-center gap-3">
                     <Link href={`/plants?highlight=${planting.plant_id}`} className="text-xs text-garden-600 dark:text-garden-400 hover:underline font-medium">View in Library</Link>
                     <Link href={`/history/plant/${planting.plant_id}`} className="text-xs text-garden-600 dark:text-garden-400 hover:underline font-medium">View History</Link>
-                    <button onClick={() => handleRemovePlanting(planting.id)} className="text-xs text-red-500 hover:text-red-700 font-medium ml-auto">Remove Plant</button>
+                    <button onClick={() => { handleRemovePlanting(planting.id); setRemoveStep('died-details'); }} className="text-xs text-orange-600 hover:text-orange-800 font-medium ml-auto">Died</button>
+                    <button onClick={() => handleRemovePlanting(planting.id)} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove Plant</button>
                   </div>
                 </div>
               );
@@ -1489,15 +1492,12 @@ export default function BedDetailPage() {
                           <button
                             key={plant.id}
                             onClick={async () => {
-                              const hasVarieties = await checkVarietiesBeforePlacing(plant, 0, 0);
-                              if (!hasVarieties) {
-                                await placeWithVariety(plant, 0, 0);
-                                setSinglePlantPickerOpen(false);
-                                setSinglePlantSearch('');
-                              }
+                              await placeWithVariety(plant, 0, 0);
+                              setSinglePlantPickerOpen(false);
+                              setSinglePlantSearch('');
                             }}
                             disabled={placing || loadingVarieties}
-                            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
+                            className="w-full flex items-center gap-3 px-3 py-2.5 min-h-[48px] rounded-lg text-left hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
                           >
                             <span className="text-xl">{getPlantIcon(plant.name, plant.category)}</span>
                             <div className="flex-1 min-w-0">
@@ -1520,7 +1520,7 @@ export default function BedDetailPage() {
                               <button
                                 onClick={async () => { await placeWithVariety(varietyPickerPlant, 0, 0); setSinglePlantPickerOpen(false); setSinglePlantSearch(''); }}
                                 disabled={placing}
-                                className="w-full text-left px-2 py-1 rounded text-xs hover:bg-garden-100 dark:hover:bg-gray-700 text-earth-600 dark:text-gray-300"
+                                className="w-full text-left px-2 py-2.5 min-h-[44px] rounded text-xs hover:bg-garden-100 dark:hover:bg-gray-700 text-earth-600 dark:text-gray-300"
                               >
                                 Any / No specific variety
                               </button>
@@ -1529,7 +1529,7 @@ export default function BedDetailPage() {
                                   key={v.id}
                                   onClick={async () => { await placeWithVariety(varietyPickerPlant, 0, 0, v.id); setSinglePlantPickerOpen(false); setSinglePlantSearch(''); }}
                                   disabled={placing}
-                                  className="w-full text-left px-2 py-1 rounded text-xs hover:bg-garden-100 dark:hover:bg-gray-700 flex items-center justify-between"
+                                  className="w-full text-left px-2 py-2.5 min-h-[44px] rounded text-xs hover:bg-garden-100 dark:hover:bg-gray-700 flex items-center justify-between"
                                 >
                                   <span className="font-medium text-earth-800 dark:text-gray-100">{v.name}</span>
                                   {v.desert_rating != null && v.desert_rating > 0 && (
@@ -2071,6 +2071,12 @@ export default function BedDetailPage() {
                   Move
                 </button>
                 <button
+                  onClick={() => { openRemoveDialog(); setRemoveStep('died-details'); }}
+                  className="text-xs text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 font-medium"
+                >
+                  Died
+                </button>
+                <button
                   onClick={openRemoveDialog}
                   className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium"
                 >
@@ -2169,7 +2175,7 @@ export default function BedDetailPage() {
                 </button>
               ))}
             </div>
-            <div className="max-h-96 overflow-y-auto scrollbar-thin space-y-1">
+            <div className="max-h-96 overflow-y-auto scrollbar-thin space-y-0.5">
               {filteredPlants.length === 0 ? (
                 <p className="text-earth-400 dark:text-gray-500 text-sm py-4 text-center">No plants found</p>
               ) : (
@@ -2182,18 +2188,15 @@ export default function BedDetailPage() {
                         setSelectedPlant(null);
                         return;
                       }
-                      // If an empty cell is already highlighted, check varieties then place
+                      // If an empty cell is already highlighted, place immediately then offer variety choice
                       if (selectedCell && !bed?.grid[selectedCell.y]?.[selectedCell.x]) {
-                        const hasVarieties = await checkVarietiesBeforePlacing(plant, selectedCell.x, selectedCell.y);
-                        if (!hasVarieties) {
-                          await placeWithVariety(plant, selectedCell.x, selectedCell.y);
-                        }
+                        await placeWithVariety(plant, selectedCell.x, selectedCell.y);
                       } else {
                         setSelectedPlant(plant);
                         setSelectedPlanting(null);
                       }
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
+                    className={`w-full text-left px-3 py-2.5 min-h-[48px] rounded-lg text-sm transition-colors flex items-center gap-2 ${
                       selectedPlant?.id === plant.id
                         ? 'bg-garden-100 dark:bg-garden-900/30 border border-garden-300 dark:border-garden-700'
                         : 'hover:bg-earth-50 dark:hover:bg-gray-700 border border-transparent'
@@ -2233,7 +2236,7 @@ export default function BedDetailPage() {
                       <button
                         onClick={() => placeWithVariety(varietyPickerPlant, varietyPickerCell.x, varietyPickerCell.y)}
                         disabled={placing}
-                        className="w-full text-left px-3 py-1.5 rounded text-sm hover:bg-garden-100 dark:hover:bg-gray-700 transition-colors text-earth-600 dark:text-gray-300"
+                        className="w-full text-left px-3 py-2.5 min-h-[44px] rounded text-sm hover:bg-garden-100 dark:hover:bg-gray-700 transition-colors text-earth-600 dark:text-gray-300"
                       >
                         Any / No specific variety
                       </button>
@@ -2242,7 +2245,7 @@ export default function BedDetailPage() {
                           key={v.id}
                           onClick={() => placeWithVariety(varietyPickerPlant, varietyPickerCell.x, varietyPickerCell.y, v.id)}
                           disabled={placing}
-                          className="w-full text-left px-3 py-1.5 rounded text-sm hover:bg-garden-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
+                          className="w-full text-left px-3 py-2.5 min-h-[44px] rounded text-sm hover:bg-garden-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
                         >
                           <span className="font-medium text-earth-800 dark:text-gray-100">{v.name}</span>
                           {v.desert_rating != null && v.desert_rating > 0 && (
@@ -3045,26 +3048,40 @@ export default function BedDetailPage() {
 
             {removeStep === 'died-details' && (
               <div className="space-y-3">
-                <p className="text-sm font-medium text-earth-700 dark:text-gray-200">What happened? (optional)</p>
+                <p className="text-sm font-medium text-earth-700 dark:text-gray-200">What happened?</p>
+                <select
+                  value={diedReason}
+                  onChange={(e) => setDiedReason(e.target.value)}
+                  className="w-full px-3 py-2.5 min-h-[44px] border border-earth-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none"
+                >
+                  <option value="">Select a reason (optional)</option>
+                  <option value="Frost">Frost</option>
+                  <option value="Disease">Disease</option>
+                  <option value="Pest">Pest</option>
+                  <option value="Heat">Heat</option>
+                  <option value="Overwatering">Overwatering</option>
+                  <option value="Underwatering">Underwatering</option>
+                  <option value="Unknown">Unknown</option>
+                </select>
                 <textarea
                   value={removeNote}
                   onChange={(e) => setRemoveNote(e.target.value)}
-                  placeholder="e.g. Root rot, pest damage, frost..."
+                  placeholder="Additional notes (optional)"
                   rows={2}
                   className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none resize-none"
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={() => setRemoveStep('choose')}
-                    className="flex-1 px-4 py-2 rounded-lg border border-earth-300 dark:border-gray-600 text-earth-600 dark:text-gray-300 text-sm hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
+                    className="flex-1 px-4 py-2.5 min-h-[44px] rounded-lg border border-earth-300 dark:border-gray-600 text-earth-600 dark:text-gray-300 text-sm hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     Back
                   </button>
                   <button
                     onClick={() => handleRemoveAs('failed')}
-                    className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                    className="flex-1 px-4 py-2.5 min-h-[44px] rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
                   >
-                    Mark as Failed
+                    Mark as Died
                   </button>
                 </div>
               </div>
