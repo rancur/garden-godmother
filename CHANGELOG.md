@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.1.0 (2026-03-27)
+
+### Dashboard & UX
+- **Dashboard redesign** — quick actions bar, recent activity feed, garden at-a-glance with fill bars
+- **Pull-to-refresh** on 6 key mobile pages
+- **Smart Journal mockup** — context-aware suggestion cards, photo-first flow, voice note UI prototype
+- **Companion Planting demo** — multi-plant cell visualization with suggestion engine
+
+### Bug Fixes
+- Harvest logging updates plant status (final harvest checkbox)
+- Planter counts now include 'planned' plants
+- Plant picker: all plants directly clickable on mobile (48px tap targets)
+- Pepper varieties selectable without going through generic 'Pepper'
+- "Died" button added to planter actions with reason dropdown
+- Vacant spaces count corrected
+
+### Data & Features
+- Added Mini Carnation, Sweet Banana Pepper, Pinto Bean to plant database
+- Added 6 Zinnia varieties (Profusion Orange, Cherry, Double Mix, Benary's Giant, Zahara, Cut and Come Again)
+- Cascading soil amendments — plant instances show inherited container amendments
+- 49 plantings updated from 'planned' to 'growing' with correct dates
+
 ## v2.0.0 (2026-03-26)
 
 ### Plant Instance Model
