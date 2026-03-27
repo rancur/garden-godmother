@@ -1161,4 +1161,13 @@ def startup_run_migrations():
 
         run_migration(db, 45, "add_requested_plants", [], callback=_add_requested_plants)
 
+        # ── Migration 046: add instance_id to soil_amendments ──
+        def _amendment_instance_id(db):
+            _migration_add_columns_if_missing(db, "soil_amendments", {
+                "instance_id": "INTEGER REFERENCES plant_instances(id)"
+            })
+            db.execute("CREATE INDEX IF NOT EXISTS idx_soil_amendments_instance ON soil_amendments(instance_id)")
+            db.commit()
+        run_migration(db, 46, "amendment_instance_id", [], callback=_amendment_instance_id)
+
         logger.info("Migration system: all migrations checked/applied")

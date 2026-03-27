@@ -2778,8 +2778,13 @@ AMENDMENT_TYPES = ("compost", "fertilizer", "sulfur", "gypsum", "mulch", "worm_c
 
 
 @router.get("/api/amendments")
-def list_amendments(bed_id: int = Query(None), ground_plant_id: int = Query(None), tray_id: int = Query(None)):
-    """List soil amendments, optionally filtered by bed, ground plant, or tray."""
+def list_amendments(bed_id: int = Query(None), ground_plant_id: int = Query(None), tray_id: int = Query(None), instance_id: int = Query(None)):
+    """List soil amendments, optionally filtered by bed, ground plant, tray, or instance.
+
+    When instance_id is provided, returns both direct instance amendments AND
+    inherited amendments from the parent container (bed/tray via plant_instance_locations).
+    Inherited rows include an 'inherited' flag and 'inherited_from' label.
+    """
     with get_db() as db:
         sql = """
             SELECT sa.*,
@@ -2804,9 +2809,60 @@ def list_amendments(bed_id: int = Query(None), ground_plant_id: int = Query(None
         if tray_id is not None:
             sql += " AND sa.tray_id = ?"
             params.append(tray_id)
+        if instance_id is not None:
+            sql += " AND sa.instance_id = ?"
+            params.append(instance_id)
         sql += " ORDER BY sa.applied_date DESC, sa.created_at DESC"
         rows = db.execute(sql, params).fetchall()
-        return [dict(r) for r in rows]
+        results = [dict(r) for r in rows]
+
+        # If querying by instance_id, also fetch inherited amendments from parent container
+        if instance_id is not None:
+            loc = db.execute(
+                "SELECT location_type, bed_id, tray_id FROM plant_instance_locations WHERE instance_id = ? AND is_current = 1",
+                (instance_id,)
+            ).fetchone()
+            if loc:
+                inherited_sql = """
+                    SELECT sa.*,
+                           gb.name as bed_name,
+                           gp_alias.name as ground_plant_label,
+                           p.name as ground_plant_species,
+                           st.name as tray_name
+                    FROM soil_amendments sa
+                    LEFT JOIN garden_beds gb ON sa.bed_id = gb.id
+                    LEFT JOIN ground_plants gp_alias ON sa.ground_plant_id = gp_alias.id
+                    LEFT JOIN plants p ON gp_alias.plant_id = p.id
+                    LEFT JOIN seed_trays st ON sa.tray_id = st.id
+                    WHERE sa.instance_id IS NULL
+                """
+                iparams: list = []
+                container_name = None
+                if loc["location_type"] == "planter" and loc["bed_id"]:
+                    inherited_sql += " AND sa.bed_id = ?"
+                    iparams.append(loc["bed_id"])
+                    bed_row = db.execute("SELECT name FROM garden_beds WHERE id = ?", (loc["bed_id"],)).fetchone()
+                    container_name = bed_row["name"] if bed_row else "planter"
+                elif loc["location_type"] == "tray" and loc["tray_id"]:
+                    inherited_sql += " AND sa.tray_id = ?"
+                    iparams.append(loc["tray_id"])
+                    tray_row = db.execute("SELECT name FROM seed_trays WHERE id = ?", (loc["tray_id"],)).fetchone()
+                    container_name = tray_row["name"] if tray_row else "tray"
+                else:
+                    container_name = None
+
+                if iparams:
+                    inherited_sql += " ORDER BY sa.applied_date DESC, sa.created_at DESC"
+                    inherited_rows = db.execute(inherited_sql, iparams).fetchall()
+                    existing_ids = {r["id"] for r in results}
+                    for r in inherited_rows:
+                        d = dict(r)
+                        if d["id"] not in existing_ids:
+                            d["inherited"] = True
+                            d["inherited_from"] = container_name
+                            results.append(d)
+
+        return results
 
 
 @router.post("/api/amendments")
@@ -2814,13 +2870,13 @@ def create_amendment(data: AmendmentCreate):
     """Log a new soil amendment."""
     if data.amendment_type not in AMENDMENT_TYPES:
         raise HTTPException(400, f"Invalid amendment_type. Must be one of: {', '.join(AMENDMENT_TYPES)}")
-    if not data.bed_id and not data.ground_plant_id and not data.tray_id:
-        raise HTTPException(400, "Must specify bed_id, ground_plant_id, or tray_id")
+    if not data.bed_id and not data.ground_plant_id and not data.tray_id and not data.instance_id:
+        raise HTTPException(400, "Must specify bed_id, ground_plant_id, tray_id, or instance_id")
     with get_db() as db:
         cursor = db.execute(
-            """INSERT INTO soil_amendments (bed_id, ground_plant_id, tray_id, amendment_type, product_name, amount, applied_date, next_due_date, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (data.bed_id, data.ground_plant_id, data.tray_id, data.amendment_type, data.product_name,
+            """INSERT INTO soil_amendments (bed_id, ground_plant_id, tray_id, instance_id, amendment_type, product_name, amount, applied_date, next_due_date, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (data.bed_id, data.ground_plant_id, data.tray_id, data.instance_id, data.amendment_type, data.product_name,
              data.amount, data.applied_date, data.next_due_date, data.notes),
         )
         db.commit()

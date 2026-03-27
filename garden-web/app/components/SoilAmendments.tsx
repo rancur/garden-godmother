@@ -13,12 +13,16 @@ interface Amendment {
   applied_date: string;
   next_due_date: string | null;
   notes: string | null;
+  inherited?: boolean;
+  inherited_from?: string | null;
 }
 
 interface SoilAmendmentsProps {
-  entityType: 'bed' | 'ground_plant' | 'tray';
+  entityType: 'bed' | 'ground_plant' | 'tray' | 'instance';
   entityId: number;
   entityName: string;
+  /** Optional plant instance ID. When set, also fetches inherited amendments from the parent container. */
+  instanceId?: number;
   /** If true, section is always expanded (no collapse toggle). Default: false. */
   alwaysOpen?: boolean;
 }
@@ -35,7 +39,7 @@ const AMENDMENT_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
-export default function SoilAmendments({ entityType, entityId, entityName, alwaysOpen = false }: SoilAmendmentsProps) {
+export default function SoilAmendments({ entityType, entityId, entityName, instanceId, alwaysOpen = false }: SoilAmendmentsProps) {
   const { toast } = useToast();
 
   const [expanded, setExpanded] = useState(alwaysOpen);
@@ -52,11 +56,21 @@ export default function SoilAmendments({ entityType, entityId, entityName, alway
 
   const loadAmendments = useCallback(() => {
     const params: Record<string, number> = {};
-    if (entityType === 'bed') params.bed_id = entityId;
-    else if (entityType === 'ground_plant') params.ground_plant_id = entityId;
-    else if (entityType === 'tray') params.tray_id = entityId;
+    if (entityType === 'instance' && instanceId) {
+      params.instance_id = instanceId;
+    } else if (instanceId) {
+      // When instanceId is provided alongside bed/ground_plant/tray, query by instance
+      // to get both direct and inherited amendments
+      params.instance_id = instanceId;
+    } else if (entityType === 'bed') {
+      params.bed_id = entityId;
+    } else if (entityType === 'ground_plant') {
+      params.ground_plant_id = entityId;
+    } else if (entityType === 'tray') {
+      params.tray_id = entityId;
+    }
     getAmendments(params).then(setAmendments).catch(() => setAmendments([]));
-  }, [entityType, entityId]);
+  }, [entityType, entityId, instanceId]);
 
   useEffect(() => {
     if (alwaysOpen) loadAmendments();
@@ -79,9 +93,16 @@ export default function SoilAmendments({ entityType, entityId, entityName, alway
         next_due_date: amendmentForm.next_due_date || undefined,
         notes: amendmentForm.notes || undefined,
       };
-      if (entityType === 'bed') payload.bed_id = entityId;
-      else if (entityType === 'ground_plant') payload.ground_plant_id = entityId;
-      else if (entityType === 'tray') payload.tray_id = entityId;
+      // When we have instanceId, create the amendment directly on the instance
+      if (instanceId) {
+        payload.instance_id = instanceId;
+      } else if (entityType === 'bed') {
+        payload.bed_id = entityId;
+      } else if (entityType === 'ground_plant') {
+        payload.ground_plant_id = entityId;
+      } else if (entityType === 'tray') {
+        payload.tray_id = entityId;
+      }
 
       await createAmendment(payload);
       setAmendmentForm({
@@ -185,8 +206,10 @@ export default function SoilAmendments({ entityType, entityId, entityName, alway
           <div className="text-xs font-medium text-earth-600 dark:text-gray-300">History</div>
           {amendments.map((a) => {
             const isDueSoon = a.next_due_date && a.next_due_date <= getGardenDateOffset(14);
+            const isInherited = !!(a as any).inherited;
+            const inheritedFrom = (a as any).inherited_from;
             return (
-              <div key={a.id} className="flex items-start justify-between gap-2 text-sm border border-earth-100 dark:border-gray-700 rounded-lg p-2">
+              <div key={a.id} className={`flex items-start justify-between gap-2 text-sm border rounded-lg p-2 ${isInherited ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10' : 'border-earth-100 dark:border-gray-700'}`}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-earth-700 dark:text-gray-200 capitalize">
@@ -197,6 +220,11 @@ export default function SoilAmendments({ entityType, entityId, entityName, alway
                     )}
                     {a.amount && (
                       <span className="text-earth-500 dark:text-gray-400 text-xs">{a.amount}</span>
+                    )}
+                    {isInherited && inheritedFrom && (
+                      <span className="inline-block px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-[10px] font-medium">
+                        from {inheritedFrom}
+                      </span>
                     )}
                     {isDueSoon && (
                       <span className="inline-block px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] font-medium">
@@ -212,13 +240,15 @@ export default function SoilAmendments({ entityType, entityId, entityName, alway
                     <div className="text-xs text-earth-400 dark:text-gray-500 mt-0.5 italic">{a.notes}</div>
                   )}
                 </div>
-                <button
-                  onClick={() => handleDelete(a.id)}
-                  className="text-red-400 hover:text-red-600 text-xs shrink-0"
-                  title="Delete"
-                >
-                  x
-                </button>
+                {!isInherited && (
+                  <button
+                    onClick={() => handleDelete(a.id)}
+                    className="text-red-400 hover:text-red-600 text-xs shrink-0"
+                    title="Delete"
+                  >
+                    x
+                  </button>
+                )}
               </div>
             );
           })}

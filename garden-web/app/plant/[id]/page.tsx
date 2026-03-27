@@ -7,6 +7,7 @@ import { getPlantInstance, updatePlantInstance, getPlantInstanceTimeline, getPho
 import PlantTimeline from '../../components/PlantTimeline';
 import RelatedTasks from '../../components/RelatedTasks';
 import SensorReadings from '../../components/SensorReadings';
+import SoilAmendments from '../../components/SoilAmendments';
 import { getPlantIcon } from '../../plant-icons';
 import { useToast } from '../../toast';
 import { plantingStatusColors as statusColors } from '../../constants';
@@ -559,6 +560,14 @@ export default function PlantInstancePage() {
       {instance.ground_plant_id && !instance.planting_id && (
         <SensorReadings targetType="ground_plant" targetId={instance.ground_plant_id} />
       )}
+
+      {/* Soil Amendments (with inherited from container) */}
+      <SoilAmendments
+        entityType="instance"
+        entityId={instance.id}
+        entityName={instance.label || instance.plant_name}
+        instanceId={instance.id}
+      />
 
       {/* Info footer */}
       <div className="text-xs text-earth-400 dark:text-gray-500 flex items-center gap-3">

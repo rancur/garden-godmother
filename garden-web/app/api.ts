@@ -1049,11 +1049,12 @@ export function getWaterUsageAnalytics(days = 30) {
 }
 
 // Soil Amendments
-export function getAmendments(params?: { bed_id?: number; ground_plant_id?: number; tray_id?: number }) {
+export function getAmendments(params?: { bed_id?: number; ground_plant_id?: number; tray_id?: number; instance_id?: number }) {
   const qs = new URLSearchParams();
   if (params?.bed_id) qs.set('bed_id', String(params.bed_id));
   if (params?.ground_plant_id) qs.set('ground_plant_id', String(params.ground_plant_id));
   if (params?.tray_id) qs.set('tray_id', String(params.tray_id));
+  if (params?.instance_id) qs.set('instance_id', String(params.instance_id));
   const query = qs.toString();
   return apiFetch(`/api/amendments${query ? `?${query}` : ''}`);
 }
@@ -1062,6 +1063,7 @@ export function createAmendment(data: {
   bed_id?: number;
   ground_plant_id?: number;
   tray_id?: number;
+  instance_id?: number;
   amendment_type: string;
   product_name?: string;
   amount?: string;

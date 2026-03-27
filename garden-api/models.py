@@ -459,6 +459,7 @@ class AmendmentCreate(BaseModel):
     bed_id: Optional[int] = None
     ground_plant_id: Optional[int] = None
     tray_id: Optional[int] = None
+    instance_id: Optional[int] = None
     amendment_type: str
     product_name: Optional[str] = None
     amount: Optional[str] = None
