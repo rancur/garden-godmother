@@ -29,6 +29,7 @@ import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
 import { formatGardenDate, getGardenYear } from '../timezone';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 // -- Types --
 
@@ -494,11 +495,20 @@ export default function JournalPage() {
   };
 
   return (
+    <PullToRefresh onRefresh={async () => { loadFeed(); }}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-earth-800 dark:text-gray-100">Garden Journal</h1>
         <div className="flex items-center gap-2">
+          <Link
+            href="/journal/smart"
+            className="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors text-sm font-medium flex items-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            Smart Journal
+            <span className="text-[10px] font-bold uppercase tracking-wide opacity-75">beta</span>
+          </Link>
           <a
             href={getExportUrl('journal')}
             download
@@ -1115,6 +1125,7 @@ export default function JournalPage() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }
 

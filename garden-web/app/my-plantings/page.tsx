@@ -7,6 +7,7 @@ import { getPlantIcon } from '../plant-icons';
 import { plantingStatusColors as statusColors } from '../constants';
 import { formatGardenDate } from '../timezone';
 import { Skeleton, CardSkeleton } from '../skeleton';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 interface Planting {
   id: number;
@@ -48,12 +49,20 @@ export default function MyPlantingsPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [showHistorical, setShowHistorical] = useState(false);
 
-  useEffect(() => {
+  const loadData = async () => {
     setLoading(true);
-    getMyPlantings(undefined, showHistorical)
-      .then((data) => setPlantings(Array.isArray(data) ? data : []))
-      .catch(() => setError('Failed to load plantings. Is the API running?'))
-      .finally(() => setLoading(false));
+    try {
+      const data = await getMyPlantings(undefined, showHistorical);
+      setPlantings(Array.isArray(data) ? data : []);
+    } catch {
+      setError('Failed to load plantings. Is the API running?');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
   }, [showHistorical]);
 
   const filtered = useMemo(() => {
@@ -113,6 +122,7 @@ export default function MyPlantingsPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={loadData}>
     <div className="space-y-6">
       {/* Header */}
       <div>
@@ -268,5 +278,6 @@ export default function MyPlantingsPage() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }

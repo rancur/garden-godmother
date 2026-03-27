@@ -8,6 +8,7 @@ import { useModal } from '../confirm-modal';
 import { useToast } from '../toast';
 import { getPlantIcon } from '../plant-icons';
 import { getGardenToday } from '../timezone';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 interface Planting {
   id: number;
@@ -150,6 +151,7 @@ export default function HarvestPage() {
   if (error) return <div className="text-center py-12 text-red-600 dark:text-red-400">{error}</div>;
 
   return (
+    <PullToRefresh onRefresh={async () => { loadData(); }}>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl sm:text-3xl font-bold text-garden-800 dark:text-garden-400">Harvest Tracker</h1>
@@ -457,5 +459,6 @@ export default function HarvestPage() {
         )}
       </div>
     </div>
+    </PullToRefresh>
   );
 }

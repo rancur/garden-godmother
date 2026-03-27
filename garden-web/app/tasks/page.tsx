@@ -20,6 +20,7 @@ import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { getPlantIcon } from '../plant-icons';
 import { taskTypeIcons, taskTypeLabels, taskStatusColors as statusColors } from '../constants';
 import { getGardenToday, formatGardenDate } from '../timezone';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 interface Task {
   id: number;
@@ -398,6 +399,7 @@ export default function TasksPage() {
   };
 
   return (
+    <PullToRefresh onRefresh={loadData}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -597,5 +599,6 @@ export default function TasksPage() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }

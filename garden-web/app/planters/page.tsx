@@ -7,6 +7,7 @@ import { CardSkeleton } from '../skeleton';
 import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
 import type { Area } from '../types';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 interface Bed {
   id: number;
@@ -705,11 +706,15 @@ export default function BedsPage() {
   };
 
   return (
+    <PullToRefresh onRefresh={async () => { loadData(); }}>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-earth-800 dark:text-gray-100">Planters</h1>
           <p className="text-earth-500 dark:text-gray-400 mt-1">Manage your planters and planting areas</p>
+          <Link href="/planters/companion-demo" className="inline-block mt-1 text-sm text-garden-600 dark:text-garden-400 hover:underline font-medium">
+            See Companion Planting Demo &rarr;
+          </Link>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1086,5 +1091,6 @@ export default function BedsPage() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }
