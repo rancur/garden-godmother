@@ -528,10 +528,8 @@ PLANTS = [
         "companions": ["Cucumber", "Corn", "Squash", "Lettuce (shade)"],
         "antagonists": ["Potato", "Pole bean"],
     },
-    # =====================================================================
-    # NEW PLANTS — 55 additions for 80 total
-    # =====================================================================
-
+    # ==============================================================    # NEW PLANTS — 55 additions for 80 total
+    # ==============================================================
     # COOL SEASON BRASSICAS
     {
         "name": "Broccoli",
@@ -2182,10 +2180,8 @@ PLANTS = [
         "companions": ["Carrot", "Radish", "Turnip", "Cucumber", "Corn", "Bean", "Lettuce", "Spinach"],
         "antagonists": ["Onion", "Garlic", "Chive"],
     },
-    # =====================================================================
-    # BATCH 2 — New plants
-    # =====================================================================
-
+    # ==============================================================    # BATCH 2 — New plants
+    # ==============================================================
     # ── GLOBE MALLOW (AZ native wildflower) ──
     {
         "name": "Globe Mallow",
@@ -3627,10 +3623,8 @@ def init_db():
         # ── NEW BASIL varieties ──
         ("Basil", "Sweet Basil", "Classic Genovese-type sweet basil, the standard pesto basil.", 50, 65, "high", None, "Sweet, aromatic, classic Italian basil", "Medium (18-24 in)", "Green", "Bushy upright", 4, "The standard sweet basil synonymous with Genovese. Essential for pesto, caprese, Italian cooking. Pinch flower buds to extend leaf production. Needs consistent water in AZ.", "Italian"),
 
-        # =====================================================================
-        # BATCH 2 — New varieties
-        # =====================================================================
-
+        # ==============================================================        # BATCH 2 — New varieties
+        # ==============================================================
         # ── CARROT varieties ──
         ("Carrot", "Little Finger", "Tiny French gourmet baby carrot, perfect for containers and shallow desert soil.", 55, 65, "low", None, "Sweet, tender, delicate", "Small (3-4 in long, finger-sized)", "Orange", "Short Nantes type", 4, "Only 3-4 inches long — ideal for AZ clay/caliche soil where long varieties fail. Perfect for containers and GreenStalk pockets. Sweet enough to eat raw. Great for succession planting every 2 weeks Oct-Feb.", "French heirloom"),
         ("Carrot", "Carnival Rainbow", "Multicolored carrot mix with purple, yellow, white, orange, and red roots.", 65, 80, "low", None, "Sweet, each color has slight flavor variation", "Medium (6-8 in)", "Purple, yellow, white, orange, red mix", "Imperator/Nantes mix", 3, "Beautiful rainbow mix for the cool-season desert garden. Purple varieties have anthocyanins. Needs loose, amended soil — amend clay with sand and compost. Direct sow Oct-Jan for best results in AZ.", "Open-pollinated mix"),
@@ -3710,10 +3704,8 @@ def init_db():
         ("Boysenberry", "Brulee", "New Zealand-bred thornless boysenberry with firm, plump berries.", 365, 730, "moderate", None, "Sweet, aromatic, firm texture holds up well", "Large, plump, firm", "Dark purple-red", "Trailing, thornless canes", 3, "Developed by Plant & Food Research New Zealand. Thornless canes with firm berries that ship and store better than standard boysenberry. Good for fresh eating and jam. Same desert growing requirements apply — afternoon shade, acidic-to-neutral soil, heavy mulch. Less commonly available in US but worth seeking out for AZ container growing.", "Plant & Food Research NZ"),
         ("Boysenberry", "Mapua", "New Zealand cultivar with extra-bold flavor and large reddish berries.", 365, 730, "moderate", None, "Extra-bold, intensely flavored, richer than standard", "Large, reddish", "Reddish-purple", "Trailing, semi-thornless canes", 3, "NZ-bred cultivar prized for its extra-bold flavor profile. Large reddish berries with more complex taste than standard boysenberry. Semi-thornless. Hard to source in the US but occasionally available from specialty nurseries. Same AZ desert management: shade, mulch, consistent water, trellis.", "Plant & Food Research NZ"),
 
-        # =====================================================================
-        # BATCH 3 — Varieties for remaining plants (130 varieties for 83 plants)
-        # =====================================================================
-
+        # ==============================================================        # BATCH 3 — Varieties for remaining plants (130 varieties for 83 plants)
+        # ==============================================================
         # ── ARUGULA varieties ──
         ("Arugula", "Astro", "Fast-growing, mild arugula. Less peppery than wild types.", 21, 40, "low", None, "Mild, nutty, less peppery", "Baby to full (4-6 in leaves)", "Dark green", "Rosette", 4, "Quick crop for AZ cool season. Mild enough for salad mix. Bolts fast in heat — grow Oct-Feb only.", "Open-pollinated"),
         ("Arugula", "Sylvetta (Wild)", "Perennial wild arugula with intense peppery flavor.", 40, 60, "moderate", None, "Intensely peppery, nutty, bold", "Small (3-4 in leaves), deeply lobed", "Dark green", "Low rosette, perennial", 4, "Much more heat-tolerant than regular arugula. Perennial in AZ — goes dormant in summer, returns in fall. Intense flavor.", "Wild/heirloom"),
