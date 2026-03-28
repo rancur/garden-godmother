@@ -131,10 +131,22 @@ export function deleteBed(id: number) {
 }
 
 // Plantings
-export function createPlanting(data: { bed_id: number; plant_id: number; cell_x: number; cell_y: number; planted_date: string; variety_id?: number }) {
+export function createPlanting(data: { bed_id: number; plant_id: number; cell_x: number; cell_y: number; planted_date: string; variety_id?: number; cell_role?: string; companion_of?: number }) {
   return apiFetch('/api/plantings', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+// Companion planting
+export function getCompanionSuggestions(bedId: number, x: number, y: number) {
+  return apiFetch(`/api/beds/${bedId}/cell/${x}/${y}/companion-suggestions`);
+}
+
+export function addCompanion(bedId: number, data: { plant_id: number; cell_x: number; cell_y: number; companion_of: number; planted_date: string; variety_id?: number }) {
+  return apiFetch('/api/plantings', {
+    method: 'POST',
+    body: JSON.stringify({ ...data, bed_id: bedId, cell_role: 'companion' }),
   });
 }
 

@@ -1170,4 +1170,13 @@ def startup_run_migrations():
             db.commit()
         run_migration(db, 46, "amendment_instance_id", [], callback=_amendment_instance_id)
 
+        # ── Migration 047: companion planting — multiple plants per cell ──
+        def _companion_planting(db):
+            _migration_add_columns_if_missing(db, "plantings", {
+                "cell_role": "TEXT DEFAULT 'primary' CHECK(cell_role IN ('primary', 'companion'))",
+                "companion_of": "INTEGER REFERENCES plantings(id)",
+            })
+            db.commit()
+        run_migration(db, 47, "companion_planting", [], callback=_companion_planting)
+
         logger.info("Migration system: all migrations checked/applied")

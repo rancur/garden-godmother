@@ -108,6 +108,9 @@ export interface Planting {
   variety_id?: number | null;
   variety_name?: string | null;
   variety_desert_rating?: number | null;
+  cell_role?: string;
+  companion_of?: number | null;
+  companions?: Planting[];
 }
 
 /** Journal feed entry */
@@ -130,8 +133,16 @@ export interface JournalEntry {
 /** Normalize planting_id into id for grid cells. Call once after loading grid data. */
 export function normalizePlantingGrid(grid: (Planting | null)[][]): (Planting | null)[][] {
   return grid.map(row =>
-    row.map(cell =>
-      cell ? { ...cell, id: cell.planting_id ?? cell.id } : null
-    )
+    row.map(cell => {
+      if (!cell) return null;
+      const normalized: Planting = { ...cell, id: cell.planting_id ?? cell.id };
+      if (cell.companions && cell.companions.length > 0) {
+        normalized.companions = cell.companions.map(c => ({
+          ...c,
+          id: c.planting_id ?? c.id,
+        }));
+      }
+      return normalized;
+    })
   );
 }

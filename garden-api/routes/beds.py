@@ -476,11 +476,12 @@ def get_bed_grid(bed_id: int):
         photo_counts = {r["planting_id"]: r["cnt"] for r in photo_counts_rows}
 
         grid = [[None for _ in range(bed["width_cells"])] for _ in range(bed["height_cells"])]
+        companions_grid = [[[] for _ in range(bed["width_cells"])] for _ in range(bed["height_cells"])]
         for p in plantings:
             p = dict(p)
             x, y = p.get("cell_x"), p.get("cell_y")
             if x is not None and y is not None and 0 <= y < bed["height_cells"] and 0 <= x < bed["width_cells"]:
-                grid[y][x] = {
+                entry = {
                     "planting_id": p["id"],
                     "plant_id": p["plant_id"],
                     "plant_name": p["plant_name"],
@@ -491,10 +492,87 @@ def get_bed_grid(bed_id: int):
                     "variety_id": p.get("variety_id"),
                     "variety_name": p.get("variety_name"),
                     "variety_desert_rating": p.get("variety_desert_rating"),
+                    "cell_role": p.get("cell_role", "primary"),
+                    "companion_of": p.get("companion_of"),
                 }
+                role = p.get("cell_role", "primary")
+                if role == "companion":
+                    companions_grid[y][x].append(entry)
+                else:
+                    # Primary planting — keep backward compat (grid[y][x] = single planting or null)
+                    grid[y][x] = entry
+
+        # Attach companions list to each cell for the frontend
+        for y in range(bed["height_cells"]):
+            for x in range(bed["width_cells"]):
+                if grid[y][x] is not None:
+                    grid[y][x]["companions"] = companions_grid[y][x]
 
         return {"bed": bed, "grid": grid}
 
+
+@router.get("/api/beds/{bed_id}/cell/{x}/{y}/companion-suggestions")
+def get_companion_suggestions(bed_id: int, x: int, y: int, request: Request):
+    """Suggest good companions for the primary plant in this cell."""
+    require_user(request)
+    with get_db() as db:
+        # Find the primary planting in this cell
+        primary = db.execute(
+            "SELECT p.*, pl.name as plant_name FROM plantings p JOIN plants pl ON p.plant_id = pl.id "
+            "WHERE p.bed_id = ? AND p.cell_x = ? AND p.cell_y = ? AND p.cell_role = 'primary' "
+            "AND p.status NOT IN ('removed', 'failed')",
+            (bed_id, x, y)
+        ).fetchone()
+        if not primary:
+            return {"suggestions": [], "avoid": []}
+
+        primary = dict(primary)
+
+        # Get companion names from the companions table (uses companion_name text, not IDs)
+        companion_rows = db.execute(
+            "SELECT companion_name FROM companions WHERE plant_id = ? AND relationship = 'companion'",
+            (primary["plant_id"],)
+        ).fetchall()
+
+        # Look up plant IDs for these companion names
+        suggestions = []
+        for row in companion_rows:
+            name = row["companion_name"]
+            plant_row = db.execute(
+                "SELECT id, name, category FROM plants WHERE name = ?", (name,)
+            ).fetchone()
+            if plant_row:
+                suggestions.append({
+                    "plant_id": plant_row["id"],
+                    "plant_name": plant_row["name"],
+                    "category": plant_row["category"],
+                    "relationship": "companion",
+                    "benefit": f"Good companion for {primary['plant_name']}",
+                })
+
+        # Get antagonist names
+        antagonist_rows = db.execute(
+            "SELECT companion_name FROM companions WHERE plant_id = ? AND relationship = 'antagonist'",
+            (primary["plant_id"],)
+        ).fetchall()
+        avoid = []
+        for row in antagonist_rows:
+            name = row["companion_name"]
+            plant_row = db.execute(
+                "SELECT id, name, category FROM plants WHERE name = ?", (name,)
+            ).fetchone()
+            avoid.append({
+                "plant_id": plant_row["id"] if plant_row else None,
+                "plant_name": name,
+                "category": plant_row["category"] if plant_row else None,
+                "relationship": "antagonist",
+            })
+
+        return {
+            "primary": {"name": primary["plant_name"], "plant_id": primary["plant_id"], "planting_id": primary["id"]},
+            "suggestions": suggestions,
+            "avoid": avoid,
+        }
 
 
 @router.post("/api/plantings")
@@ -504,6 +582,19 @@ def create_planting(planting: PlantingCreate):
         if not plant:
             raise HTTPException(404, "Plant not found")
         plant = row_to_dict(plant)
+
+        cell_role = planting.cell_role or "primary"
+        companion_of = planting.companion_of
+
+        # Validate companion_of if provided
+        if companion_of:
+            primary = db.execute("SELECT * FROM plantings WHERE id = ?", (companion_of,)).fetchone()
+            if not primary:
+                raise HTTPException(404, "Primary planting not found")
+            primary = dict(primary)
+            if primary["bed_id"] != planting.bed_id or primary["cell_x"] != planting.cell_x or primary["cell_y"] != planting.cell_y:
+                raise HTTPException(400, "Companion must be in the same cell as the primary planting")
+            cell_role = "companion"
 
         # If variety specified, use its DTM for expected harvest if available
         dtm_min = plant["days_to_maturity_min"]
@@ -526,16 +617,18 @@ def create_planting(planting: PlantingCreate):
 
         cursor = db.execute("""
             INSERT INTO plantings (bed_id, plant_id, variety_id, cell_x, cell_y, planted_date,
-                                   expected_harvest_date, status, season, year, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?)
+                                   expected_harvest_date, status, season, year, notes,
+                                   cell_role, companion_of)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?)
         """, (
             planting.bed_id, planting.plant_id, planting.variety_id,
             planting.cell_x, planting.cell_y,
             planting.planted_date, expected_harvest,
             planting.season, planting.year or CURRENT_YEAR, planting.notes,
+            cell_role, companion_of,
         ))
         db.commit()
-        return {"id": cursor.lastrowid, "expected_harvest_date": expected_harvest}
+        return {"id": cursor.lastrowid, "expected_harvest_date": expected_harvest, "cell_role": cell_role}
 
 
 @router.patch("/api/plantings/{planting_id}")

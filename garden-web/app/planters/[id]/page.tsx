@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate } from '../../api';
+import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate, getCompanionSuggestions, addCompanion } from '../../api';
 import SoilAmendments from '../../components/SoilAmendments';
 import SensorReadings from '../../components/SensorReadings';
 import PlantTimeline from '../../components/PlantTimeline';
@@ -260,6 +260,12 @@ export default function BedDetailPage() {
   // Sidebar visibility state (hidden by default, shown on cell click)
   const [showSidebar, setShowSidebar] = useState(false);
 
+  // Companion planting state
+  const [companionSuggestions, setCompanionSuggestions] = useState<any>(null);
+  const [loadingCompanionSuggestions, setLoadingCompanionSuggestions] = useState(false);
+  const [showCompanionPanel, setShowCompanionPanel] = useState(false);
+  const [addingCompanionMode, setAddingCompanionMode] = useState(false);
+
   // Template state
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState<{ id: string; name: string; description: string; emoji: string; plants: string[]; min_cells: number }[]>([]);
@@ -312,14 +318,22 @@ export default function BedDetailPage() {
   const loadBed = useCallback(() => {
     getBedGrid(bedId)
       .then((bedData) => {
+        const grid = normalizePlantingGrid(bedData.grid);
         if (bedData.bed) {
-          setBed({ ...bedData.bed, grid: normalizePlantingGrid(bedData.grid) });
+          setBed({ ...bedData.bed, grid });
         } else {
-          setBed({ ...bedData, grid: normalizePlantingGrid(bedData.grid || []) });
+          setBed({ ...bedData, grid: grid || [] });
+        }
+        // Refresh selectedPlanting from updated grid (e.g. after adding companion)
+        if (selectedCell) {
+          const updated = grid[selectedCell.y]?.[selectedCell.x];
+          if (updated) {
+            setSelectedPlanting(updated);
+          }
         }
       })
       .catch(() => setError('Failed to load planter'));
-  }, [bedId]);
+  }, [bedId, selectedCell]);
 
 
   useEffect(() => {
@@ -898,6 +912,9 @@ export default function BedDetailPage() {
       setSelectedPlanting(cell);
       setSelectedCell({ x, y });
       setSelectedPlant(null);
+      setShowCompanionPanel(false);
+      setCompanionSuggestions(null);
+      setAddingCompanionMode(false);
       setShowSidebar(true);
       return;
     }
@@ -910,6 +927,65 @@ export default function BedDetailPage() {
       setSelectedCell({ x, y });
       setSelectedPlanting(null);
       setShowSidebar(true);
+    }
+  };
+
+  const handleShowCompanionSuggestions = async () => {
+    if (!selectedPlanting || !selectedCell) return;
+    setLoadingCompanionSuggestions(true);
+    setShowCompanionPanel(true);
+    try {
+      const data = await getCompanionSuggestions(bedId, selectedCell.x, selectedCell.y);
+      setCompanionSuggestions(data);
+    } catch {
+      toast('Failed to load companion suggestions', 'error');
+    } finally {
+      setLoadingCompanionSuggestions(false);
+    }
+  };
+
+  const handleAddCompanion = async (plantId: number, plantName: string) => {
+    if (!selectedPlanting || !selectedCell) return;
+    setPlacing(true);
+    try {
+      await addCompanion(bedId, {
+        plant_id: plantId,
+        cell_x: selectedCell.x,
+        cell_y: selectedCell.y,
+        companion_of: selectedPlanting.id,
+        planted_date: getGardenToday(),
+      });
+      loadBed();
+      setShowCompanionPanel(false);
+      setCompanionSuggestions(null);
+      setAddingCompanionMode(false);
+      toast(`${plantName} added as companion to ${selectedPlanting.plant_name}`);
+    } catch {
+      toast('Failed to add companion', 'error');
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const handleAddCompanionFromPicker = async (plant: Plant) => {
+    if (!selectedPlanting || !selectedCell) return;
+    setPlacing(true);
+    try {
+      await addCompanion(bedId, {
+        plant_id: plant.id,
+        cell_x: selectedCell.x,
+        cell_y: selectedCell.y,
+        companion_of: selectedPlanting.id,
+        planted_date: getGardenToday(),
+      });
+      loadBed();
+      setAddingCompanionMode(false);
+      setShowCompanionPanel(false);
+      toast(`${plant.name} added as companion to ${selectedPlanting.plant_name}`);
+    } catch {
+      toast('Failed to add companion', 'error');
+    } finally {
+      setPlacing(false);
     }
   };
 
@@ -1654,6 +1730,11 @@ export default function BedDetailPage() {
                                       ? (cell.variety_name.length > 5 ? cell.variety_name.slice(0, 5) + '..' : cell.variety_name)
                                       : (cell.plant_name.length > 5 ? cell.plant_name.slice(0, 5) + '..' : cell.plant_name)}
                                   </span>
+                                  {cell.companions && cell.companions.length > 0 && (
+                                    <span className="absolute bottom-0.5 right-0.5 text-[8px] font-bold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 rounded-full px-1 leading-tight">
+                                      +{cell.companions.length}
+                                    </span>
+                                  )}
                                 </>
                               ) : (
                                 <span className="text-earth-300 text-lg">+</span>
@@ -1762,6 +1843,19 @@ export default function BedDetailPage() {
                             </span>
                           )}
                           <span className="absolute top-0.5 right-0.5 text-[8px] font-bold text-earth-500 dark:text-earth-300 leading-none" aria-hidden="true">{statusAbbrev}</span>
+                          {cell.companions && cell.companions.length > 0 && (
+                            <>
+                              <span className="absolute bottom-0.5 left-0.5 text-[10px] leading-none">
+                                {getPlantIcon(cell.companions[0].plant_name, cell.companions[0].category)}
+                              </span>
+                              <span className="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 rounded-full px-1 leading-tight">
+                                +{cell.companions.length}
+                              </span>
+                            </>
+                          )}
+                          {cell.companions && cell.companions.length > 0 && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-500 rounded-b" />
+                          )}
                         </>
                       ) : topSuggestion ? (
                         <>
@@ -1787,14 +1881,14 @@ export default function BedDetailPage() {
           {/* Mobile overlay backdrop */}
           <div
             className="fixed inset-0 bg-black/30 z-40 lg:hidden"
-            onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); }}
+            onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
           />
           <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl p-4 lg:static lg:max-h-none lg:rounded-xl lg:shadow-sm lg:p-0 lg:bg-transparent lg:dark:bg-transparent lg:z-auto w-full lg:w-80 lg:flex-shrink-0 space-y-4">
 
           {/* Close button */}
           <div className="flex justify-end mb-1">
             <button
-              onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); }}
+              onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
               className="text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300 text-sm font-bold px-2 py-1 rounded hover:bg-earth-100 dark:hover:bg-gray-700 transition-colors"
               title="Close sidebar"
             >
@@ -1869,6 +1963,144 @@ export default function BedDetailPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+              {/* Companions Section */}
+              <div className="mt-4 pt-4 border-t border-earth-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-earth-500 dark:text-gray-400">
+                    Companions {selectedPlanting.companions && selectedPlanting.companions.length > 0 && `(${selectedPlanting.companions.length})`}
+                  </p>
+                  <button
+                    onClick={handleShowCompanionSuggestions}
+                    disabled={loadingCompanionSuggestions}
+                    className="text-xs px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-700 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors font-medium"
+                  >
+                    {loadingCompanionSuggestions ? 'Loading...' : '+ Add Companion'}
+                  </button>
+                </div>
+                {selectedPlanting.companions && selectedPlanting.companions.length > 0 && (
+                  <div className="space-y-1.5 mb-2">
+                    {selectedPlanting.companions.map((comp) => (
+                      <div key={comp.id} className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-2.5 py-1.5">
+                        <span className="text-sm">{getPlantIcon(comp.plant_name, comp.category)}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium text-earth-700 dark:text-gray-200">{comp.plant_name}</span>
+                          {comp.variety_name && (
+                            <span className="text-[10px] text-earth-400 dark:text-gray-500 ml-1">{comp.variety_name}</span>
+                          )}
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusLabels[comp.status]?.color || 'bg-gray-100 text-gray-600'}`}>
+                          {statusLabels[comp.status]?.label || comp.status}
+                        </span>
+                        <button
+                          onClick={async () => {
+                            if (await showConfirm({ title: 'Remove Companion', message: `Remove ${comp.plant_name} as companion?`, confirmText: 'Remove', destructive: true })) {
+                              try {
+                                await deletePlanting(comp.id);
+                                loadBed();
+                                toast(`${comp.plant_name} removed`);
+                              } catch { toast('Failed to remove companion', 'error'); }
+                            }
+                          }}
+                          className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 text-xs font-bold"
+                          title="Remove companion"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showCompanionPanel && (
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-earth-700 dark:text-gray-200">Companion Suggestions</span>
+                      <button
+                        onClick={() => { setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
+                        className="text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300 text-xs font-bold"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                    {loadingCompanionSuggestions ? (
+                      <p className="text-xs text-earth-400 text-center py-2">Loading suggestions...</p>
+                    ) : companionSuggestions ? (
+                      <>
+                        {companionSuggestions.suggestions?.length > 0 ? (
+                          <div className="space-y-1.5 mb-2">
+                            {companionSuggestions.suggestions.map((s: any) => (
+                              <div key={s.plant_id} className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg px-2.5 py-1.5 border border-green-200 dark:border-green-800">
+                                <span className="text-sm">{getPlantIcon(s.plant_name, s.category)}</span>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-medium text-earth-700 dark:text-gray-200">{s.plant_name}</span>
+                                  <p className="text-[10px] text-earth-400 dark:text-gray-500">{s.benefit}</p>
+                                </div>
+                                <button
+                                  onClick={() => handleAddCompanion(s.plant_id, s.plant_name)}
+                                  disabled={placing}
+                                  className="text-[10px] px-2 py-1 rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors font-medium shrink-0"
+                                >
+                                  Add
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-earth-400 text-center py-1">No specific companions found in database</p>
+                        )}
+                        {companionSuggestions.avoid?.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-red-200 dark:border-red-800">
+                            <p className="text-[10px] font-medium text-red-500 dark:text-red-400 mb-1">Avoid planting with:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {companionSuggestions.avoid.map((a: any, i: number) => (
+                                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
+                                  {a.plant_name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setAddingCompanionMode(true)}
+                          className="mt-2 w-full text-xs px-3 py-1.5 rounded-lg border border-dashed border-green-400 dark:border-green-600 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                        >
+                          Choose any plant as companion...
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+                {addingCompanionMode && (
+                  <div className="bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700 rounded-lg p-3 mb-2">
+                    <p className="text-xs font-medium text-earth-600 dark:text-gray-300 mb-2">Pick any plant as companion:</p>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search plants..."
+                      className="w-full px-2.5 py-1.5 border border-earth-300 dark:border-gray-600 rounded-lg text-xs focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none mb-2 bg-white dark:bg-gray-700 dark:text-gray-100"
+                    />
+                    <div className="max-h-48 overflow-y-auto scrollbar-thin space-y-0.5">
+                      {plants.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 20).map((plant) => (
+                        <button
+                          key={plant.id}
+                          onClick={() => handleAddCompanionFromPicker(plant)}
+                          disabled={placing}
+                          className="w-full text-left px-2.5 py-1.5 rounded text-xs hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors flex items-center gap-2"
+                        >
+                          <span>{getPlantIcon(plant.name, plant.category)}</span>
+                          <span className="font-medium text-earth-700 dark:text-gray-200">{plant.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setAddingCompanionMode(false)}
+                      className="mt-2 w-full text-xs text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
               {/* Photo Section */}
               <div className="mt-4 pt-4 border-t border-earth-200">
@@ -2083,7 +2315,7 @@ export default function BedDetailPage() {
                   Remove
                 </button>
                 <button
-                  onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); }}
+                  onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
                   className="text-xs text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300"
                 >
                   Close

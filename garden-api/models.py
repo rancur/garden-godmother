@@ -128,6 +128,8 @@ class PlantingCreate(BaseModel):
     season: Optional[str] = None
     year: Optional[int] = None
     notes: Optional[str] = None
+    cell_role: Optional[str] = "primary"
+    companion_of: Optional[int] = None
 
 class PlantingUpdate(BaseModel):
     status: Optional[str] = None
