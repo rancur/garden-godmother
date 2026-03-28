@@ -12560,6 +12560,7 @@ PLANT_KNOWLEDGE: Dict[str, dict] = {
         "rotation_group": "legume",
         "plant_before": ["heavy feeders", "leafy greens", "brassicas"],
         "plant_after": ["corn", "cucurbits", "alliums"],
+    },
     "cassava": {
         "scientific_name": "Manihot esculenta",
         "family": "Euphorbiaceae",
