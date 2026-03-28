@@ -572,20 +572,52 @@ def _analyze_forecast_weather(forecast: list[dict], current_temp: Optional[float
 
 @router.get("/api/sensors/weather")
 async def get_weather_sensors():
-    """Pull current Tempest weather data from HA."""
+    """Pull current Tempest weather data from HA, using entity mappings when available."""
     if not _ha_is_configured():
         raise HTTPException(503, "Home Assistant not configured — add token in Settings > Integrations")
 
-    all_ids = list(WEATHER_SENSORS.values()) + [WEATHER_ENTITY]
+    # Build effective sensor map: prefer DB entity mappings, fall back to hardcoded defaults
+    mappings = _get_entity_mappings()
+    # Map from entity-mapping roles to the keys used in WEATHER_SENSORS / response
+    _role_to_key = {
+        "outdoor_temperature": "temperature",
+        "outdoor_humidity": "humidity",
+        "wind_speed": "wind_speed",
+        "rain_accumulation": "rain_today",
+        "uv_index": "uv_index",
+        "solar_radiation": "solar_radiation",
+    }
+    effective_sensors = dict(WEATHER_SENSORS)  # start with hardcoded defaults
+    for role, key in _role_to_key.items():
+        mapped = mappings.get(role)
+        if mapped:
+            effective_sensors[key] = mapped
+
+    # Derive the weather entity from the temperature entity prefix
+    # e.g. sensor.curran_national_park_air_temperature -> weather.curran_national_park
+    weather_entity = WEATHER_ENTITY
+    temp_entity = mappings.get("outdoor_temperature", "")
+    if temp_entity:
+        # Strip "sensor." prefix and known suffixes to get the station name
+        station_name = temp_entity.replace("sensor.", "")
+        for suffix in ("_air_temperature", "_temperature"):
+            if station_name.endswith(suffix):
+                station_name = station_name[: -len(suffix)]
+                break
+        candidate = f"weather.{station_name}"
+        if candidate != "weather.":
+            weather_entity = candidate
+
+    all_ids = list(effective_sensors.values()) + [weather_entity]
     states = await _ha_get_states_bulk(all_ids)
 
-    weather_state = states.get(WEATHER_ENTITY)
+    weather_state = states.get(weather_entity)
     condition = None
     if weather_state:
         condition = weather_state.get("state")
 
     result = {"condition": condition}
-    for key, entity_id in WEATHER_SENSORS.items():
+    for key, entity_id in effective_sensors.items():
         st = states.get(entity_id)
         if st:
             result[key] = _safe_float(st.get("state"))
