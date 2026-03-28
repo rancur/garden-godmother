@@ -529,8 +529,7 @@ PLANTS = [
         "antagonists": ["Potato", "Pole bean"],
     },
     # ==============================================================    # NEW PLANTS — 55 additions for 80 total
-    # ==============================================================
-    # COOL SEASON BRASSICAS
+    # =======================================================    # COOL SEASON BRASSICAS
     {
         "name": "Broccoli",
         "category": "vegetable",
@@ -2181,8 +2180,7 @@ PLANTS = [
         "antagonists": ["Onion", "Garlic", "Chive"],
     },
     # ==============================================================    # BATCH 2 — New plants
-    # ==============================================================
-    # ── GLOBE MALLOW (AZ native wildflower) ──
+    # =======================================================    # ── GLOBE MALLOW (AZ native wildflower) ──
     {
         "name": "Globe Mallow",
         "category": "flower",
@@ -2852,6 +2850,104 @@ PLANTS = [
         "desert_harvest": ["04-15", "10-31"],
         "notes": "Leaf amaranth is one of the most heat- and drought-resilient greens for low desert summers.",
         "companions": ["Corn", "Pepper", "Eggplant", "Okra"],
+    {
+        "name": "Cassava",
+        "category": "vegetable",
+        "subcategory": "root",
+        "days_to_maturity_min": 240,
+        "days_to_maturity_max": 360,
+        "spacing_inches": 36,
+        "sun": "full",
+        "water": "low to moderate",
+        "heat_tolerance": "excellent",
+        "cold_tolerance": "very low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["03-15", "06-30"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-01", "03-31"],
+        "notes": "Tropical staple root crop (yuca/manioc) that thrives in extreme heat. Grow from cuttings after frost danger. Needs long warm season and good drainage. Drought tolerant once established but yields best with deep, occasional irrigation.",
+        "companions": ["Bean (Bush)", "Sesame", "Marigold", "Sweet Potato"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Sesame",
+        "category": "seed",
+        "subcategory": "oilseed",
+        "days_to_maturity_min": 95,
+        "days_to_maturity_max": 130,
+        "spacing_inches": 12,
+        "sun": "full",
+        "water": "low",
+        "heat_tolerance": "excellent",
+        "cold_tolerance": "very low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["03-15", "07-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["07-15", "11-15"],
+        "notes": "Ancient oilseed crop that loves heat and dry air. One of the most drought-tolerant annuals once established. Harvest when lower capsules dry and begin to split.",
+        "companions": ["Cowpea", "Basil", "Marigold", "Amaranth"],
+        "antagonists": ["None known"],
+    },
+    {
+        "name": "Fenugreek",
+        "category": "herb",
+        "subcategory": "leaf and seed",
+        "days_to_maturity_min": 30,
+        "days_to_maturity_max": 110,
+        "spacing_inches": 6,
+        "sun": "full to partial",
+        "water": "low to moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["10-01", "03-31"],
+        "desert_transplant": None,
+        "desert_harvest": ["11-01", "05-31"],
+        "notes": "Dual-purpose crop for leaves (methi) and seed spice. Fast cool-season green in low desert with spring shoulder-season potential. Light legume that can contribute nitrogen.",
+        "companions": ["Tomato", "Pepper", "Carrot", "Coriander"],
+        "antagonists": ["None known"],
+    },
+    {
+        "name": "Jerusalem Artichoke",
+        "category": "vegetable",
+        "subcategory": "tuber",
+        "days_to_maturity_min": 120,
+        "days_to_maturity_max": 150,
+        "spacing_inches": 24,
+        "sun": "full",
+        "water": "low to moderate",
+        "heat_tolerance": "high",
+        "cold_tolerance": "high",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": ["02-01", "04-15"],
+        "desert_transplant": None,
+        "desert_harvest": ["10-15", "02-28"],
+        "notes": "Perennial sunflower relative grown for crunchy, nutty tubers (sunchokes). Handles heat with deep irrigation and mulch. Plant where spread can be controlled.",
+        "companions": ["Corn", "Bean (Bush)", "Basil", "Marigold"],
+        "antagonists": ["Potato"],
+    },
+    {
+        "name": "Tamarind",
+        "category": "fruit",
+        "subcategory": "tree",
+        "days_to_maturity_min": 1095,
+        "days_to_maturity_max": 2555,
+        "spacing_inches": 240,
+        "sun": "full",
+        "water": "low to moderate",
+        "heat_tolerance": "excellent",
+        "cold_tolerance": "low",
+        "desert_seasons": ["warm", "monsoon"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["03-01", "05-15"],
+        "desert_harvest": ["12-01", "04-30"],
+        "notes": "Long-lived tropical legume tree producing tangy-sweet pods. Performs in hottest low-desert microclimates with frost protection while young. Deep roots and high heat tolerance once established.",
+        "companions": ["Pomegranate", "Guava", "Lemongrass", "Marigold"],
         "antagonists": ["None known"],
     },
 ]
@@ -3624,8 +3720,7 @@ def init_db():
         ("Basil", "Sweet Basil", "Classic Genovese-type sweet basil, the standard pesto basil.", 50, 65, "high", None, "Sweet, aromatic, classic Italian basil", "Medium (18-24 in)", "Green", "Bushy upright", 4, "The standard sweet basil synonymous with Genovese. Essential for pesto, caprese, Italian cooking. Pinch flower buds to extend leaf production. Needs consistent water in AZ.", "Italian"),
 
         # ==============================================================        # BATCH 2 — New varieties
-        # ==============================================================
-        # ── CARROT varieties ──
+        # =======================================================        # ── CARROT varieties ──
         ("Carrot", "Little Finger", "Tiny French gourmet baby carrot, perfect for containers and shallow desert soil.", 55, 65, "low", None, "Sweet, tender, delicate", "Small (3-4 in long, finger-sized)", "Orange", "Short Nantes type", 4, "Only 3-4 inches long — ideal for AZ clay/caliche soil where long varieties fail. Perfect for containers and GreenStalk pockets. Sweet enough to eat raw. Great for succession planting every 2 weeks Oct-Feb.", "French heirloom"),
         ("Carrot", "Carnival Rainbow", "Multicolored carrot mix with purple, yellow, white, orange, and red roots.", 65, 80, "low", None, "Sweet, each color has slight flavor variation", "Medium (6-8 in)", "Purple, yellow, white, orange, red mix", "Imperator/Nantes mix", 3, "Beautiful rainbow mix for the cool-season desert garden. Purple varieties have anthocyanins. Needs loose, amended soil — amend clay with sand and compost. Direct sow Oct-Jan for best results in AZ.", "Open-pollinated mix"),
 
@@ -3705,8 +3800,7 @@ def init_db():
         ("Boysenberry", "Mapua", "New Zealand cultivar with extra-bold flavor and large reddish berries.", 365, 730, "moderate", None, "Extra-bold, intensely flavored, richer than standard", "Large, reddish", "Reddish-purple", "Trailing, semi-thornless canes", 3, "NZ-bred cultivar prized for its extra-bold flavor profile. Large reddish berries with more complex taste than standard boysenberry. Semi-thornless. Hard to source in the US but occasionally available from specialty nurseries. Same AZ desert management: shade, mulch, consistent water, trellis.", "Plant & Food Research NZ"),
 
         # ==============================================================        # BATCH 3 — Varieties for remaining plants (130 varieties for 83 plants)
-        # ==============================================================
-        # ── ARUGULA varieties ──
+        # =======================================================        # ── ARUGULA varieties ──
         ("Arugula", "Astro", "Fast-growing, mild arugula. Less peppery than wild types.", 21, 40, "low", None, "Mild, nutty, less peppery", "Baby to full (4-6 in leaves)", "Dark green", "Rosette", 4, "Quick crop for AZ cool season. Mild enough for salad mix. Bolts fast in heat — grow Oct-Feb only.", "Open-pollinated"),
         ("Arugula", "Sylvetta (Wild)", "Perennial wild arugula with intense peppery flavor.", 40, 60, "moderate", None, "Intensely peppery, nutty, bold", "Small (3-4 in leaves), deeply lobed", "Dark green", "Low rosette, perennial", 4, "Much more heat-tolerant than regular arugula. Perennial in AZ — goes dormant in summer, returns in fall. Intense flavor.", "Wild/heirloom"),
 
@@ -4018,12 +4112,15 @@ def init_db():
 
         # ── NEW DESERT VARIETIES (research run 2026-03-25) ──
         ("Okra", "Jing Orange", "Chinese red-orange okra with excellent heat tolerance and tender pods.", 55, 65, "excellent", None, "Tender, mild, slightly nutty", "Medium pods (4-6 in)", "Orange-red", "Tall upright", 5, "Reliable in extreme summer heat. Harvest young for best tenderness.", "Open-pollinated"),
+        ("Pomegranate", "Parfianka", "Premium soft-seeded pomegranate with excellent juice quality and rich flavor.", 730, 1095, "excellent", None, "Sweet-tart, wine-like complexity", "Medium-large fruit", "Bright red", "Multi-trunk shrub/tree", 5, "Very well adapted to desert heat and alkaline soils, with consistent production under deep, infrequent irrigation.", "USDA introduction"),
+        ("Guava", "Mexican Cream", "Creamy white-fleshed guava with low seediness and high sweetness.", 730, 1095, "high", None, "Very sweet, creamy, aromatic", "Medium round fruit", "Yellow skin, white flesh", "Small tree", 5, "Reliable low-desert performer with frost protection while young and deep irrigation through summer.", "Heirloom"),
+        ("Cassava", "MCOL 1684", "Widely grown improved cassava line with strong vigor and root yield.", 270, 360, "excellent", None, "Mild, starchy, clean flavor", "Large storage roots", "Brown skin, white flesh", "Upright shrub", 5, "Long-season tropical root crop that thrives in desert heat when planted after frost; highly drought tolerant once established.", "CIAT selection"),
         ("Basil", "Everleaf Emerald Towers", "Slow-bolting Genovese-type basil bred for prolonged leaf harvest.", 60, 75, "high", "Downy mildew tolerance", "Sweet, classic pesto flavor", "Tall plants (24-30 in)", "Green", "Upright columnar", 4, "Handles desert heat better than standard sweet basil if watered consistently.", "Hybrid"),
         ("Tomatillo", "Grande Rio Verde", "Large-fruited green tomatillo selection with strong productivity.", 70, 85, "high", None, "Bright tart flavor", "Large husked fruit (2.5-3 in)", "Green", "Sprawling bush", 5, "Very productive in warm desert conditions; harvest when husks split.", "Open-pollinated"),
         ("Bean (Bush)", "California Blackeye #5", "University-selected black-eyed pea/cowpea for dry climates and heat.", 60, 75, "excellent", "Root-knot nematode tolerance", "Creamy, earthy classic cowpea", "Small shelling pods", "Cream with black eye", "Bush", 5, "Outstanding low-water producer for hot desert summers; reliable pod set in high heat.", "University release"),
         ("Bean (Bush)", "Pink Eye Purple Hull", "Classic Southern cowpea with purple hulls and high heat productivity.", 60, 80, "excellent", None, "Rich cowpea flavor, tender fresh shelled peas", "Medium pods", "Purple hull, cream seed", "Bush to semi-vining", 5, "Excellent monsoon-season legume for Zone 9b/10a, with strong drought resilience.", "Heirloom"),
         ("Pepper", "Chiltepin", "Wild Sonoran chile pepper with tiny fiery fruit and exceptional heat tolerance.", 95, 130, "excellent", None, "Bright, smoky-fruity heat", "Tiny round berries", "Green to red", "Shrubby perennial in frost-free microclimates", 5, "Native desert chile that thrives in reflected heat and low-water conditions once established.", "Native/wild"),
-        ("Tepary Bean", "White Tepary", "Traditional white-seeded tepary selected for arid Southwest conditions.", 60, 80, "excellent", None, "Nutty, rich, dense texture", "Small dry bean", "White", "Low bush", 5, "Among the most drought-adapted edible beans; dependable with minimal irrigation.", "Native heirloom"),
+        ("Tepary Bean", "White Tepary (Desert Selected)", "Traditional white-seeded tepary selected for arid Southwest conditions.", 60, 80, "excellent", None, "Nutty, rich, dense texture", "Small dry bean", "White", "Low bush", 5, "Among the most drought-adapted edible beans; dependable with minimal irrigation.", "Native heirloom"),
         ("Tepary Bean", "Brown Tepary", "Traditional brown tepary bean with robust flavor and heat resilience.", 60, 85, "excellent", None, "Deep earthy, nutty", "Small dry bean", "Brown", "Low bush", 5, "Excellent for dryland desert production; performs well under high-heat and low-water stress.", "Native heirloom"),
 
         # ── NEW DESERT VARIETIES (research run 2026-03-27) ──
