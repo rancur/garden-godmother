@@ -2850,6 +2850,7 @@ PLANTS = [
         "desert_harvest": ["04-15", "10-31"],
         "notes": "Leaf amaranth is one of the most heat- and drought-resilient greens for low desert summers.",
         "companions": ["Corn", "Pepper", "Eggplant", "Okra"],
+    },
     {
         "name": "Cassava",
         "category": "vegetable",
