@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.2.0 (2026-03-29)
+
+### Voice Journal & Photo-First Flow
+- **Voice notes** — record audio journal entries directly from the app
+- **Photo-first journal entry** — snap a photo as the starting point for any journal entry
+- **Quick input bar** — journal page redesigned with quick input bar at top for faster entries
+- **Journal page UX cleanup** — improved layout, streamlined entry flow
+
+### Smart Features
+- **Smart journal suggestions** — context-aware suggestion cards integrated into main journal page (moved from mockup to production)
+- **Companion planting (real implementation)** — multiple plants per cell with suggestion engine (#67), replacing the v2.1.0 demo
+- **Comprehensive audit logging** — full tracking across all user actions
+
+### Bug Fixes
+- **Variety picker fix** — check for varieties before placing, don't skip past variety selection
+- **Harvested/died plants removed from grid** — plants marked as harvested or died no longer appear in planter grid (#91)
+- **Dashboard weather fix** — dynamic entity IDs from HA mappings instead of hardcoded sensor IDs
+- **Weather entities lazy load** — load from DB at startup, not at import time
+- **Dashboard quick actions** — removed broken /photos link
+- **Expense creation fix** — removed CHECK constraint that blocked 'transplants' category
+- **Syntax fixes** — missing closing braces in plant_knowledge.py (cowpea) and init_db.py (Amaranth)
+
+### Expenses
+- **Expense line editing** — PATCH endpoint with inline edit UX
+- **Transplants category** — added to expense system
+
+### Plant Database
+- Plant research batch (2026-03-28): added 6 plants, 8 varieties (#78)
+- Plant research batch (2026-03-24 merge): added 6 plants, 6 varieties (#65)
+- Plant research batch: added 5 plants, 3 varieties
+- New plants include: Garlic Chives, Eucalyptus Baby Blue, Echinacea, Cayenne, Snack/Lunchbox pepper varieties
+- New varieties: additional Zinnia cultivars, Sweet Banana Pepper varieties, Pinto Bean
+
+### Dependencies
+- Bumped pip group (2 updates, #55)
+
 ## v2.1.0 (2026-03-27)
 
 ### Dashboard & UX
