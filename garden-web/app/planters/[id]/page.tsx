@@ -920,8 +920,9 @@ export default function BedDetailPage() {
     }
 
     if (selectedPlant) {
-      // Place immediately — no variety gate
-      await placeWithVariety(selectedPlant, x, y);
+      // Check for varieties first, place immediately if none
+      const hadVarieties = await checkVarietiesBeforePlacing(selectedPlant, x, y);
+      if (!hadVarieties) await placeWithVariety(selectedPlant, x, y);
     } else {
       // Select empty cell to prompt plant picker
       setSelectedCell({ x, y });
@@ -1568,9 +1569,12 @@ export default function BedDetailPage() {
                           <button
                             key={plant.id}
                             onClick={async () => {
-                              await placeWithVariety(plant, 0, 0);
-                              setSinglePlantPickerOpen(false);
-                              setSinglePlantSearch('');
+                              const hadVarieties = await checkVarietiesBeforePlacing(plant, 0, 0);
+                              if (!hadVarieties) {
+                                await placeWithVariety(plant, 0, 0);
+                                setSinglePlantPickerOpen(false);
+                                setSinglePlantSearch('');
+                              }
                             }}
                             disabled={placing || loadingVarieties}
                             className="w-full flex items-center gap-3 px-3 py-2.5 min-h-[48px] rounded-lg text-left hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
@@ -2420,9 +2424,10 @@ export default function BedDetailPage() {
                         setSelectedPlant(null);
                         return;
                       }
-                      // If an empty cell is already highlighted, place immediately then offer variety choice
+                      // If an empty cell is already highlighted, check for varieties first
                       if (selectedCell && !bed?.grid[selectedCell.y]?.[selectedCell.x]) {
-                        await placeWithVariety(plant, selectedCell.x, selectedCell.y);
+                        const hadVarieties = await checkVarietiesBeforePlacing(plant, selectedCell.x, selectedCell.y);
+                        if (!hadVarieties) await placeWithVariety(plant, selectedCell.x, selectedCell.y);
                       } else {
                         setSelectedPlant(plant);
                         setSelectedPlanting(null);
