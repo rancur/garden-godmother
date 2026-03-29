@@ -43,26 +43,62 @@ HA_TOKEN = os.environ.get("HA_TOKEN", "")
 _ha_cache: dict[str, tuple[float, dict]] = {}
 HA_CACHE_TTL = 60  # seconds
 
-# Tempest weather entity IDs — update these to match your Home Assistant entity names
-WEATHER_ENTITY = "weather.my_weather_station"
-WEATHER_SENSORS = {
-    "temperature": "sensor.my_weather_station_air_temperature",
-    "humidity": "sensor.my_weather_station_relative_humidity",
-    "wind_speed": "sensor.my_weather_station_wind_speed",
-    "wind_gust": "sensor.my_weather_station_wind_gust",
-    "wind_direction": "sensor.my_weather_station_wind_direction",
-    "uv_index": "sensor.my_weather_station_uv_index",
-    "solar_radiation": "sensor.my_weather_station_solar_radiation",
-    "rain_today": "sensor.my_weather_station_rain_accumulation_today",
-    "rain_yesterday": "sensor.my_weather_station_rain_accumulation_yesterday",
-    "rain_intensity": "sensor.my_weather_station_rain_intensity",
-    "pressure": "sensor.my_weather_station_station_pressure",
-    "pressure_trend": "sensor.my_weather_station_pressure_trend",
-    "dew_point": "sensor.my_weather_station_dew_point",
-    "feels_like": "sensor.my_weather_station_feels_like",
-    "brightness": "sensor.my_weather_station_brightness",
-    "lightning_count": "sensor.my_weather_station_lightning_strike_count",
-}
+# Weather entity IDs — loaded dynamically from HA entity mappings in app_config
+# Falls back to defaults if not configured
+def _get_weather_sensors():
+    """Get weather sensor entity IDs from HA entity mappings or defaults."""
+    with get_db() as db:
+        row = db.execute("SELECT value FROM app_config WHERE key = 'ha_entity_mappings'").fetchone()
+        if row:
+            try:
+                mappings = json.loads(row["value"])
+                # Derive the station prefix from the temperature entity
+                temp_entity = mappings.get("outdoor_temperature", "")
+                if temp_entity:
+                    # e.g., sensor.curran_national_park_air_temperature → curran_national_park
+                    prefix = temp_entity.replace("sensor.", "").replace("_air_temperature", "")
+                    return {
+                        "temperature": mappings.get("outdoor_temperature", f"sensor.{prefix}_air_temperature"),
+                        "humidity": mappings.get("outdoor_humidity", f"sensor.{prefix}_relative_humidity"),
+                        "wind_speed": mappings.get("wind_speed", f"sensor.{prefix}_wind_speed"),
+                        "wind_gust": f"sensor.{prefix}_wind_gust",
+                        "wind_direction": f"sensor.{prefix}_wind_direction",
+                        "uv_index": mappings.get("uv_index", f"sensor.{prefix}_uv_index"),
+                        "solar_radiation": mappings.get("solar_radiation", f"sensor.{prefix}_solar_radiation"),
+                        "rain_today": mappings.get("rain_accumulation", f"sensor.{prefix}_rain_accumulation_today"),
+                        "rain_yesterday": f"sensor.{prefix}_rain_accumulation_yesterday",
+                        "rain_intensity": f"sensor.{prefix}_rain_intensity",
+                        "pressure": f"sensor.{prefix}_station_pressure",
+                        "pressure_trend": f"sensor.{prefix}_pressure_trend",
+                        "dew_point": f"sensor.{prefix}_dew_point",
+                        "feels_like": f"sensor.{prefix}_feels_like",
+                        "brightness": f"sensor.{prefix}_brightness",
+                        "lightning_count": f"sensor.{prefix}_lightning_strike_count",
+                    }, f"weather.{prefix}"
+            except Exception:
+                pass
+    # Default fallback
+    return {
+        "temperature": "sensor.my_weather_station_air_temperature",
+        "humidity": "sensor.my_weather_station_relative_humidity",
+        "wind_speed": "sensor.my_weather_station_wind_speed",
+        "wind_gust": "sensor.my_weather_station_wind_gust",
+        "wind_direction": "sensor.my_weather_station_wind_direction",
+        "uv_index": "sensor.my_weather_station_uv_index",
+        "solar_radiation": "sensor.my_weather_station_solar_radiation",
+        "rain_today": "sensor.my_weather_station_rain_accumulation_today",
+        "rain_yesterday": "sensor.my_weather_station_rain_accumulation_yesterday",
+        "rain_intensity": "sensor.my_weather_station_rain_intensity",
+        "pressure": "sensor.my_weather_station_station_pressure",
+        "pressure_trend": "sensor.my_weather_station_pressure_trend",
+        "dew_point": "sensor.my_weather_station_dew_point",
+        "feels_like": "sensor.my_weather_station_feels_like",
+        "brightness": "sensor.my_weather_station_brightness",
+        "lightning_count": "sensor.my_weather_station_lightning_strike_count",
+    }, "weather.my_weather_station"
+
+# Legacy references — functions that use these should call _get_weather_sensors() instead
+WEATHER_SENSORS, WEATHER_ENTITY = _get_weather_sensors()
 
 # Rachio entities
 RACHIO_ENTITIES = {
