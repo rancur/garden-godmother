@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from db import get_db
-from auth import require_user
+from auth import require_user, audit_log
 
 router = APIRouter()
 
@@ -204,6 +204,14 @@ async def update_plant_instance(request: Request, instance_id: int):
 
         params.append(instance_id)
         db.execute(f"UPDATE plant_instances SET {', '.join(updates)} WHERE id = ?", params)
+        if user:
+            details = {'label': row['label']}
+            if 'status' in body:
+                details['old_status'] = row['status']
+                details['new_status'] = body['status']
+            audit_log(db, user['id'], 'update', 'instance', instance_id,
+                      details,
+                      request.client.host if request.client else None)
         db.commit()
 
         return {"ok": True, "id": instance_id}
@@ -249,6 +257,10 @@ async def transplant_instance(request: Request, instance_id: int):
                 (instance_id, body.get("tray_id"), body.get("tray_row"), body.get("tray_col"))
             )
 
+        if user:
+            audit_log(db, user['id'], 'transplant', 'instance', instance_id,
+                      {'location_type': location_type, 'bed_id': body.get('bed_id'), 'ground_plant_id': body.get('ground_plant_id'), 'tray_id': body.get('tray_id')},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "id": instance_id}
 

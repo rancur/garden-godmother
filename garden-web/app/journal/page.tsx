@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   getJournalFeed,
+  getJournalSuggestions,
   createJournalEntry,
   updateJournalEntry,
   deleteJournalEntry,
@@ -87,6 +88,33 @@ interface PhotoAnalysis {
   summary: string;
 }
 
+interface QuickAction {
+  label: string;
+  content: string;
+  entry_type: string;
+  mood?: string;
+  milestone_type?: string;
+}
+
+interface Suggestion {
+  id: string;
+  type: string;
+  title: string;
+  subtitle: string;
+  prompt: string;
+  quick_actions: QuickAction[];
+  plant_name?: string;
+  category?: string;
+  planting_id?: number;
+  ground_plant_id?: number;
+  plant_id?: number;
+  container_type?: string;
+  days_since_observed?: number;
+  status?: string;
+  age_days?: number;
+  priority: number;
+}
+
 // -- Constants --
 
 const ENTRY_TYPES = [
@@ -165,6 +193,12 @@ export default function JournalPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState('');
 
+  // Smart suggestions state
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
+  const [submittingActionId, setSubmittingActionId] = useState<string | null>(null);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
+
   // Add entry form state
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState('observation');
@@ -223,9 +257,59 @@ export default function JournalPage() {
       .finally(() => setLoading(false));
   }, [filterType]);
 
+  const loadSuggestions = useCallback(() => {
+    setSuggestionsLoading(true);
+    getJournalSuggestions()
+      .then((data: Suggestion[]) => {
+        setSuggestions(Array.isArray(data) ? data : []);
+        setDismissedSuggestions(new Set());
+      })
+      .catch(() => setSuggestions([]))
+      .finally(() => setSuggestionsLoading(false));
+  }, []);
+
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    loadSuggestions();
+  }, [loadSuggestions]);
+
+  const handleQuickAction = useCallback(async (suggestion: Suggestion, action: QuickAction) => {
+    const actionId = `${suggestion.id}-${action.label}`;
+    setSubmittingActionId(actionId);
+    try {
+      const data: Parameters<typeof createJournalEntry>[0] = {
+        entry_type: action.entry_type,
+        content: action.content,
+      };
+      if (action.mood) data.mood = action.mood;
+      if (action.milestone_type) data.milestone_type = action.milestone_type;
+      if (suggestion.plant_id) data.plant_id = suggestion.plant_id;
+      if (suggestion.container_type === 'ground' && suggestion.ground_plant_id) {
+        data.ground_plant_id = suggestion.ground_plant_id;
+      } else if (suggestion.planting_id) {
+        data.planting_id = suggestion.planting_id;
+      }
+
+      await createJournalEntry(data);
+      toast(`Logged: ${action.content.substring(0, 60)}${action.content.length > 60 ? '...' : ''}`, 'success');
+      // Dismiss the card
+      setDismissedSuggestions(prev => new Set(prev).add(suggestion.id));
+      // Refresh feed
+      loadFeed();
+    } catch {
+      toast('Failed to save entry', 'error');
+    } finally {
+      setSubmittingActionId(null);
+    }
+  }, [toast, loadFeed]);
+
+  const visibleSuggestions = useMemo(
+    () => suggestions.filter(s => !dismissedSuggestions.has(s.id)).slice(0, 5),
+    [suggestions, dismissedSuggestions]
+  );
 
   // Load typeahead options on mount
   useEffect(() => {
@@ -495,20 +579,12 @@ export default function JournalPage() {
   };
 
   return (
-    <PullToRefresh onRefresh={async () => { loadFeed(); }}>
+    <PullToRefresh onRefresh={async () => { loadFeed(); loadSuggestions(); }}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-earth-800 dark:text-gray-100">Garden Journal</h1>
         <div className="flex items-center gap-2">
-          <Link
-            href="/journal/smart"
-            className="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors text-sm font-medium flex items-center gap-1.5"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            Smart Journal
-            <span className="text-[10px] font-bold uppercase tracking-wide opacity-75">beta</span>
-          </Link>
           <a
             href={getExportUrl('journal')}
             download
@@ -564,6 +640,92 @@ export default function JournalPage() {
           </div>
         )}
       </div>
+
+      {/* Smart Suggestions */}
+      {suggestionsLoading ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <svg className="w-4 h-4 text-garden-600 dark:text-garden-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <span className="text-sm font-semibold text-earth-700 dark:text-gray-300">What needs attention</span>
+          </div>
+          {[1, 2, 3].map(i => (
+            <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm animate-pulse">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-earth-200 dark:bg-gray-700" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-earth-200 dark:bg-gray-700 rounded w-1/3" />
+                  <div className="h-3 bg-earth-100 dark:bg-gray-700 rounded w-1/4" />
+                  <div className="h-3 bg-earth-100 dark:bg-gray-700 rounded w-1/2 mt-2" />
+                  <div className="flex gap-2 mt-3">
+                    <div className="h-8 bg-earth-100 dark:bg-gray-700 rounded-lg w-20" />
+                    <div className="h-8 bg-earth-100 dark:bg-gray-700 rounded-lg w-20" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : visibleSuggestions.length > 0 ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <svg className="w-4 h-4 text-garden-600 dark:text-garden-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <span className="text-sm font-semibold text-earth-700 dark:text-gray-300">What needs attention</span>
+            <span className="text-xs text-earth-400 dark:text-gray-500">({visibleSuggestions.length})</span>
+          </div>
+          {visibleSuggestions.map((s) => {
+            const icon = s.category ? getPlantIcon(s.plant_name || '', s.category) : (s.type === 'heat-check' ? '\uD83C\uDF21\uFE0F' : s.type === 'cold-check' ? '\u2744\uFE0F' : '\uD83C\uDF3B');
+            return (
+              <div
+                key={s.id}
+                className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl flex-shrink-0 mt-0.5">{icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-earth-800 dark:text-gray-100 text-sm">{s.title}</span>
+                      {s.priority === 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">urgent</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-earth-500 dark:text-gray-400 mt-0.5">{s.subtitle}</p>
+                    <p className="text-sm text-earth-700 dark:text-gray-300 mt-2 italic">&ldquo;{s.prompt}&rdquo;</p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {s.quick_actions.map((action) => {
+                        const actionId = `${s.id}-${action.label}`;
+                        const isSubmitting = submittingActionId === actionId;
+                        return (
+                          <button
+                            key={action.label}
+                            onClick={() => handleQuickAction(s, action)}
+                            disabled={!!submittingActionId}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all active:scale-95 disabled:opacity-50 ${
+                              action.entry_type === 'problem'
+                                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800'
+                                : action.entry_type === 'milestone' || action.entry_type === 'harvest'
+                                ? 'bg-garden-50 dark:bg-garden-900/20 text-garden-700 dark:text-garden-300 hover:bg-garden-100 dark:hover:bg-garden-900/30 border border-garden-200 dark:border-garden-800'
+                                : 'bg-earth-100 dark:bg-gray-700 text-earth-700 dark:text-gray-300 hover:bg-earth-200 dark:hover:bg-gray-600 border border-earth-200 dark:border-gray-600'
+                            }`}
+                          >
+                            {isSubmitting ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
+                                Saving...
+                              </span>
+                            ) : (
+                              action.label
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {/* Error */}
       {error && (

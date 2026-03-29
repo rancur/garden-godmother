@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from db import get_db
-from auth import require_user
+from auth import require_user, audit_log
 
 router = APIRouter()
 
@@ -127,6 +127,11 @@ async def create_pest_incident(request: Request):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (plant_id, bed_id, ground_plant_id, pest_type, pest_name,
               severity, status, treatment, notes, detected_date))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'pest', cur.lastrowid,
+                      {'pest_name': pest_name, 'severity': severity, 'pest_type': pest_type},
+                      request.client.host if request.client else None)
         db.commit()
         row = db.execute("SELECT * FROM pest_incidents WHERE id = ?", (cur.lastrowid,)).fetchone()
         return dict(row)
@@ -162,6 +167,11 @@ async def update_pest_incident(incident_id: int, request: Request):
 
         params.append(incident_id)
         db.execute(f"UPDATE pest_incidents SET {', '.join(updates)} WHERE id = ?", params)
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'update', 'pest', incident_id,
+                      {'pest_name': existing['pest_name'], 'new_status': body.get('status')},
+                      request.client.host if request.client else None)
         db.commit()
         row = db.execute("SELECT * FROM pest_incidents WHERE id = ?", (incident_id,)).fetchone()
         return dict(row)
@@ -172,10 +182,15 @@ def delete_pest_incident(incident_id: int, request: Request):
     """Remove a pest incident."""
     require_user(request)
     with get_db() as db:
-        existing = db.execute("SELECT id FROM pest_incidents WHERE id = ?", (incident_id,)).fetchone()
+        existing = db.execute("SELECT * FROM pest_incidents WHERE id = ?", (incident_id,)).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Incident not found")
         db.execute("DELETE FROM pest_incidents WHERE id = ?", (incident_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'pest', incident_id,
+                      {'pest_name': existing['pest_name']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True}
 

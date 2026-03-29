@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from db import get_db, row_to_dict
-from auth import require_user
+from auth import require_user, audit_log
 from models import HarvestCreate
 from constants import create_undo_action
 
@@ -76,7 +76,7 @@ def _estimate_price_per_oz(plant_name: str) -> float:
 
 
 @router.post("/api/harvests")
-def create_harvest(harvest: HarvestCreate):
+def create_harvest(harvest: HarvestCreate, request: Request):
     with get_db() as db:
         # Verify planting exists
         planting = db.execute("SELECT id, plant_id, bed_id FROM plantings WHERE id = ?", (harvest.planting_id,)).fetchone()
@@ -105,6 +105,12 @@ def create_harvest(harvest: HarvestCreate):
             WHERE h.id = ?
         """, (harvest_id,)).fetchone()
         result = dict(row)
+
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'harvest', harvest_id,
+                      {'plant_name': result.get('plant_name'), 'weight_oz': harvest.weight_oz, 'quantity': harvest.quantity},
+                      request.client.host if request.client else None)
 
         # Auto-create journal entry if requested
         if harvest.create_journal_entry:
@@ -230,13 +236,18 @@ def harvest_summary():
 
 
 @router.delete("/api/harvests/{harvest_id}")
-def delete_harvest(harvest_id: int):
+def delete_harvest(harvest_id: int, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM harvests WHERE id = ?", (harvest_id,)).fetchone()
         if not existing:
             raise HTTPException(404, "Harvest not found")
         undo_id = create_undo_action(db, "delete_harvest", {"harvest": dict(existing)})
         db.execute("DELETE FROM harvests WHERE id = ?", (harvest_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'harvest', harvest_id,
+                      {'planting_id': existing['planting_id']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "undo_id": undo_id}
 

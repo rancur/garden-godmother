@@ -93,6 +93,7 @@ async def apply_template(bed_id: int, request: Request):
     if not template:
         raise HTTPException(404, "Template not found")
 
+    user = getattr(request.state, 'user', None)
     with get_db() as db:
         bed = db.execute("SELECT * FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
         if not bed:
@@ -127,6 +128,10 @@ async def apply_template(bed_id: int, request: Request):
                 if found:
                     break
 
+        if user:
+            audit_log(db, user['id'], 'apply_template', 'bed', bed_id,
+                      {'bed_name': bed['name'], 'template': template['name'], 'placed': placed},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "placed": placed, "template": template["name"]}
 
@@ -146,7 +151,7 @@ def list_areas(type: Optional[str] = Query(None)):
         return [dict(r) for r in rows]
 
 @router.post("/api/areas")
-def create_area(data: AreaCreate):
+def create_area(data: AreaCreate, request: Request):
     with get_db() as db:
         max_order = db.execute("SELECT COALESCE(MAX(sort_order), -1) FROM areas").fetchone()[0]
         cursor = db.execute(
@@ -154,12 +159,17 @@ def create_area(data: AreaCreate):
             (data.name, "all", max_order + 1, data.color, data.notes,
              data.default_irrigation_type or "manual", data.default_irrigation_zone_name, data.zone_id),
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'area', cursor.lastrowid,
+                      {'name': data.name},
+                      request.client.host if request.client else None)
         db.commit()
         row = db.execute("SELECT * FROM areas WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return dict(row) if row else {"id": cursor.lastrowid, "name": data.name}
 
 @router.patch("/api/areas/{area_id}")
-def update_area(area_id: int, data: AreaUpdate):
+def update_area(area_id: int, data: AreaUpdate, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM areas WHERE id = ?", (area_id,)).fetchone()
         if not existing:
@@ -178,12 +188,17 @@ def update_area(area_id: int, data: AreaUpdate):
         if updates:
             params.append(area_id)
             db.execute(f"UPDATE areas SET {', '.join(updates)} WHERE id = ?", params)
+            user = getattr(request.state, 'user', None)
+            if user:
+                audit_log(db, user['id'], 'update', 'area', area_id,
+                          {'name': existing['name']},
+                          request.client.host if request.client else None)
             db.commit()
         row = db.execute("SELECT * FROM areas WHERE id = ?", (area_id,)).fetchone()
         return dict(row) if row else {"ok": True}
 
 @router.delete("/api/areas/{area_id}")
-def delete_area(area_id: int):
+def delete_area(area_id: int, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM areas WHERE id = ?", (area_id,)).fetchone()
         if not existing:
@@ -192,6 +207,11 @@ def delete_area(area_id: int):
         db.execute("UPDATE seed_trays SET area_id = NULL WHERE area_id = ?", (area_id,))
         db.execute("UPDATE ground_plants SET area_id = NULL WHERE area_id = ?", (area_id,))
         db.execute("DELETE FROM areas WHERE id = ?", (area_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'area', area_id,
+                      {'name': existing['name']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True}
 
@@ -275,7 +295,7 @@ def list_beds():
 
 
 @router.post("/api/beds")
-def create_bed(bed: BedCreate):
+def create_bed(bed: BedCreate, request: Request):
     if bed.bed_type not in ("grid", "linear", "single", "freeform", "vertical"):
         raise HTTPException(400, "Invalid bed_type")
     # Enforce constraints for special bed types
@@ -296,6 +316,11 @@ def create_bed(bed: BedCreate):
             "INSERT INTO garden_beds (name, width_cells, height_cells, cell_size_inches, bed_type, description, location, notes, planter_type_id, depth_inches, physical_width_inches, physical_length_inches, soil_type, soil_mix, soil_product_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (bed.name, w, h, bed.cell_size_inches, bed.bed_type, bed.description, bed.location, bed.notes, planter_type_id, bed.depth_inches, bed.physical_width_inches, bed.physical_length_inches, bed.soil_type, bed.soil_mix, bed.soil_product_id),
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'bed', cursor.lastrowid,
+                      {'name': bed.name, 'bed_type': bed.bed_type},
+                      request.client.host if request.client else None)
         db.commit()
         return {"id": cursor.lastrowid, **bed.dict(), "width_cells": w, "height_cells": h}
 
@@ -315,7 +340,7 @@ def list_bed_positions():
 
 
 @router.patch("/api/beds/{bed_id}")
-def update_bed(bed_id: int, data: BedUpdate):
+def update_bed(bed_id: int, data: BedUpdate, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
         if not existing:
@@ -391,6 +416,11 @@ def update_bed(bed_id: int, data: BedUpdate):
         if updates:
             params.append(bed_id)
             db.execute(f"UPDATE garden_beds SET {', '.join(updates)} WHERE id = ?", params)
+            user = getattr(request.state, 'user', None)
+            if user:
+                audit_log(db, user['id'], 'update', 'bed', bed_id,
+                          {'name': existing['name']},
+                          request.client.host if request.client else None)
             db.commit()
         return {"ok": True, "removed_plantings": len(removed_plantings)}
 
@@ -398,7 +428,7 @@ def update_bed(bed_id: int, data: BedUpdate):
 
 
 @router.post("/api/beds/reorder")
-def reorder_beds(data: ReorderRequest):
+def reorder_beds(data: ReorderRequest, request: Request):
     with get_db() as db:
         for item in data.orders:
             if item.area_id is not None:
@@ -407,12 +437,17 @@ def reorder_beds(data: ReorderRequest):
             else:
                 db.execute("UPDATE garden_beds SET sort_order = ? WHERE id = ?",
                            (item.sort_order, item.id))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'reorder', 'bed', None,
+                      {'count': len(data.orders)},
+                      request.client.host if request.client else None)
         db.commit()
     return {"ok": True}
 
 
 @router.delete("/api/beds/{bed_id}")
-def delete_bed(bed_id: int):
+def delete_bed(bed_id: int, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
         if not existing:
@@ -426,6 +461,11 @@ def delete_bed(bed_id: int):
         db.execute("DELETE FROM plantings WHERE bed_id = ?", (bed_id,))
         db.execute("DELETE FROM bed_sections WHERE bed_id = ?", (bed_id,))
         db.execute("DELETE FROM garden_beds WHERE id = ?", (bed_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'bed', bed_id,
+                      {'name': existing['name']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "undo_id": undo_id}
 
@@ -576,7 +616,7 @@ def get_companion_suggestions(bed_id: int, x: int, y: int, request: Request):
 
 
 @router.post("/api/plantings")
-def create_planting(planting: PlantingCreate):
+def create_planting(planting: PlantingCreate, request: Request):
     with get_db() as db:
         plant = db.execute("SELECT * FROM plants WHERE id = ?", (planting.plant_id,)).fetchone()
         if not plant:
@@ -627,12 +667,17 @@ def create_planting(planting: PlantingCreate):
             planting.season, planting.year or CURRENT_YEAR, planting.notes,
             cell_role, companion_of,
         ))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'planting', cursor.lastrowid,
+                      {'plant_name': plant['name'], 'bed_id': planting.bed_id, 'cell': f'{planting.cell_x},{planting.cell_y}', 'cell_role': cell_role},
+                      request.client.host if request.client else None)
         db.commit()
         return {"id": cursor.lastrowid, "expected_harvest_date": expected_harvest, "cell_role": cell_role}
 
 
 @router.patch("/api/plantings/{planting_id}")
-def update_planting(planting_id: int, update: PlantingUpdate):
+def update_planting(planting_id: int, update: PlantingUpdate, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM plantings WHERE id = ?", (planting_id,)).fetchone()
         if not existing:
@@ -653,13 +698,22 @@ def update_planting(planting_id: int, update: PlantingUpdate):
         if updates:
             params.append(planting_id)
             db.execute(f"UPDATE plantings SET {', '.join(updates)} WHERE id = ?", params)
+            user = getattr(request.state, 'user', None)
+            if user:
+                details = {}
+                if update.status:
+                    details['old_status'] = existing['status']
+                    details['new_status'] = update.status
+                audit_log(db, user['id'], 'update', 'planting', planting_id,
+                          details,
+                          request.client.host if request.client else None)
             db.commit()
 
         return {"ok": True}
 
 
 @router.delete("/api/plantings/{planting_id}")
-def delete_planting(planting_id: int):
+def delete_planting(planting_id: int, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM plantings WHERE id = ?", (planting_id,)).fetchone()
         if not existing:
@@ -675,13 +729,19 @@ def delete_planting(planting_id: int):
         db.execute("DELETE FROM planting_photos WHERE planting_id = ?", (planting_id,))
         db.execute("DELETE FROM harvests WHERE planting_id = ?", (planting_id,))
         db.execute("DELETE FROM plantings WHERE id = ?", (planting_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            plant_row = db.execute("SELECT name FROM plants WHERE id = ?", (existing['plant_id'],)).fetchone()
+            audit_log(db, user['id'], 'delete', 'planting', planting_id,
+                      {'plant_name': plant_row['name'] if plant_row else None, 'bed_id': existing['bed_id']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "undo_id": undo_id}
 
 
 
 @router.post("/api/plantings/{planting_id}/move")
-def move_planting(planting_id: int, data: PlantingMove):
+def move_planting(planting_id: int, data: PlantingMove, request: Request):
     """Move a planting to a different bed/cell, preserving all history."""
     with get_db() as db:
         existing = db.execute("SELECT * FROM plantings WHERE id = ?", (planting_id,)).fetchone()
@@ -702,13 +762,18 @@ def move_planting(planting_id: int, data: PlantingMove):
             "INSERT INTO planting_notes (planting_id, note_type, content) VALUES (?, 'move', ?)",
             (planting_id, note),
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'move', 'planting', planting_id,
+                      {'from_bed': old_bed_name, 'to_bed': new_bed_name, 'to_cell': f'{data.target_cell_x},{data.target_cell_y}'},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "note": note}
 
 
 
 @router.post("/api/plantings/{planting_id}/move-to-ground")
-def move_planting_to_ground(planting_id: int, data: PlantingMoveToGround):
+def move_planting_to_ground(planting_id: int, data: PlantingMoveToGround, request: Request):
     """Convert a planting to a ground plant, preserving plant reference and planted date."""
     with get_db() as db:
         existing = db.execute("SELECT * FROM plantings WHERE id = ?", (planting_id,)).fetchone()
@@ -737,13 +802,18 @@ def move_planting_to_ground(planting_id: int, data: PlantingMoveToGround):
             "INSERT INTO planting_notes (planting_id, note_type, content) VALUES (?, 'move', ?)",
             (planting_id, f"Moved to ground as '{gp_name}'"),
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'move_to_ground', 'planting', planting_id,
+                      {'plant_name': plant_name, 'from_bed': old_bed_name, 'ground_plant_id': ground_plant_id},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "ground_plant_id": ground_plant_id}
 
 
 
 @router.post("/api/ground-plants/{gp_id}/move-to-planter")
-def move_ground_plant_to_planter(gp_id: int, data: GroundPlantMoveToPlanter):
+def move_ground_plant_to_planter(gp_id: int, data: GroundPlantMoveToPlanter, request: Request):
     """Convert a ground plant to a planting in a bed."""
     with get_db() as db:
         gp = db.execute("SELECT * FROM ground_plants WHERE id = ?", (gp_id,)).fetchone()
@@ -772,12 +842,17 @@ def move_ground_plant_to_planter(gp_id: int, data: GroundPlantMoveToPlanter):
             "UPDATE ground_plants SET status = 'removed', notes = COALESCE(notes || ' | ', '') || ? WHERE id = ?",
             (f"Moved to planter: {target_bed['name']} ({data.cell_x},{data.cell_y})", gp_id),
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'move_to_planter', 'ground_plant', gp_id,
+                      {'to_bed': target_bed['name'], 'to_cell': f'{data.cell_x},{data.cell_y}', 'planting_id': planting_id},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "planting_id": planting_id}
 
 
 @router.post("/api/trays/{tray_id}/cells/{cell_id}/move-to-planter")
-def move_tray_cell_to_planter(tray_id: int, cell_id: int, data: TrayCellMoveToPlanter):
+def move_tray_cell_to_planter(tray_id: int, cell_id: int, data: TrayCellMoveToPlanter, request: Request):
     """Move a tray seedling to a planter, preserving seed date as planted date."""
     with get_db() as db:
         cell = db.execute(
@@ -808,6 +883,12 @@ def move_tray_cell_to_planter(tray_id: int, cell_id: int, data: TrayCellMoveToPl
         ))
         planting_id = cursor.lastrowid
         db.execute("UPDATE seed_tray_cells SET status = 'transplanted' WHERE id = ?", (cell_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            plant_row = db.execute("SELECT name FROM plants WHERE id = ?", (cell['plant_id'],)).fetchone()
+            audit_log(db, user['id'], 'move_to_planter', 'tray_cell', cell_id,
+                      {'plant_name': plant_row['name'] if plant_row else None, 'to_bed': target_bed['name'], 'to_cell': f'{data.cell_x},{data.cell_y}'},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "planting_id": planting_id}
 
@@ -839,7 +920,7 @@ def list_plantings(bed_id: Optional[int] = None, status: Optional[str] = None, y
 
 
 @router.put("/api/beds/{bed_id}/position")
-def set_bed_position(bed_id: int, data: BedPositionUpdate):
+def set_bed_position(bed_id: int, data: BedPositionUpdate, request: Request):
     with get_db() as db:
         bed = db.execute("SELECT id FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
         if not bed:
@@ -877,21 +958,26 @@ def list_bed_sections(bed_id: int):
 
 
 @router.post("/api/beds/{bed_id}/sections")
-def create_bed_section(bed_id: int, data: BedSectionCreate):
+def create_bed_section(bed_id: int, data: BedSectionCreate, request: Request):
     with get_db() as db:
-        bed = db.execute("SELECT id FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
+        bed = db.execute("SELECT id, name FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
         if not bed:
             raise HTTPException(404, "Bed not found")
         cursor = db.execute(
             "INSERT INTO bed_sections (bed_id, name, start_cell, end_cell, irrigation_zone_name, notes) VALUES (?, ?, ?, ?, ?, ?)",
             (bed_id, data.name, data.start_cell, data.end_cell, data.irrigation_zone_name, data.notes),
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'bed_section', cursor.lastrowid,
+                      {'name': data.name, 'bed_name': bed['name']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"id": cursor.lastrowid, "bed_id": bed_id, **data.dict()}
 
 
 @router.patch("/api/beds/{bed_id}/sections/{section_id}")
-def update_bed_section(bed_id: int, section_id: int, data: BedSectionUpdate):
+def update_bed_section(bed_id: int, section_id: int, data: BedSectionUpdate, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM bed_sections WHERE id = ? AND bed_id = ?", (section_id, bed_id)).fetchone()
         if not existing:
@@ -906,17 +992,27 @@ def update_bed_section(bed_id: int, section_id: int, data: BedSectionUpdate):
         if updates:
             params.append(section_id)
             db.execute(f"UPDATE bed_sections SET {', '.join(updates)} WHERE id = ?", params)
+            user = getattr(request.state, 'user', None)
+            if user:
+                audit_log(db, user['id'], 'update', 'bed_section', section_id,
+                          {'name': existing['name']},
+                          request.client.host if request.client else None)
             db.commit()
         return {"ok": True}
 
 
 @router.delete("/api/beds/{bed_id}/sections/{section_id}")
-def delete_bed_section(bed_id: int, section_id: int):
+def delete_bed_section(bed_id: int, section_id: int, request: Request):
     with get_db() as db:
         existing = db.execute("SELECT * FROM bed_sections WHERE id = ? AND bed_id = ?", (section_id, bed_id)).fetchone()
         if not existing:
             raise HTTPException(404, "Section not found")
         db.execute("DELETE FROM bed_sections WHERE id = ?", (section_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'bed_section', section_id,
+                      {'name': existing['name']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True}
 

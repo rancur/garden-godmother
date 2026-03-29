@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, UploadFile, File, 
 from fastapi.responses import FileResponse, Response
 
 from db import get_db
-from auth import require_user, require_admin
+from auth import require_user, require_admin, audit_log
 from constants import PHOTOS_DIR, ALLOWED_PHOTO_TYPES, MAX_PHOTO_SIZE, PHOTO_EXTENSIONS, _get_configured_zone
 from services.integrations import get_openai_key
 from services.notifications import send_notification
@@ -28,6 +28,7 @@ PHOTO_EXTENSIONS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".w
 
 @router.post("/api/plantings/{planting_id}/photos")
 async def upload_planting_photo(
+    request: Request,
     planting_id: int,
     file: UploadFile = File(...),
     caption: str = Form(None),

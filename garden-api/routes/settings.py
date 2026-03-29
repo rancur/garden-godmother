@@ -67,6 +67,11 @@ def update_integration(integration: str, body: IntegrationUpdate, request: Reque
             ON CONFLICT(integration) DO UPDATE SET config = ?, enabled = ?, updated_at = datetime('now')
         """, (integration, json.dumps(body.config), 1 if body.enabled else 0,
               json.dumps(body.config), 1 if body.enabled else 0))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'update', 'integration', None,
+                      {'integration_type': integration, 'enabled': body.enabled},
+                      request.client.host if request.client else None)
         db.commit()
     return {"ok": True}
 
@@ -76,6 +81,11 @@ def delete_integration(integration: str, request: Request):
     require_admin(request)
     with get_db() as db:
         db.execute("DELETE FROM integration_settings WHERE integration = ?", (integration,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'integration', None,
+                      {'integration_type': integration},
+                      request.client.host if request.client else None)
         db.commit()
     return {"ok": True}
 
@@ -187,6 +197,11 @@ def mark_setup_complete(request: Request):
     require_admin(request)
     with get_db() as db:
         db.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES ('setup_complete', '1')")
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'update', 'setting', None,
+                      {'key': 'setup_complete', 'value': '1'},
+                      request.client.host if request.client else None)
         db.commit()
     return {"ok": True}
 
@@ -219,6 +234,11 @@ def update_frost_date_settings(request: Request, data: FrostDateUpdate):
     with get_db() as db:
         db.execute("UPDATE property SET last_frost_spring = ?, first_frost_fall = ? WHERE id = 1",
                    (data.last_frost, data.first_frost))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'update', 'setting', None,
+                      {'key': 'frost_dates', 'last_frost': data.last_frost, 'first_frost': data.first_frost},
+                      request.client.host if request.client else None)
         db.commit()
     return {"last_frost": data.last_frost, "first_frost": data.first_frost}
 
@@ -231,6 +251,11 @@ def update_usda_zone(request: Request, data: UsdaZoneUpdate):
     require_admin(request)
     with get_db() as db:
         db.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES ('usda_zone', ?)", (data.zone,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'update', 'setting', None,
+                      {'key': 'usda_zone', 'value': data.zone},
+                      request.client.host if request.client else None)
         db.commit()
     return {"zone": data.zone}
 

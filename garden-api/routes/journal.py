@@ -18,6 +18,178 @@ from services.integrations import get_openai_key
 
 router = APIRouter()
 
+# ──────────────── JOURNAL SUGGESTIONS ────────────────
+
+
+@router.get("/api/journal/suggestions")
+def get_journal_suggestions(request: Request):
+    """Generate context-aware journal suggestions based on garden state."""
+    require_user(request)
+    with get_db() as db:
+        suggestions = []
+
+        # 1. Plants not observed recently
+        # Get all active plantings with their last observation date
+        plantings = db.execute("""
+            SELECT pl.id, pl.plant_id, pl.status, pl.planted_date,
+                   p.name as plant_name, p.category,
+                   gb.name as bed_name, gb.id as bed_id,
+                   v.name as variety_name,
+                   (SELECT MAX(je.created_at) FROM journal_entries je WHERE je.planting_id = pl.id) as last_observed
+            FROM plantings pl
+            JOIN plants p ON pl.plant_id = p.id
+            LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
+            LEFT JOIN varieties v ON pl.variety_id = v.id
+            WHERE pl.status NOT IN ('planned', 'removed', 'failed', 'harvested')
+            ORDER BY last_observed ASC NULLS FIRST
+        """).fetchall()
+
+        now = datetime.utcnow()
+
+        for row in plantings:
+            d = dict(row)
+            plant_name = d["plant_name"]
+            variety = d.get("variety_name")
+            display_name = f"{plant_name} ({variety})" if variety else plant_name
+            bed_name = d.get("bed_name") or "garden"
+            status = d["status"]
+            planted_date = d.get("planted_date")
+            age_days = (now.date() - date.fromisoformat(planted_date)).days if planted_date else 0
+
+            # Calculate days since last observation
+            last_obs = d.get("last_observed")
+            if last_obs:
+                try:
+                    last_obs_dt = datetime.fromisoformat(last_obs.replace("Z", "+00:00").replace("+00:00", ""))
+                    days_since = (now - last_obs_dt).days
+                except (ValueError, TypeError):
+                    days_since = 999
+            else:
+                days_since = 999
+
+            if days_since < 3:
+                continue
+
+            suggestion = {
+                "id": f"checkin-planting:{d['id']}",
+                "type": "check-in",
+                "title": display_name,
+                "subtitle": f"Day {age_days}, {bed_name}",
+                "plant_name": plant_name,
+                "category": d.get("category"),
+                "planting_id": d["id"],
+                "plant_id": d["plant_id"],
+                "container_type": "planting",
+                "days_since_observed": days_since,
+                "status": status,
+                "age_days": age_days,
+                "priority": 0 if days_since > 7 else 1,
+            }
+
+            # Tailor prompt and quick actions based on growth stage
+            if status in ("seeded", "planted"):
+                suggestion["prompt"] = "Any sprouts yet?"
+                suggestion["quick_actions"] = [
+                    {"label": "Sprouted!", "content": f"{plant_name} has sprouted on day {age_days}.", "entry_type": "milestone", "milestone_type": "sprouted"},
+                    {"label": "Not yet", "content": f"Checked {plant_name} on day {age_days} - no sprouts yet.", "entry_type": "observation"},
+                    {"label": "Problem spotted", "content": f"Issue noticed with {plant_name} on day {age_days}.", "entry_type": "problem"},
+                ]
+            elif status == "sprouted":
+                suggestion["prompt"] = "How is it growing?"
+                suggestion["quick_actions"] = [
+                    {"label": "Growing well", "content": f"{plant_name} growing well on day {age_days}.", "entry_type": "observation", "mood": "good"},
+                    {"label": "Problem spotted", "content": f"Issue noticed with {plant_name} on day {age_days}.", "entry_type": "problem"},
+                ]
+            elif status == "growing":
+                suggestion["prompt"] = "Flowering yet?"
+                suggestion["quick_actions"] = [
+                    {"label": "Yes, flowering!", "content": f"{plant_name} started flowering on day {age_days}!", "entry_type": "milestone", "milestone_type": "flowering", "mood": "great"},
+                    {"label": "Not yet", "content": f"Checked {plant_name} on day {age_days} - still growing, no flowers yet.", "entry_type": "observation"},
+                    {"label": "Problem spotted", "content": f"Issue noticed with {plant_name} on day {age_days}.", "entry_type": "problem"},
+                ]
+            elif status == "flowering":
+                suggestion["prompt"] = "Setting fruit yet?"
+                suggestion["quick_actions"] = [
+                    {"label": "Fruiting!", "content": f"{plant_name} is setting fruit on day {age_days}!", "entry_type": "milestone", "milestone_type": "fruiting", "mood": "great"},
+                    {"label": "Still flowering", "content": f"{plant_name} still flowering on day {age_days}, looking good.", "entry_type": "observation", "mood": "good"},
+                    {"label": "Problem spotted", "content": f"Issue noticed with {plant_name} on day {age_days}.", "entry_type": "problem"},
+                ]
+            elif status == "fruiting":
+                suggestion["type"] = "harvest-check"
+                suggestion["prompt"] = "Ready to harvest?"
+                suggestion["priority"] = 1
+                suggestion["quick_actions"] = [
+                    {"label": "Harvested today", "content": f"Harvested {plant_name} on day {age_days}!", "entry_type": "harvest", "mood": "great"},
+                    {"label": "Not ready", "content": f"Checked {plant_name} on day {age_days} - fruit not ready yet.", "entry_type": "observation"},
+                    {"label": "Problem spotted", "content": f"Issue noticed with {plant_name} fruit on day {age_days}.", "entry_type": "problem"},
+                ]
+            else:
+                suggestion["prompt"] = f"Haven't checked in {days_since} days" if days_since > 7 else "How does it look?"
+                suggestion["quick_actions"] = [
+                    {"label": "All good", "content": f"{plant_name} looking healthy on day {age_days}.", "entry_type": "observation", "mood": "good"},
+                    {"label": "Spotted an issue", "content": f"Issue noticed with {plant_name} on day {age_days}.", "entry_type": "problem"},
+                ]
+
+            suggestions.append(suggestion)
+
+        # Ground plants not observed recently
+        ground_plants = db.execute("""
+            SELECT gp.id, gp.plant_id, gp.name as gp_name, gp.status, gp.planted_date,
+                   p.name as plant_name, p.category,
+                   a.name as area_name,
+                   (SELECT MAX(je.created_at) FROM journal_entries je WHERE je.ground_plant_id = gp.id) as last_observed
+            FROM ground_plants gp
+            JOIN plants p ON gp.plant_id = p.id
+            LEFT JOIN areas a ON gp.area_id = a.id
+            WHERE gp.status NOT IN ('removed', 'died', 'planned')
+        """).fetchall()
+
+        for row in ground_plants:
+            d = dict(row)
+            plant_name = d.get("gp_name") or d["plant_name"]
+            area = d.get("area_name") or "garden"
+            planted_date = d.get("planted_date")
+            age_days = (now.date() - date.fromisoformat(planted_date)).days if planted_date else 0
+
+            last_obs = d.get("last_observed")
+            if last_obs:
+                try:
+                    last_obs_dt = datetime.fromisoformat(last_obs.replace("Z", "+00:00").replace("+00:00", ""))
+                    days_since = (now - last_obs_dt).days
+                except (ValueError, TypeError):
+                    days_since = 999
+            else:
+                days_since = 999
+
+            if days_since < 3:
+                continue
+
+            suggestions.append({
+                "id": f"checkin-ground:{d['id']}",
+                "type": "check-in",
+                "title": plant_name,
+                "subtitle": f"Day {age_days}, {area}",
+                "plant_name": plant_name,
+                "category": d.get("category"),
+                "ground_plant_id": d["id"],
+                "plant_id": d["plant_id"],
+                "container_type": "ground",
+                "days_since_observed": days_since,
+                "status": d.get("status"),
+                "age_days": age_days,
+                "priority": 0 if days_since > 7 else 3,
+                "prompt": f"Haven't checked in {days_since} days" if days_since > 7 else "How does it look?",
+                "quick_actions": [
+                    {"label": "All good", "content": f"{plant_name} looking healthy.", "entry_type": "observation", "mood": "good"},
+                    {"label": "Spotted an issue", "content": f"Issue noticed with {plant_name}.", "entry_type": "problem"},
+                ],
+            })
+
+        # Sort by priority (lower = more important), then by days_since_observed desc
+        suggestions.sort(key=lambda s: (s.get("priority", 5), -s.get("days_since_observed", 0)))
+        return suggestions[:10]
+
+
 # ──────────────── JOURNAL ────────────────
 
 
@@ -110,6 +282,11 @@ async def quick_add_journal(request: Request):
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (title, content, entry_type, planting_id, ground_plant_id, severity, milestone_type)
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'journal', cursor.lastrowid,
+                      {'title': title, 'entry_type': entry_type},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "id": cursor.lastrowid, "title": title}
 
@@ -227,7 +404,7 @@ def list_journal_entries(
 
 
 @router.post("/api/journal")
-def create_journal_entry(entry: JournalEntryCreate):
+def create_journal_entry(entry: JournalEntryCreate, request: Request):
     """Create a new journal entry."""
     valid_types = ('note', 'observation', 'milestone', 'problem', 'harvest', 'weather', 'photo')
     if entry.entry_type not in valid_types:
@@ -252,13 +429,18 @@ def create_journal_entry(entry: JournalEntryCreate):
              entry.bed_id, entry.tray_id, entry.tray_cell_id, entry.ground_plant_id, entry.photo_id,
              entry.mood, tags_json, entry.severity, entry.milestone_type),
         )
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'create', 'journal', cursor.lastrowid,
+                      {'title': entry.title, 'entry_type': entry.entry_type},
+                      request.client.host if request.client else None)
         db.commit()
         row = db.execute("SELECT * FROM journal_entries WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return _enrich_journal_entry(db, dict(row))
 
 
 @router.patch("/api/journal/{entry_id}")
-def update_journal_entry(entry_id: int, data: JournalEntryUpdate):
+def update_journal_entry(entry_id: int, data: JournalEntryUpdate, request: Request):
     """Update an existing journal entry."""
     with get_db() as db:
         existing = db.execute("SELECT * FROM journal_entries WHERE id = ?", (entry_id,)).fetchone()
@@ -327,6 +509,11 @@ def update_journal_entry(entry_id: int, data: JournalEntryUpdate):
 
         params.append(entry_id)
         db.execute(f"UPDATE journal_entries SET {', '.join(fields)} WHERE id = ?", params)
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'update', 'journal', entry_id,
+                      {'title': existing['title']},
+                      request.client.host if request.client else None)
         db.commit()
 
         row = db.execute("SELECT * FROM journal_entries WHERE id = ?", (entry_id,)).fetchone()
@@ -334,7 +521,7 @@ def update_journal_entry(entry_id: int, data: JournalEntryUpdate):
 
 
 @router.delete("/api/journal/{entry_id}")
-def delete_journal_entry(entry_id: int):
+def delete_journal_entry(entry_id: int, request: Request):
     """Delete a journal entry."""
     with get_db() as db:
         existing = db.execute("SELECT * FROM journal_entries WHERE id = ?", (entry_id,)).fetchone()
@@ -347,6 +534,11 @@ def delete_journal_entry(entry_id: int):
         })
         db.execute("DELETE FROM journal_entry_photos WHERE journal_entry_id = ?", (entry_id,))
         db.execute("DELETE FROM journal_entries WHERE id = ?", (entry_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'journal', entry_id,
+                      {'title': existing['title'], 'entry_type': existing['entry_type']},
+                      request.client.host if request.client else None)
         db.commit()
         return {"ok": True, "undo_id": undo_id}
 
@@ -445,7 +637,7 @@ def serve_journal_photo(photo_id: int):
 
 
 @router.delete("/api/journal/photos/{photo_id}")
-def delete_journal_photo(photo_id: int):
+def delete_journal_photo(photo_id: int, request: Request):
     """Delete a journal photo."""
     with get_db() as db:
         row = db.execute("SELECT * FROM journal_entry_photos WHERE id = ?", (photo_id,)).fetchone()
@@ -455,6 +647,11 @@ def delete_journal_photo(photo_id: int):
         if photo_path.exists():
             photo_path.unlink()
         db.execute("DELETE FROM journal_entry_photos WHERE id = ?", (photo_id,))
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'delete', 'journal_photo', photo_id,
+                      {'filename': row['filename'], 'journal_entry_id': row['journal_entry_id']},
+                      request.client.host if request.client else None)
         db.commit()
     return {"ok": True}
 

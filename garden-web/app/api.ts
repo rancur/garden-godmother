@@ -952,6 +952,11 @@ export function getSoilRecommendations(plantId: number, soilType: string = 'nati
   return apiFetch(`/api/soil/recommendations?plant_id=${plantId}&soil_type=${encodeURIComponent(soilType)}`);
 }
 
+// Journal Suggestions
+export function getJournalSuggestions() {
+  return apiFetch('/api/journal/suggestions');
+}
+
 // Journal
 export function getJournalFeed(params?: { limit?: number; entry_type?: string }) {
   const qs = new URLSearchParams();
