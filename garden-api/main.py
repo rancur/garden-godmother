@@ -42,6 +42,13 @@ def startup_migrations():
 
 
 @app.on_event("startup")
+def startup_weather_entities():
+    """Load weather entity IDs from HA entity mappings."""
+    from routes.sensors import init_weather_entities
+    init_weather_entities()
+
+
+@app.on_event("startup")
 async def startup_session_cleanup():
     """Background task to clean up expired sessions hourly."""
     async def cleanup_loop():

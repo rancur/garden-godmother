@@ -97,8 +97,36 @@ def _get_weather_sensors():
         "lightning_count": "sensor.my_weather_station_lightning_strike_count",
     }, "weather.my_weather_station"
 
-# Legacy references — functions that use these should call _get_weather_sensors() instead
-WEATHER_SENSORS, WEATHER_ENTITY = _get_weather_sensors()
+# Initialize with defaults — updated at startup from DB
+WEATHER_SENSORS = {
+    "temperature": "sensor.my_weather_station_air_temperature",
+    "humidity": "sensor.my_weather_station_relative_humidity",
+    "wind_speed": "sensor.my_weather_station_wind_speed",
+    "wind_gust": "sensor.my_weather_station_wind_gust",
+    "wind_direction": "sensor.my_weather_station_wind_direction",
+    "uv_index": "sensor.my_weather_station_uv_index",
+    "solar_radiation": "sensor.my_weather_station_solar_radiation",
+    "rain_today": "sensor.my_weather_station_rain_accumulation_today",
+    "rain_yesterday": "sensor.my_weather_station_rain_accumulation_yesterday",
+    "rain_intensity": "sensor.my_weather_station_rain_intensity",
+    "pressure": "sensor.my_weather_station_station_pressure",
+    "pressure_trend": "sensor.my_weather_station_pressure_trend",
+    "dew_point": "sensor.my_weather_station_dew_point",
+    "feels_like": "sensor.my_weather_station_feels_like",
+    "brightness": "sensor.my_weather_station_brightness",
+    "lightning_count": "sensor.my_weather_station_lightning_strike_count",
+}
+WEATHER_ENTITY = "weather.my_weather_station"
+
+def init_weather_entities():
+    """Called at startup to load entity mappings from DB. Updates module-level constants."""
+    global WEATHER_SENSORS, WEATHER_ENTITY
+    try:
+        sensors, entity = _get_weather_sensors()
+        WEATHER_SENSORS.update(sensors)
+        WEATHER_ENTITY = entity
+    except Exception:
+        pass
 
 # Rachio entities
 RACHIO_ENTITIES = {
