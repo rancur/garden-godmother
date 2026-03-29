@@ -406,9 +406,6 @@ export default function Dashboard() {
           <Link href="/pests" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-700 hover:border-garden-400 dark:hover:border-garden-500 hover:shadow-sm transition-all text-sm font-medium text-earth-700 dark:text-gray-200">
             <span>{'\uD83D\uDC1B'}</span> Pest
           </Link>
-          <Link href="/photos" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-700 hover:border-garden-400 dark:hover:border-garden-500 hover:shadow-sm transition-all text-sm font-medium text-earth-700 dark:text-gray-200">
-            <span>{'\uD83D\uDCF8'}</span> Photo
-          </Link>
           <Link href="/planters" className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-700 hover:border-garden-400 dark:hover:border-garden-500 hover:shadow-sm transition-all text-sm font-medium text-earth-700 dark:text-gray-200">
             <span>{'\uD83C\uDF31'}</span> Plant
           </Link>
