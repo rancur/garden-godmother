@@ -186,6 +186,16 @@ const severityColor: Record<string, string> = {
   high: 'text-red-600',
 };
 
+const entryTypeBadgeColor: Record<string, string> = {
+  observation: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+  harvest: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+  problem: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+  milestone: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+  note: 'bg-earth-100 dark:bg-gray-700 text-earth-600 dark:text-gray-400',
+  weather: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300',
+  photo: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+};
+
 // -- Component --
 
 export default function JournalPage() {
@@ -253,6 +263,7 @@ export default function JournalPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
 
   // Quick input state (voice + photo)
+  const [voiceMode, setVoiceMode] = useState(false);
   const [voiceTranscribing, setVoiceTranscribing] = useState(false);
   const [photoFlowOpen, setPhotoFlowOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -310,9 +321,7 @@ export default function JournalPage() {
 
       await createJournalEntry(data);
       toast(`Logged: ${action.content.substring(0, 60)}${action.content.length > 60 ? '...' : ''}`, 'success');
-      // Dismiss the card
       setDismissedSuggestions(prev => new Set(prev).add(suggestion.id));
-      // Refresh feed
       loadFeed();
     } catch {
       toast('Failed to save entry', 'error');
@@ -349,7 +358,6 @@ export default function JournalPage() {
       )
       .catch(() => {});
 
-    // Build unified planting selector: bed plantings + ground plants
     Promise.all([getPlantings(), getGroundPlants()])
       .then(([plantings, groundPlants]: [
         { id: number; plant_name: string; bed_name?: string; status: string }[],
@@ -399,7 +407,7 @@ export default function JournalPage() {
       .catch(() => setPlantContext({ entries: [], loading: false }));
   }, [formPlantingId]);
 
-  // Load cached analysis when lightbox opens (only for planting photos)
+  // Load cached analysis when lightbox opens
   useEffect(() => {
     if (lightboxPhotoId && !lightboxIsJournalPhoto && !analyses[lightboxPhotoId]) {
       getPhotoAnalysis(lightboxPhotoId)
@@ -459,11 +467,28 @@ export default function JournalPage() {
     }
   };
 
+  const resetForm = () => {
+    setFormType('observation');
+    setFormTitle('');
+    setFormContent('');
+    setFormMood('');
+    setFormPlantId('');
+    setFormBedId('');
+    setFormTrayId('');
+    setFormGroundPlantId('');
+    setFormPlantingId('');
+    setFormPlantingType('');
+    setFormSeverity('');
+    setFormMilestoneType('');
+    formPhotoPreviews.forEach((url) => URL.revokeObjectURL(url));
+    setFormPhotos([]);
+    setFormPhotoPreviews([]);
+  };
+
   const handleSubmit = async () => {
     if (!formContent.trim() && !formTitle.trim()) return;
     setSubmitting(true);
     try {
-      // Resolve unified planting selector
       let planting_id: number | undefined;
       let ground_plant_id: number | undefined;
       if (formPlantingId && formPlantingId !== 'general') {
@@ -487,25 +512,10 @@ export default function JournalPage() {
         severity: formSeverity || undefined,
         milestone_type: formMilestoneType || undefined,
       });
-      // Upload photos if any
       if (formPhotos.length > 0 && entry.id) {
         await uploadJournalPhotos(entry.id, formPhotos);
       }
-      setFormType('observation');
-      setFormTitle('');
-      setFormContent('');
-      setFormMood('');
-      setFormPlantId('');
-      setFormBedId('');
-      setFormTrayId('');
-      setFormGroundPlantId('');
-      setFormPlantingId('');
-      setFormPlantingType('');
-      setFormSeverity('');
-      setFormMilestoneType('');
-      formPhotoPreviews.forEach((url) => URL.revokeObjectURL(url));
-      setFormPhotos([]);
-      setFormPhotoPreviews([]);
+      resetForm();
       setShowForm(false);
       loadFeed();
       toast('Journal entry created!');
@@ -522,7 +532,6 @@ export default function JournalPage() {
         content: editContent.trim(),
         title: editTitle.trim() || undefined,
       });
-      // Upload new photos if any
       if (editPhotos.length > 0) {
         await uploadJournalPhotos(id, editPhotos);
       }
@@ -539,7 +548,7 @@ export default function JournalPage() {
   };
 
   const handleDelete = async (id: number | string) => {
-    if (typeof id === 'string') return; // Can't delete photo/note feed items from here
+    if (typeof id === 'string') return;
     if (!await showConfirm({ title: 'Delete Entry', message: 'Delete this journal entry?', confirmText: 'Delete', destructive: true })) return;
     try {
       const res = await deleteJournalEntry(id);
@@ -571,6 +580,7 @@ export default function JournalPage() {
   // Voice note handler
   const handleVoiceRecording = useCallback(async (blob: Blob) => {
     setVoiceTranscribing(true);
+    setVoiceMode(false);
     try {
       const formData = new FormData();
       formData.append('file', blob, 'voice-note.webm');
@@ -650,6 +660,7 @@ export default function JournalPage() {
     if (diffHours < 1) return `${Math.max(1, Math.round(diffMs / (1000 * 60)))}m ago`;
     if (diffHours < 24) return `${Math.round(diffHours)}h ago`;
     const diffDays = Math.round(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays}d ago`;
     const currentYear = getGardenYear();
     return formatGardenDate(dateStr, { month: 'short', day: 'numeric', year: d.getFullYear() !== currentYear ? 'numeric' : undefined });
@@ -669,178 +680,51 @@ export default function JournalPage() {
 
   return (
     <PullToRefresh onRefresh={async () => { loadFeed(); loadSuggestions(); }}>
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-earth-800 dark:text-gray-100">Garden Journal</h1>
-        <div className="flex items-center gap-2">
+    <div className="space-y-8 pb-8">
+
+      {/* ========== QUICK INPUT BAR (Top of page — primary action) ========== */}
+      <div className="pt-2">
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-2xl font-bold text-earth-800 dark:text-gray-100">Garden Journal</h1>
           <a
             href={getExportUrl('journal')}
             download
-            className="px-3 py-2 bg-earth-100 dark:bg-gray-700 text-earth-700 dark:text-gray-300 rounded-lg hover:bg-earth-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+            className="px-3 py-1.5 bg-earth-100 dark:bg-gray-700 text-earth-500 dark:text-gray-400 rounded-lg hover:bg-earth-200 dark:hover:bg-gray-600 transition-colors text-xs font-medium"
           >
             Export
           </a>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 max-w-sm mx-auto">
+          {/* Voice button */}
           <button
-            onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 transition-colors text-sm font-medium flex items-center gap-2"
+            type="button"
+            onClick={() => setVoiceMode(!voiceMode)}
+            disabled={voiceTranscribing}
+            className={`flex flex-col items-center justify-center gap-2 py-5 rounded-2xl border-2 transition-all active:scale-95 ${
+              voiceMode
+                ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400'
+                : 'bg-white dark:bg-gray-800 border-earth-200 dark:border-gray-700 text-earth-700 dark:text-gray-300 hover:border-garden-400 dark:hover:border-garden-600 hover:bg-garden-50 dark:hover:bg-garden-900/20'
+            } disabled:opacity-50`}
           >
-            {showForm ? 'Cancel' : '+ New Entry'}
-          </button>
-        </div>
-      </div>
-
-      {/* AI Summary Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-            <span className="font-semibold text-earth-800 dark:text-gray-100 text-sm">AI Weekly Summary</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={summaryDays}
-              onChange={(e) => setSummaryDays(Number(e.target.value))}
-              className="text-xs px-2 py-1 rounded border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-700 dark:text-gray-300"
-            >
-              <option value={7}>7 days</option>
-              <option value={14}>14 days</option>
-              <option value={30}>30 days</option>
-            </select>
-            <button
-              onClick={handleGenerateSummary}
-              disabled={summaryLoading}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50"
-            >
-              {summaryLoading ? 'Generating...' : 'Generate Summary'}
-            </button>
-          </div>
-        </div>
-        {showSummary && summaryText && (
-          <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800">
-            <p className="text-sm text-earth-700 dark:text-gray-300 whitespace-pre-line">{summaryText}</p>
-            {summaryActivity && (
-              <div className="mt-2 flex gap-4 text-xs text-earth-500 dark:text-gray-400">
-                <span>{summaryActivity.journal_entries} journal entries</span>
-                <span>{summaryActivity.tasks_completed} tasks completed</span>
-                <span>{summaryActivity.harvests} harvests</span>
-              </div>
+            {voiceTranscribing ? (
+              <span className="animate-spin w-7 h-7 border-3 border-garden-600 border-t-transparent rounded-full" />
+            ) : (
+              <span className="text-2xl">{'\u{1F3A4}'}</span>
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Smart Suggestions */}
-      {suggestionsLoading ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <svg className="w-4 h-4 text-garden-600 dark:text-garden-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            <span className="text-sm font-semibold text-earth-700 dark:text-gray-300">What needs attention</span>
-          </div>
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm animate-pulse">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-earth-200 dark:bg-gray-700" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-earth-200 dark:bg-gray-700 rounded w-1/3" />
-                  <div className="h-3 bg-earth-100 dark:bg-gray-700 rounded w-1/4" />
-                  <div className="h-3 bg-earth-100 dark:bg-gray-700 rounded w-1/2 mt-2" />
-                  <div className="flex gap-2 mt-3">
-                    <div className="h-8 bg-earth-100 dark:bg-gray-700 rounded-lg w-20" />
-                    <div className="h-8 bg-earth-100 dark:bg-gray-700 rounded-lg w-20" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : visibleSuggestions.length > 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <svg className="w-4 h-4 text-garden-600 dark:text-garden-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            <span className="text-sm font-semibold text-earth-700 dark:text-gray-300">What needs attention</span>
-            <span className="text-xs text-earth-400 dark:text-gray-500">({visibleSuggestions.length})</span>
-          </div>
-          {visibleSuggestions.map((s) => {
-            const icon = s.category ? getPlantIcon(s.plant_name || '', s.category) : (s.type === 'heat-check' ? '\uD83C\uDF21\uFE0F' : s.type === 'cold-check' ? '\u2744\uFE0F' : '\uD83C\uDF3B');
-            return (
-              <div
-                key={s.id}
-                className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl flex-shrink-0 mt-0.5">{icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-earth-800 dark:text-gray-100 text-sm">{s.title}</span>
-                      {s.priority === 0 && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">urgent</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-earth-500 dark:text-gray-400 mt-0.5">{s.subtitle}</p>
-                    <p className="text-sm text-earth-700 dark:text-gray-300 mt-2 italic">&ldquo;{s.prompt}&rdquo;</p>
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {s.quick_actions.map((action) => {
-                        const actionId = `${s.id}-${action.label}`;
-                        const isSubmitting = submittingActionId === actionId;
-                        return (
-                          <button
-                            key={action.label}
-                            onClick={() => handleQuickAction(s, action)}
-                            disabled={!!submittingActionId}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all active:scale-95 disabled:opacity-50 ${
-                              action.entry_type === 'problem'
-                                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800'
-                                : action.entry_type === 'milestone' || action.entry_type === 'harvest'
-                                ? 'bg-garden-50 dark:bg-garden-900/20 text-garden-700 dark:text-garden-300 hover:bg-garden-100 dark:hover:bg-garden-900/30 border border-garden-200 dark:border-garden-800'
-                                : 'bg-earth-100 dark:bg-gray-700 text-earth-700 dark:text-gray-300 hover:bg-earth-200 dark:hover:bg-gray-600 border border-earth-200 dark:border-gray-600'
-                            }`}
-                          >
-                            {isSubmitting ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
-                                Saving...
-                              </span>
-                            ) : (
-                              action.label
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {/* Quick Input Row */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-earth-500 dark:text-gray-400 uppercase tracking-wide">Quick Input</span>
-          {voiceTranscribing && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-garden-600 dark:text-garden-400">
-              <span className="animate-spin w-3 h-3 border-2 border-garden-600 dark:border-garden-400 border-t-transparent rounded-full" />
-              Transcribing...
+            <span className="text-xs font-semibold">
+              {voiceTranscribing ? 'Saving...' : voiceMode ? 'Cancel' : 'Voice'}
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {/* Voice note */}
-          <VoiceRecorder onRecordingComplete={handleVoiceRecording} disabled={voiceTranscribing} />
+          </button>
 
-          {/* Photo capture */}
+          {/* Photo button */}
           <button
             type="button"
             onClick={() => photoInputRef.current?.click()}
-            className="w-14 h-14 rounded-full bg-garden-600 hover:bg-garden-700 text-white flex items-center justify-center transition-colors"
+            className="flex flex-col items-center justify-center gap-2 py-5 rounded-2xl border-2 bg-white dark:bg-gray-800 border-earth-200 dark:border-gray-700 text-earth-700 dark:text-gray-300 hover:border-garden-400 dark:hover:border-garden-600 hover:bg-garden-50 dark:hover:bg-garden-900/20 transition-all active:scale-95"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
+            <span className="text-2xl">{'\u{1F4F8}'}</span>
+            <span className="text-xs font-semibold">Photo</span>
           </button>
           <input
             ref={photoInputRef}
@@ -850,116 +734,71 @@ export default function JournalPage() {
             onChange={handlePhotoCaptured}
             className="hidden"
           />
-          <span className="text-xs text-earth-400 dark:text-gray-500">Photo</span>
 
-          {/* Text entry shortcut */}
+          {/* Write button */}
           <button
             type="button"
-            onClick={() => { setShowForm(true); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 100); }}
-            className="w-14 h-14 rounded-full bg-garden-600 hover:bg-garden-700 text-white flex items-center justify-center transition-colors"
+            onClick={() => {
+              setShowForm(!showForm);
+              if (!showForm) {
+                setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+              }
+            }}
+            className={`flex flex-col items-center justify-center gap-2 py-5 rounded-2xl border-2 transition-all active:scale-95 ${
+              showForm
+                ? 'bg-garden-50 dark:bg-garden-900/20 border-garden-400 dark:border-garden-600 text-garden-700 dark:text-garden-300'
+                : 'bg-white dark:bg-gray-800 border-earth-200 dark:border-gray-700 text-earth-700 dark:text-gray-300 hover:border-garden-400 dark:hover:border-garden-600 hover:bg-garden-50 dark:hover:bg-garden-900/20'
+            }`}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
+            <span className="text-2xl">{'\u270F\uFE0F'}</span>
+            <span className="text-xs font-semibold">{showForm ? 'Cancel' : 'Write'}</span>
           </button>
-          <span className="text-xs text-earth-400 dark:text-gray-500">Write</span>
         </div>
+
+        {/* Inline Voice Recorder (shown when Voice is tapped) */}
+        {voiceMode && (
+          <div className="mt-4 flex justify-center">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700 px-6 py-4 shadow-sm flex items-center gap-4">
+              <VoiceRecorder onRecordingComplete={handleVoiceRecording} disabled={voiceTranscribing} />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Photo-First Flow Modal */}
-      {photoFlowOpen && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 space-y-4 shadow-md">
+      {/* ========== ENTRY FORM (hidden by default, shown on Write tap) ========== */}
+      {showForm && (
+        <div ref={formRef} className="bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700 p-5 space-y-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-300 uppercase tracking-wide">Photo Journal Entry</h2>
-            <button onClick={handlePhotoCancelFlow} className="text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg">&times;</button>
-          </div>
-          {photoPreview && (
-            <img src={photoPreview} alt="Captured" className="w-full max-h-64 object-contain rounded-lg border border-earth-200 dark:border-gray-600" />
-          )}
-          {photoAiSuggestion && !photoCaption && (
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                <span className="text-xs font-medium text-purple-700 dark:text-purple-300">AI Suggestion</span>
-              </div>
-              <p className="text-sm text-purple-700 dark:text-purple-300">{photoAiSuggestion}</p>
-              <button
-                onClick={() => setPhotoCaption(photoAiSuggestion || '')}
-                className="mt-2 text-xs text-purple-600 dark:text-purple-400 underline hover:no-underline"
-              >
-                Use this as caption
-              </button>
-            </div>
-          )}
-          <div>
-            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Link to plant (optional)</label>
-            <TypeaheadSelect
-              options={allPlantingOptions}
-              value={photoPlantingId}
-              onChange={(val) => setPhotoPlantingId(val)}
-              placeholder="Search plantings, ground plants..."
-            />
-          </div>
-          <textarea
-            value={photoCaption}
-            onChange={(e) => setPhotoCaption(e.target.value)}
-            placeholder="Add a note (optional, AI will describe if left blank)..."
-            rows={2}
-            className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm resize-y"
-          />
-          <div className="flex justify-end gap-2">
+            <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-300 uppercase tracking-wide">New Journal Entry</h2>
             <button
-              onClick={handlePhotoCancelFlow}
-              className="px-4 py-2 text-sm font-medium text-earth-600 dark:text-gray-400 border border-earth-300 dark:border-gray-600 rounded-lg hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
+              onClick={() => { resetForm(); setShowForm(false); }}
+              className="text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300 text-sm font-medium"
             >
               Cancel
             </button>
-            <button
-              onClick={handlePhotoSubmit}
-              disabled={photoSubmitting}
-              className="px-5 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 transition-colors text-sm font-medium disabled:opacity-50"
-            >
-              {photoSubmitting ? 'Saving...' : 'Save Entry'}
-            </button>
           </div>
-        </div>
-      )}
 
-      {/* Error */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 font-bold">&times;</button>
-        </div>
-      )}
-
-      {/* Add Entry Form */}
-      {showForm && (
-        <div ref={formRef} className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 space-y-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-300 uppercase tracking-wide">New Journal Entry</h2>
-
-          {/* Entry type selector - visual cards */}
+          {/* Entry type selector - emoji cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {ENTRY_TYPES.filter((t) => t.value !== 'photo').map((t) => (
               <button
                 key={t.value}
                 onClick={() => setFormType(t.value)}
-                className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl text-sm font-medium border-2 transition-all active:scale-95 ${
                   formType === t.value
                     ? 'bg-garden-50 dark:bg-garden-900/30 border-garden-500 dark:border-garden-500 text-garden-700 dark:text-garden-300 shadow-sm'
                     : 'bg-white dark:bg-gray-700 border-earth-200 dark:border-gray-600 text-earth-600 dark:text-gray-400 hover:border-garden-300 dark:hover:border-garden-600'
                 }`}
               >
-                <span className="text-lg">{t.icon}</span>
+                <span className="text-xl">{t.icon}</span>
                 <span className="text-xs font-semibold">{t.label}</span>
-                <span className="text-[10px] text-earth-400 dark:text-gray-500">{t.description}</span>
               </button>
             ))}
           </div>
 
-          {/* What plant is this about? - Unified planting selector */}
+          {/* Plant selector */}
           <div>
-            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">What plant is this about?</label>
+            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1.5 block">What plant is this about?</label>
             <TypeaheadSelect
               options={allPlantingOptions}
               value={formPlantingId}
@@ -968,7 +807,7 @@ export default function JournalPage() {
             />
           </div>
 
-          {/* Plant context card — shows recent history for the selected plant */}
+          {/* Plant context card */}
           {formPlantingId && formPlantingId !== 'general' && (
             <div className="bg-earth-50 dark:bg-gray-700/50 rounded-lg border border-earth-200 dark:border-gray-600 p-3">
               {plantContext.loading ? (
@@ -992,16 +831,14 @@ export default function JournalPage() {
             </div>
           )}
 
-          {/* Title (optional) */}
+          {/* Title */}
           <input
             type="text"
             value={formTitle}
             onChange={(e) => setFormTitle(e.target.value)}
             placeholder="Title (optional)"
-            className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm"
+            className="w-full px-3 py-2.5 border border-earth-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm"
           />
-
-          {/* Adaptive fields based on entry_type */}
 
           {/* Problem: severity selector */}
           {formType === 'problem' && (
@@ -1047,7 +884,7 @@ export default function JournalPage() {
             </div>
           )}
 
-          {/* Content */}
+          {/* Content textarea */}
           <textarea
             value={formContent}
             onChange={(e) => setFormContent(e.target.value)}
@@ -1057,20 +894,20 @@ export default function JournalPage() {
               formType === 'milestone' ? 'Describe the milestone...' :
               "What's happening in the garden?"
             }
-            rows={3}
-            className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm resize-y"
+            rows={4}
+            className="w-full px-3 py-2.5 border border-earth-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm resize-y"
           />
 
           {/* Mood selector */}
           <div>
-            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Garden Mood</label>
+            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1.5 block">Garden Mood</label>
             <div className="flex gap-2">
               {MOODS.map((m) => (
                 <button
                   key={m.value}
                   onClick={() => setFormMood(formMood === m.value ? '' : m.value)}
                   title={m.label}
-                  className={`w-9 h-9 rounded-full text-lg flex items-center justify-center border transition-colors ${
+                  className={`w-10 h-10 rounded-full text-lg flex items-center justify-center border-2 transition-all active:scale-95 ${
                     formMood === m.value
                       ? 'bg-garden-100 dark:bg-garden-900/40 border-garden-400 dark:border-garden-600 shadow-sm'
                       : 'bg-white dark:bg-gray-700 border-earth-200 dark:border-gray-600 hover:border-garden-300'
@@ -1084,7 +921,6 @@ export default function JournalPage() {
 
           {/* Photo upload */}
           <div>
-            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Photos</label>
             <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-earth-50 dark:bg-gray-700 border border-earth-200 dark:border-gray-600 text-earth-600 dark:text-gray-300 hover:bg-earth-100 dark:hover:bg-gray-600 transition-colors text-sm cursor-pointer">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               Add Photos
@@ -1114,11 +950,17 @@ export default function JournalPage() {
           </div>
 
           {/* Submit */}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => { resetForm(); setShowForm(false); }}
+              className="px-4 py-2.5 text-sm font-medium text-earth-600 dark:text-gray-400 border border-earth-300 dark:border-gray-600 rounded-xl hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
             <button
               onClick={handleSubmit}
               disabled={submitting || (!formContent.trim() && !formTitle.trim())}
-              className="px-5 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2.5 bg-garden-600 text-white rounded-xl hover:bg-garden-700 transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? 'Saving...' : 'Add Entry'}
             </button>
@@ -1126,281 +968,518 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-1.5 pb-1">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setFilterType(tab.value)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filterType === tab.value
-                ? 'bg-garden-600 text-white'
-                : 'bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-700 text-earth-600 dark:text-gray-400 hover:bg-garden-50 dark:hover:bg-gray-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Feed */}
-      {loading ? (
-        <div className="text-center py-16 text-earth-400 dark:text-gray-500">Loading journal...</div>
-      ) : feed.length === 0 ? (
-        <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700">
-          <div className="text-4xl mb-3">{'\u{1F4D3}'}</div>
-          <p className="text-earth-500 dark:text-gray-400 mb-2">No journal entries yet</p>
-          <p className="text-earth-400 dark:text-gray-500 text-sm">
-            Click &quot;+ New Entry&quot; to start recording your garden observations, milestones, and notes.
-          </p>
-        </div>
-      ) : (
+      {/* ========== SMART SUGGESTIONS ========== */}
+      {suggestionsLoading ? (
         <div className="space-y-3">
-          {feed.map((entry) => {
-            const isEditing = editingId !== null && entry.id === editingId;
-            const isJournalEntry = entry.source === 'journal' && typeof entry.id === 'number';
-
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-garden-600 dark:text-garden-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <span className="text-sm font-semibold text-earth-700 dark:text-gray-300">What needs attention</span>
+          </div>
+          {[1, 2].map(i => (
+            <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm animate-pulse">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-earth-200 dark:bg-gray-700" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-earth-200 dark:bg-gray-700 rounded w-1/3" />
+                  <div className="h-3 bg-earth-100 dark:bg-gray-700 rounded w-1/4" />
+                  <div className="flex gap-2 mt-3">
+                    <div className="h-8 bg-earth-100 dark:bg-gray-700 rounded-lg w-24" />
+                    <div className="h-8 bg-earth-100 dark:bg-gray-700 rounded-lg w-24" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : visibleSuggestions.length > 0 ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-garden-600 dark:text-garden-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <span className="text-sm font-semibold text-earth-700 dark:text-gray-300">What needs attention</span>
+            <span className="text-xs text-earth-400 dark:text-gray-500 bg-earth-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{visibleSuggestions.length}</span>
+          </div>
+          {visibleSuggestions.map((s) => {
+            const icon = s.category ? getPlantIcon(s.plant_name || '', s.category) : (s.type === 'heat-check' ? '\uD83C\uDF21\uFE0F' : s.type === 'cold-check' ? '\u2744\uFE0F' : '\uD83C\uDF3B');
             return (
               <div
-                key={`${entry.source}_${entry.id}`}
-                className={`bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 shadow-sm overflow-hidden border-l-4 ${entryTypeStyle(entry.entry_type)}`}
+                key={s.id}
+                className="bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm"
               >
-                <div className="p-4">
-                  {/* Header row */}
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <span className="text-lg shrink-0" title={entry.entry_type}>{typeIcon(entry.entry_type)}</span>
-                      <span className="text-xs font-medium text-earth-400 dark:text-gray-500 uppercase tracking-wide">{entry.entry_type}</span>
-                      {entry.mood && <span className="text-sm" title={entry.mood}>{moodIcon(entry.mood)}</span>}
-                      <span className="text-xs text-earth-300 dark:text-gray-600">{'\u00B7'}</span>
-                      <span className="text-xs text-earth-400 dark:text-gray-500">{formatDate(entry.created_at)}</span>
-                      {entry.source === 'planting_note' && (
-                        <span className="text-[10px] bg-earth-100 dark:bg-gray-700 text-earth-400 dark:text-gray-500 px-1.5 py-0.5 rounded">planting note</span>
-                      )}
-                    </div>
-                    {/* Actions */}
-                    {isJournalEntry && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => {
-                            if (isEditing) {
-                              setEditingId(null);
-                              editPhotoPreviews.forEach((url) => URL.revokeObjectURL(url));
-                              setEditPhotos([]);
-                              setEditPhotoPreviews([]);
-                              setEditExistingPhotos([]);
-                            } else {
-                              setEditingId(entry.id as number);
-                              setEditContent(entry.content);
-                              setEditTitle(entry.title || '');
-                              setEditExistingPhotos(entry.photos || []);
-                              setEditPhotos([]);
-                              setEditPhotoPreviews([]);
-                            }
-                          }}
-                          className="p-1.5 rounded-lg text-earth-400 dark:text-gray-500 hover:bg-earth-100 dark:hover:bg-gray-700 hover:text-earth-600 dark:hover:text-gray-300 transition-colors"
-                          title={isEditing ? 'Cancel edit' : 'Edit'}
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(entry.id)}
-                          className="p-1.5 rounded-lg text-earth-400 dark:text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors"
-                          title="Delete"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-garden-50 dark:bg-garden-900/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">{icon}</span>
                   </div>
-
-                  {/* Title */}
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      placeholder="Title (optional)"
-                      className="w-full px-2 py-1 mb-2 border border-earth-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100 text-sm"
-                    />
-                  ) : (
-                    entry.title && <h3 className="text-sm font-semibold text-earth-800 dark:text-gray-100 mb-1">{entry.title}</h3>
-                  )}
-
-                  {/* Photo inline (legacy single photo_id) */}
-                  {entry.photo_id && (!entry.photos || entry.photos.length === 0) && (
-                    <button
-                      onClick={() => { setLightboxPhotoId(entry.photo_id); setLightboxEntry(entry); setLightboxIsJournalPhoto(false); }}
-                      className="mb-2 block rounded-lg overflow-hidden max-w-xs hover:opacity-90 transition-opacity"
-                    >
-                      <img
-                        src={getPhotoUrl(entry.photo_id)}
-                        alt={entry.title || entry.content}
-                        className="w-full h-48 object-cover"
-                        loading="lazy"
-                      />
-                    </button>
-                  )}
-
-                  {/* Journal entry photos grid */}
-                  {entry.photos && entry.photos.length > 0 && (
-                    <div className={`mb-2 grid gap-1.5 ${entry.photos.length === 1 ? 'grid-cols-1 max-w-xs' : entry.photos.length === 2 ? 'grid-cols-2 max-w-md' : 'grid-cols-3 max-w-lg'}`}>
-                      {entry.photos.map((photo) => (
-                        <button
-                          key={photo.id}
-                          onClick={() => { setLightboxPhotoId(photo.id); setLightboxEntry(entry); setLightboxIsJournalPhoto(true); }}
-                          className="block rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
-                        >
-                          <img
-                            src={getJournalPhotoUrl(photo.id)}
-                            alt={photo.caption || entry.title || entry.content}
-                            className={`w-full object-cover ${entry.photos!.length === 1 ? 'h-48' : 'h-32'}`}
-                            loading="lazy"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Content */}
-                  {isEditing ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        rows={3}
-                        className="w-full px-2 py-1.5 border border-earth-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-gray-100 text-sm resize-y"
-                      />
-                      {/* Existing photos with delete */}
-                      {editExistingPhotos.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {editExistingPhotos.map((photo) => (
-                            <div key={photo.id} className="relative group">
-                              <img src={getJournalPhotoUrl(photo.id)} alt={photo.caption || ''} className="w-20 h-20 object-cover rounded-lg border border-earth-200 dark:border-gray-600" />
-                              <button
-                                onClick={() => handleDeleteExistingPhoto(photo.id)}
-                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          ))}
-                        </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-earth-800 dark:text-gray-100 text-sm">{s.title}</span>
+                      {s.priority === 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">urgent</span>
                       )}
-                      {/* New photos to add */}
-                      {editPhotoPreviews.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {editPhotoPreviews.map((url, i) => (
-                            <div key={i} className="relative group">
-                              <img src={url} alt={`New ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-dashed border-garden-400 dark:border-garden-600" />
-                              <button
-                                onClick={() => removeEditPhoto(i)}
-                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-earth-50 dark:bg-gray-700 border border-earth-200 dark:border-gray-600 text-earth-500 dark:text-gray-400 hover:bg-earth-100 dark:hover:bg-gray-600 transition-colors text-xs cursor-pointer">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                        Add Photos
-                        <input type="file" accept="image/*" multiple onChange={handleEditPhotoSelect} className="hidden" />
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(entry.id as number)}
-                          className="px-3 py-1 bg-garden-600 text-white rounded text-xs font-medium hover:bg-garden-700"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => { setEditingId(null); editPhotoPreviews.forEach((url) => URL.revokeObjectURL(url)); setEditPhotos([]); setEditPhotoPreviews([]); setEditExistingPhotos([]); }}
-                          className="px-3 py-1 bg-earth-100 dark:bg-gray-700 text-earth-600 dark:text-gray-300 rounded text-xs hover:bg-earth-200 dark:hover:bg-gray-600"
-                        >
-                          Cancel
-                        </button>
-                      </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-earth-700 dark:text-gray-300 whitespace-pre-wrap">{entry.content}</p>
-                  )}
-
-                  {/* Linked items */}
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {entry.plant_name && entry.plant_id && (
-                      <Link
-                        href={`/plants?highlight=${entry.plant_id}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-garden-50 dark:bg-garden-900/20 text-xs text-garden-700 dark:text-garden-400 hover:bg-garden-100 dark:hover:bg-garden-900/40 transition-colors"
-                      >
-                        <span>{getPlantIcon(entry.plant_name, entry.category || '')}</span>
-                        {entry.plant_name}
-                      </Link>
-                    )}
-                    {entry.bed_name && entry.bed_id && (
-                      <Link
-                        href={`/planters/${entry.bed_id}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-earth-100 dark:bg-gray-700 text-xs text-earth-600 dark:text-gray-400 hover:bg-earth-200 dark:hover:bg-gray-600 transition-colors"
-                      >
-                        {'\u{1FAB4}'} {entry.bed_name}
-                      </Link>
-                    )}
-                    {entry.tray_name && entry.tray_id && (
-                      <Link
-                        href={`/trays/${entry.tray_id}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-earth-100 dark:bg-gray-700 text-xs text-earth-600 dark:text-gray-400 hover:bg-earth-200 dark:hover:bg-gray-600 transition-colors"
-                      >
-                        {'\u{1F33F}'} {entry.tray_name}
-                      </Link>
-                    )}
-                    {entry.ground_plant_name && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-earth-100 dark:bg-gray-700 text-xs text-earth-600 dark:text-gray-400">
-                        {'\u{1F333}'} {entry.ground_plant_name}
-                      </span>
-                    )}
-                    {entry.severity && (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        entry.severity === 'critical' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                        entry.severity === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                        entry.severity === 'medium' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
-                        entry.severity === 'low' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
-                        entry.severity === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
-                        'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                      }`}>
-                        {entry.severity}
-                      </span>
-                    )}
-                    {entry.milestone_type && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
-                        {MILESTONE_OPTIONS.find(m => m.value === entry.milestone_type)?.icon || '\u{1F389}'} {entry.milestone_type.replace('_', ' ')}
-                      </span>
-                    )}
-                    {entry.tags && entry.tags.length > 0 && entry.tags.map((tag: string) => (
-                      <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full bg-earth-50 dark:bg-gray-700 text-xs text-earth-500 dark:text-gray-400">
-                        #{tag}
-                      </span>
-                    ))}
+                    <p className="text-xs text-earth-500 dark:text-gray-400 mt-0.5">{s.subtitle}</p>
+                    <p className="text-sm text-earth-600 dark:text-gray-300 mt-2 italic">&ldquo;{s.prompt}&rdquo;</p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {s.quick_actions.map((action) => {
+                        const actionId = `${s.id}-${action.label}`;
+                        const isSubmitting = submittingActionId === actionId;
+                        return (
+                          <button
+                            key={action.label}
+                            onClick={() => handleQuickAction(s, action)}
+                            disabled={!!submittingActionId}
+                            className={`px-3 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-50 ${
+                              action.entry_type === 'problem'
+                                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800'
+                                : action.entry_type === 'milestone' || action.entry_type === 'harvest'
+                                ? 'bg-garden-50 dark:bg-garden-900/20 text-garden-700 dark:text-garden-300 hover:bg-garden-100 dark:hover:bg-garden-900/30 border border-garden-200 dark:border-garden-800'
+                                : 'bg-earth-100 dark:bg-gray-700 text-earth-700 dark:text-gray-300 hover:bg-earth-200 dark:hover:bg-gray-600 border border-earth-200 dark:border-gray-600'
+                            }`}
+                          >
+                            {isSubmitting ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
+                                Saving...
+                              </span>
+                            ) : (
+                              action.label
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
+      ) : null}
+
+      {/* ========== ERROR ========== */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 text-sm text-red-700 dark:text-red-300 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 font-bold">&times;</button>
+        </div>
       )}
 
-      {/* Photo Lightbox */}
+      {/* ========== JOURNAL FEED ========== */}
+      <div>
+        {/* Filter tabs */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {FILTER_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => setFilterType(tab.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                filterType === tab.value
+                  ? 'bg-garden-600 text-white'
+                  : 'bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-700 text-earth-600 dark:text-gray-400 hover:bg-garden-50 dark:hover:bg-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700 p-4 animate-pulse">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded bg-earth-200 dark:bg-gray-700" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-earth-200 dark:bg-gray-700 rounded w-2/3" />
+                    <div className="h-3 bg-earth-100 dark:bg-gray-700 rounded w-full" />
+                    <div className="h-3 bg-earth-100 dark:bg-gray-700 rounded w-1/2" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : feed.length === 0 ? (
+          <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700">
+            <div className="text-4xl mb-3">{'\u{1F4D3}'}</div>
+            <p className="text-earth-500 dark:text-gray-400 mb-2">No journal entries yet</p>
+            <p className="text-earth-400 dark:text-gray-500 text-sm">
+              Tap Voice, Photo, or Write above to start recording.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {feed.map((entry) => {
+              const isEditing = editingId !== null && entry.id === editingId;
+              const isJournalEntry = entry.source === 'journal' && typeof entry.id === 'number';
+              const hasVoiceSource = entry.note_type === 'voice' || (entry.tags && entry.tags.includes('voice'));
+              const hasPhotos = (entry.photos && entry.photos.length > 0) || entry.photo_id;
+
+              return (
+                <div
+                  key={`${entry.source}_${entry.id}`}
+                  className={`bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700 shadow-sm overflow-hidden border-l-4 ${entryTypeStyle(entry.entry_type)}`}
+                >
+                  <div className="p-4">
+                    {/* Header row */}
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        {/* Type badge */}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${entryTypeBadgeColor[entry.entry_type] || 'bg-earth-100 dark:bg-gray-700 text-earth-600 dark:text-gray-400'}`}>
+                          {typeIcon(entry.entry_type)} {entry.entry_type}
+                        </span>
+                        {/* Voice badge */}
+                        {hasVoiceSource && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                            {'\u{1F3A4}'} voice
+                          </span>
+                        )}
+                        {entry.mood && <span className="text-sm" title={entry.mood}>{moodIcon(entry.mood)}</span>}
+                        <span className="text-xs text-earth-400 dark:text-gray-500">{formatDate(entry.created_at)}</span>
+                        {entry.source === 'planting_note' && (
+                          <span className="text-[10px] bg-earth-100 dark:bg-gray-700 text-earth-400 dark:text-gray-500 px-1.5 py-0.5 rounded-full">planting note</span>
+                        )}
+                      </div>
+                      {/* Actions */}
+                      {isJournalEntry && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              if (isEditing) {
+                                setEditingId(null);
+                                editPhotoPreviews.forEach((url) => URL.revokeObjectURL(url));
+                                setEditPhotos([]);
+                                setEditPhotoPreviews([]);
+                                setEditExistingPhotos([]);
+                              } else {
+                                setEditingId(entry.id as number);
+                                setEditContent(entry.content);
+                                setEditTitle(entry.title || '');
+                                setEditExistingPhotos(entry.photos || []);
+                                setEditPhotos([]);
+                                setEditPhotoPreviews([]);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-earth-400 dark:text-gray-500 hover:bg-earth-100 dark:hover:bg-gray-700 hover:text-earth-600 dark:hover:text-gray-300 transition-colors"
+                            title={isEditing ? 'Cancel edit' : 'Edit'}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry.id)}
+                            className="p-1.5 rounded-lg text-earth-400 dark:text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors"
+                            title="Delete"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="Title (optional)"
+                        className="w-full px-2 py-1 mb-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 text-sm"
+                      />
+                    ) : (
+                      entry.title && <h3 className="text-sm font-semibold text-earth-800 dark:text-gray-100 mb-1">{entry.title}</h3>
+                    )}
+
+                    {/* Photo thumbnails */}
+                    {!isEditing && entry.photo_id && (!entry.photos || entry.photos.length === 0) && (
+                      <button
+                        onClick={() => { setLightboxPhotoId(entry.photo_id); setLightboxEntry(entry); setLightboxIsJournalPhoto(false); }}
+                        className="mb-2 block rounded-xl overflow-hidden max-w-[200px] hover:opacity-90 transition-opacity"
+                      >
+                        <img
+                          src={getPhotoUrl(entry.photo_id)}
+                          alt={entry.title || entry.content}
+                          className="w-full h-36 object-cover"
+                          loading="lazy"
+                        />
+                      </button>
+                    )}
+
+                    {!isEditing && entry.photos && entry.photos.length > 0 && (
+                      <div className={`mb-2 grid gap-1.5 ${entry.photos.length === 1 ? 'grid-cols-1 max-w-[200px]' : entry.photos.length === 2 ? 'grid-cols-2 max-w-sm' : 'grid-cols-3 max-w-md'}`}>
+                        {entry.photos.map((photo) => (
+                          <button
+                            key={photo.id}
+                            onClick={() => { setLightboxPhotoId(photo.id); setLightboxEntry(entry); setLightboxIsJournalPhoto(true); }}
+                            className="block rounded-xl overflow-hidden hover:opacity-90 transition-opacity"
+                          >
+                            <img
+                              src={getJournalPhotoUrl(photo.id)}
+                              alt={photo.caption || entry.title || entry.content}
+                              className={`w-full object-cover ${entry.photos!.length === 1 ? 'h-36' : 'h-28'}`}
+                              loading="lazy"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Content */}
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          rows={3}
+                          className="w-full px-2 py-1.5 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 text-sm resize-y"
+                        />
+                        {editExistingPhotos.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {editExistingPhotos.map((photo) => (
+                              <div key={photo.id} className="relative group">
+                                <img src={getJournalPhotoUrl(photo.id)} alt={photo.caption || ''} className="w-20 h-20 object-cover rounded-lg border border-earth-200 dark:border-gray-600" />
+                                <button
+                                  onClick={() => handleDeleteExistingPhoto(photo.id)}
+                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {editPhotoPreviews.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {editPhotoPreviews.map((url, i) => (
+                              <div key={i} className="relative group">
+                                <img src={url} alt={`New ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-dashed border-garden-400 dark:border-garden-600" />
+                                <button
+                                  onClick={() => removeEditPhoto(i)}
+                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-earth-50 dark:bg-gray-700 border border-earth-200 dark:border-gray-600 text-earth-500 dark:text-gray-400 hover:bg-earth-100 dark:hover:bg-gray-600 transition-colors text-xs cursor-pointer">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                          Add Photos
+                          <input type="file" accept="image/*" multiple onChange={handleEditPhotoSelect} className="hidden" />
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEdit(entry.id as number)}
+                            className="px-3 py-1 bg-garden-600 text-white rounded-lg text-xs font-medium hover:bg-garden-700"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => { setEditingId(null); editPhotoPreviews.forEach((url) => URL.revokeObjectURL(url)); setEditPhotos([]); setEditPhotoPreviews([]); setEditExistingPhotos([]); }}
+                            className="px-3 py-1 bg-earth-100 dark:bg-gray-700 text-earth-600 dark:text-gray-300 rounded-lg text-xs hover:bg-earth-200 dark:hover:bg-gray-600"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-earth-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-3">{entry.content}</p>
+                    )}
+
+                    {/* Linked items */}
+                    {!isEditing && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {entry.plant_name && entry.plant_id && (
+                          <Link
+                            href={`/plants?highlight=${entry.plant_id}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-garden-50 dark:bg-garden-900/20 text-xs text-garden-700 dark:text-garden-400 hover:bg-garden-100 dark:hover:bg-garden-900/40 transition-colors"
+                          >
+                            <span>{getPlantIcon(entry.plant_name, entry.category || '')}</span>
+                            {entry.plant_name}
+                          </Link>
+                        )}
+                        {entry.bed_name && entry.bed_id && (
+                          <Link
+                            href={`/planters/${entry.bed_id}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-earth-100 dark:bg-gray-700 text-xs text-earth-600 dark:text-gray-400 hover:bg-earth-200 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            {'\u{1FAB4}'} {entry.bed_name}
+                          </Link>
+                        )}
+                        {entry.tray_name && entry.tray_id && (
+                          <Link
+                            href={`/trays/${entry.tray_id}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-earth-100 dark:bg-gray-700 text-xs text-earth-600 dark:text-gray-400 hover:bg-earth-200 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            {'\u{1F33F}'} {entry.tray_name}
+                          </Link>
+                        )}
+                        {entry.ground_plant_name && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-earth-100 dark:bg-gray-700 text-xs text-earth-600 dark:text-gray-400">
+                            {'\u{1F333}'} {entry.ground_plant_name}
+                          </span>
+                        )}
+                        {entry.area_name && !entry.bed_name && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-earth-100 dark:bg-gray-700 text-xs text-earth-500 dark:text-gray-400">
+                            {entry.area_name}
+                          </span>
+                        )}
+                        {entry.severity && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            entry.severity === 'critical' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
+                            entry.severity === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
+                            entry.severity === 'medium' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
+                            entry.severity === 'low' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
+                            entry.severity === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
+                            'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                          }`}>
+                            {entry.severity}
+                          </span>
+                        )}
+                        {entry.milestone_type && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
+                            {MILESTONE_OPTIONS.find(m => m.value === entry.milestone_type)?.icon || '\u{1F389}'} {entry.milestone_type.replace('_', ' ')}
+                          </span>
+                        )}
+                        {entry.tags && entry.tags.length > 0 && entry.tags.filter(t => t !== 'voice').map((tag: string) => (
+                          <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full bg-earth-50 dark:bg-gray-700 text-xs text-earth-500 dark:text-gray-400">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ========== AI SUMMARY (collapsible, bottom) ========== */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-earth-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <button
+          onClick={() => setShowSummary(!showSummary)}
+          className="w-full flex items-center justify-between p-4 text-left hover:bg-earth-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+            <span className="font-semibold text-earth-800 dark:text-gray-100 text-sm">AI Garden Summary</span>
+          </div>
+          <svg className={`w-4 h-4 text-earth-400 dark:text-gray-500 transition-transform ${showSummary ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showSummary && (
+          <div className="px-4 pb-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <select
+                value={summaryDays}
+                onChange={(e) => setSummaryDays(Number(e.target.value))}
+                className="text-xs px-2 py-1.5 rounded-lg border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-700 dark:text-gray-300"
+              >
+                <option value={7}>Last 7 days</option>
+                <option value={14}>Last 14 days</option>
+                <option value={30}>Last 30 days</option>
+              </select>
+              <button
+                onClick={handleGenerateSummary}
+                disabled={summaryLoading}
+                className="px-4 py-1.5 text-xs font-medium rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50"
+              >
+                {summaryLoading ? 'Generating...' : 'Generate Summary'}
+              </button>
+            </div>
+            {summaryText && (
+              <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800">
+                <p className="text-sm text-earth-700 dark:text-gray-300 whitespace-pre-line">{summaryText}</p>
+                {summaryActivity && (
+                  <div className="mt-2 flex gap-4 text-xs text-earth-500 dark:text-gray-400">
+                    <span>{summaryActivity.journal_entries} entries</span>
+                    <span>{summaryActivity.tasks_completed} tasks</span>
+                    <span>{summaryActivity.harvests} harvests</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ========== PHOTO FLOW MODAL (overlay) ========== */}
+      {photoFlowOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={handlePhotoCancelFlow}>
+          <div
+            className="w-full sm:max-w-lg bg-white dark:bg-gray-800 sm:rounded-2xl rounded-t-2xl border-t sm:border border-earth-200 dark:border-gray-700 p-5 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-300 uppercase tracking-wide">Photo Journal Entry</h2>
+              <button onClick={handlePhotoCancelFlow} className="w-8 h-8 rounded-full bg-earth-100 dark:bg-gray-700 text-earth-500 dark:text-gray-400 flex items-center justify-center hover:bg-earth-200 dark:hover:bg-gray-600 text-lg">&times;</button>
+            </div>
+            {photoPreview && (
+              <img src={photoPreview} alt="Captured" className="w-full max-h-64 object-contain rounded-xl border border-earth-200 dark:border-gray-600" />
+            )}
+            {photoAiSuggestion && !photoCaption && (
+              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">AI Suggestion</span>
+                </div>
+                <p className="text-sm text-purple-700 dark:text-purple-300">{photoAiSuggestion}</p>
+                <button
+                  onClick={() => setPhotoCaption(photoAiSuggestion || '')}
+                  className="mt-2 text-xs text-purple-600 dark:text-purple-400 underline hover:no-underline"
+                >
+                  Use this as caption
+                </button>
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Link to plant (optional)</label>
+              <TypeaheadSelect
+                options={allPlantingOptions}
+                value={photoPlantingId}
+                onChange={(val) => setPhotoPlantingId(val)}
+                placeholder="Search plantings, ground plants..."
+              />
+            </div>
+            <textarea
+              value={photoCaption}
+              onChange={(e) => setPhotoCaption(e.target.value)}
+              placeholder="Add a note (optional, AI will describe if left blank)..."
+              rows={2}
+              className="w-full px-3 py-2.5 border border-earth-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm resize-y"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handlePhotoCancelFlow}
+                className="px-4 py-2.5 text-sm font-medium text-earth-600 dark:text-gray-400 border border-earth-300 dark:border-gray-600 rounded-xl hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePhotoSubmit}
+                disabled={photoSubmitting}
+                className="px-5 py-2.5 bg-garden-600 text-white rounded-xl hover:bg-garden-700 transition-colors text-sm font-semibold disabled:opacity-50"
+              >
+                {photoSubmitting ? 'Saving...' : 'Save Entry'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== PHOTO LIGHTBOX ========== */}
       {lightboxPhotoId && lightboxEntry && (
         <div
           className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
           onClick={() => { setLightboxPhotoId(null); setLightboxEntry(null); setLightboxIsJournalPhoto(false); }}
         >
           <div
-            className="relative max-w-3xl w-full bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-xl max-h-[90vh] overflow-y-auto"
+            className="relative max-w-3xl w-full bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -1457,7 +1536,7 @@ export default function JournalPage() {
                   <button
                     onClick={() => handleAnalyze(lightboxPhotoId)}
                     disabled={analyzingIds.has(lightboxPhotoId)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-garden-50 dark:bg-garden-900/30 border border-garden-200 dark:border-garden-700 text-garden-700 dark:text-garden-300 hover:bg-garden-100 dark:hover:bg-garden-900/50 transition-colors text-sm disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-garden-50 dark:bg-garden-900/30 border border-garden-200 dark:border-garden-700 text-garden-700 dark:text-garden-300 hover:bg-garden-100 dark:hover:bg-garden-900/50 transition-colors text-sm disabled:opacity-50"
                   >
                     {analyzingIds.has(lightboxPhotoId) ? (
                       <>
