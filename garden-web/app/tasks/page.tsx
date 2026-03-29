@@ -296,6 +296,11 @@ export default function TasksPage() {
                   auto
                 </span>
               )}
+              {task.source === 'auto:template' && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-300">
+                  from template
+                </span>
+              )}
             </div>
 
             {task.description && (

@@ -1019,6 +1019,88 @@ def generate_tasks():
         except Exception:
             pass
 
+        # ── Template-based tasks ──
+        try:
+            templates = db.execute("SELECT * FROM plant_task_templates").fetchall()
+            for template in templates:
+                t = dict(template)
+                # Find active plantings matching this plant
+                if t["plant_id"]:
+                    plantings = db.execute(
+                        "SELECT p.*, pl.name as plant_name FROM plantings p JOIN plants pl ON p.plant_id = pl.id WHERE p.plant_id = ? AND p.status NOT IN ('removed','died','harvested')",
+                        (t["plant_id"],)
+                    ).fetchall()
+                else:
+                    plantings = db.execute(
+                        "SELECT p.*, pl.name as plant_name FROM plantings p JOIN plants pl ON p.plant_id = pl.id WHERE pl.name = ? AND p.status NOT IN ('removed','died','harvested')",
+                        (t["plant_name"],)
+                    ).fetchall()
+
+                for planting in plantings:
+                    p = dict(planting)
+                    planted_date = p.get("effective_planted_date") or p.get("planted_date")
+                    if not planted_date:
+                        continue
+
+                    title = t["title_template"].replace("{plant_name}", p["plant_name"])
+
+                    if t["trigger_type"] == "days_after_planting":
+                        days = int(t["trigger_value"])
+                        due = (date.fromisoformat(planted_date) + timedelta(days=days)).isoformat()
+                        if due < today_str:
+                            continue  # Past due date for one-time tasks
+                        # Check if already exists
+                        existing = db.execute(
+                            "SELECT id FROM garden_tasks WHERE title = ? AND plant_id = ? AND bed_id = ? AND status IN ('pending','overdue')",
+                            (title, p["plant_id"], p.get("bed_id"))
+                        ).fetchone()
+                        if not existing:
+                            insert_task(t["task_type"], title, t["description_template"] or "", t["priority"], due,
+                                       plant_id=p["plant_id"], bed_id=p.get("bed_id"), source="auto:template")
+
+                    elif t["trigger_type"] == "recurring":
+                        interval = int(t["trigger_value"])
+                        # Check last completed/pending
+                        last = db.execute(
+                            "SELECT due_date FROM garden_tasks WHERE title = ? AND plant_id = ? AND bed_id = ? ORDER BY due_date DESC LIMIT 1",
+                            (title, p["plant_id"], p.get("bed_id"))
+                        ).fetchone()
+                        if last:
+                            next_due = (date.fromisoformat(last["due_date"]) + timedelta(days=interval)).isoformat()
+                        else:
+                            next_due = today_str
+                        if next_due <= today_str or (not last):
+                            existing = db.execute(
+                                "SELECT id FROM garden_tasks WHERE title = ? AND plant_id = ? AND status IN ('pending','overdue')",
+                                (title, p["plant_id"])
+                            ).fetchone()
+                            if not existing:
+                                insert_task(t["task_type"], title, t["description_template"] or "", t["priority"], next_due,
+                                           plant_id=p["plant_id"], bed_id=p.get("bed_id"), source="auto:template")
+
+                    elif t["trigger_type"] == "growth_stage":
+                        if p.get("status") == t["trigger_value"]:
+                            existing = db.execute(
+                                "SELECT id FROM garden_tasks WHERE title = ? AND plant_id = ? AND bed_id = ? AND status IN ('pending','overdue')",
+                                (title, p["plant_id"], p.get("bed_id"))
+                            ).fetchone()
+                            if not existing:
+                                insert_task(t["task_type"], title, t["description_template"] or "", t["priority"], today_str,
+                                           plant_id=p["plant_id"], bed_id=p.get("bed_id"), source="auto:template")
+
+                    elif t["trigger_type"] == "one_time":
+                        days = int(t["trigger_value"])
+                        due = (date.fromisoformat(planted_date) + timedelta(days=days)).isoformat()
+                        existing = db.execute(
+                            "SELECT id FROM garden_tasks WHERE title = ? AND plant_id = ? AND bed_id = ?",
+                            (title, p["plant_id"], p.get("bed_id"))
+                        ).fetchone()
+                        if not existing:
+                            insert_task(t["task_type"], title, t["description_template"] or "", t["priority"], due,
+                                       plant_id=p["plant_id"], bed_id=p.get("bed_id"), source="auto:template")
+        except Exception:
+            pass
+
         # Mark overdue tasks
         db.execute(
             "UPDATE garden_tasks SET status = 'overdue' WHERE due_date < ? AND status = 'pending'",
@@ -1027,6 +1109,15 @@ def generate_tasks():
 
         db.commit()
         return {"tasks_created": created_count}
+
+
+@router.get("/api/tasks/templates")
+def list_task_templates(request: Request):
+    """List all plant task templates."""
+    require_user(request)
+    with get_db() as db:
+        rows = db.execute("SELECT * FROM plant_task_templates ORDER BY plant_name, trigger_type").fetchall()
+        return [dict(r) for r in rows]
 
 
 @router.get("/api/tasks/weather-insights")

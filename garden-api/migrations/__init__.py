@@ -1240,4 +1240,88 @@ def startup_run_migrations():
             db.commit()
         run_migration(db, 51, "nursery_transplant_columns", [], callback=_nursery_transplant)
 
+        # ── Migration 052: plant task templates ──
+        def _task_templates(db):
+            db.execute("""CREATE TABLE IF NOT EXISTS plant_task_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_id INTEGER,
+                plant_name TEXT,
+                task_type TEXT NOT NULL,
+                title_template TEXT NOT NULL,
+                description_template TEXT,
+                trigger_type TEXT NOT NULL CHECK(trigger_type IN ('days_after_planting', 'growth_stage', 'recurring', 'one_time')),
+                trigger_value TEXT NOT NULL,
+                priority TEXT DEFAULT 'medium',
+                season_filter TEXT,
+                category TEXT
+            )""")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_ptt_plant ON plant_task_templates(plant_id)")
+
+            # Seed templates for common plants
+            templates = [
+                # Tomato
+                ('Tomato', 'stake', 'Stake {plant_name}', 'Install cage or stakes when plant reaches 12 inches', 'days_after_planting', '21', 'high', None),
+                ('Tomato', 'prune', 'Prune suckers on {plant_name}', 'Remove suckers below first flower cluster for indeterminate varieties', 'days_after_planting', '28', 'medium', None),
+                ('Tomato', 'fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer (10-10-10) or tomato-specific feed', 'recurring', '14', 'medium', None),
+                ('Tomato', 'pest_check', 'Check {plant_name} for hornworms', 'Inspect leaves and stems for tomato hornworm damage', 'recurring', '7', 'medium', 'spring,summer'),
+                ('Tomato', 'harvest', 'Check {plant_name} for ripe fruit', 'Harvest when fully colored and slightly soft to touch', 'growth_stage', 'fruiting', 'medium', None),
+
+                # Pepper (all types)
+                ('Pepper', 'custom', 'Pinch first flowers on {plant_name}', 'Remove first flowers to encourage stronger root development', 'days_after_planting', '14', 'high', None),
+                ('Pepper', 'fertilize', 'Fertilize {plant_name}', 'Apply low-nitrogen fertilizer. Too much nitrogen = leaves, no fruit', 'recurring', '21', 'medium', None),
+                ('Pepper', 'pest_check', 'Check {plant_name} for aphids', 'Inspect undersides of leaves for aphid clusters', 'recurring', '7', 'low', None),
+
+                # Lettuce
+                ('Lettuce', 'custom', 'Thin {plant_name} seedlings', 'Thin to proper spacing when seedlings have 2-3 true leaves', 'days_after_planting', '10', 'high', None),
+                ('Lettuce', 'harvest', 'Harvest outer leaves of {plant_name}', 'Cut-and-come-again: harvest outer leaves, leave center growing', 'days_after_planting', '30', 'medium', None),
+                ('Lettuce', 'custom', 'Watch {plant_name} for bolting', 'In hot weather, lettuce bolts quickly. Harvest before it gets bitter', 'days_after_planting', '45', 'high', 'spring,summer'),
+
+                # Celery
+                ('Celery', 'fertilize', 'Feed {plant_name} — heavy feeder', 'Celery needs frequent feeding. Apply nitrogen-rich fertilizer', 'recurring', '14', 'high', None),
+                ('Celery', 'water', 'Deep water {plant_name}', 'Celery needs consistently moist soil. Never let it dry out', 'recurring', '2', 'high', None),
+
+                # Beans
+                ('Bean (Bush)', 'custom', 'Inoculate {plant_name} soil', 'Add rhizobium inoculant for better nitrogen fixation if not done at planting', 'one_time', '0', 'medium', None),
+                ('Bean (Bush)', 'harvest', 'Check {plant_name} for harvest', 'Pick beans when pods are firm and snap cleanly. Pick often to encourage production', 'days_after_planting', '55', 'medium', None),
+
+                # Cucumber
+                ('Cucumber', 'stake', 'Trellis {plant_name}', 'Train vines onto trellis or cage for better airflow and easier harvesting', 'days_after_planting', '14', 'high', None),
+                ('Cucumber', 'harvest', 'Check {plant_name} for harvest', 'Harvest cucumbers when 6-8 inches. Don\'t let them yellow on vine', 'days_after_planting', '50', 'medium', None),
+
+                # Zucchini/Squash
+                ('Zucchini', 'pest_check', 'Check {plant_name} for squash bugs', 'Look for bronze eggs on leaf undersides. Remove immediately', 'recurring', '7', 'medium', 'spring,summer'),
+                ('Zucchini', 'harvest', 'Harvest {plant_name}', 'Pick when 6-8 inches for best flavor. Gets woody if too large', 'days_after_planting', '45', 'medium', None),
+                ('Zucchini', 'custom', 'Hand pollinate {plant_name}', 'If not setting fruit, hand-pollinate morning flowers with a paintbrush', 'growth_stage', 'flowering', 'high', None),
+
+                # Corn
+                ('Corn', 'fertilize', 'Side-dress {plant_name} with nitrogen', 'Apply nitrogen fertilizer when corn is knee-high', 'days_after_planting', '30', 'high', None),
+                ('Corn', 'custom', 'Hill soil around {plant_name}', 'Mound soil around base for wind stability', 'days_after_planting', '21', 'medium', None),
+
+                # Eggplant
+                ('Eggplant', 'stake', 'Stake {plant_name}', 'Support heavy fruit with stakes or cage', 'days_after_planting', '28', 'high', None),
+                ('Eggplant', 'fertilize', 'Fertilize {plant_name}', 'Feed every 2 weeks with balanced fertilizer', 'recurring', '14', 'medium', None),
+
+                # Carrot
+                ('Carrot', 'custom', 'Thin {plant_name} seedlings', 'Thin to 2 inches apart when tops are 2 inches tall', 'days_after_planting', '14', 'high', None),
+
+                # Herbs (Basil)
+                ('Basil', 'prune', 'Pinch {plant_name} to encourage bushiness', 'Pinch off top sets of leaves regularly. Don\'t let it flower', 'recurring', '10', 'medium', None),
+
+                # Swiss Chard
+                ('Swiss Chard', 'harvest', 'Harvest outer leaves of {plant_name}', 'Cut outer leaves at base. Inner leaves keep growing', 'days_after_planting', '30', 'medium', None),
+            ]
+
+            for t in templates:
+                plant_name, task_type, title, desc, trigger_type, trigger_val, priority, season = t
+                # Look up plant_id
+                plant = db.execute("SELECT id FROM plants WHERE name = ?", (plant_name,)).fetchone()
+                plant_id = plant[0] if plant else None
+                db.execute(
+                    "INSERT INTO plant_task_templates (plant_id, plant_name, task_type, title_template, description_template, trigger_type, trigger_value, priority, season_filter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (plant_id, plant_name, task_type, title, desc, trigger_type, trigger_val, priority, season)
+                )
+            db.commit()
+
+        run_migration(db, 52, "plant_task_templates", [], callback=_task_templates)
+
         logger.info("Migration system: all migrations checked/applied")
