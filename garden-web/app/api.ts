@@ -415,6 +415,10 @@ export function getIrrigationUsage(days = 30) {
   return apiFetch(`/api/irrigation/usage?days=${days}`);
 }
 
+export function getIrrigationZoneTotals() {
+  return apiFetch('/api/irrigation/zone-totals');
+}
+
 export function getSensorHistorySummary() {
   return apiFetch('/api/sensors/history/summary');
 }

@@ -7,6 +7,7 @@ import time
 import asyncio
 import logging
 import math
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -1598,42 +1599,115 @@ def _get_beds_for_zone(zone_name: str) -> list:
         return result
 
 
-def _analyze_water_mismatch(plants: list, duration_minutes: float, frequency_desc: str) -> list:
-    """Flag mismatches between plant water needs and schedule."""
-    mismatches = []
-    # Estimate runs per week from frequency
+def _runs_per_week_from_rule(schedule_rule: dict) -> float:
+    """Calculate runs per week from a Rachio scheduleRule's frequency data."""
+    freq = schedule_rule.get("frequency")
+    if not freq:
+        return 3  # default fallback
+    kind = freq.get("type", "")
+    if kind == "EVEN" or kind == "ODD":
+        return 3.5
+    elif kind == "INTERVAL":
+        interval = freq.get("interval", 1)
+        return 7 / max(interval, 1)
+    elif kind == "SPECIFIC":
+        days_of_week = freq.get("daysOfWeek", [])
+        return len(days_of_week) if days_of_week else 3
+    return 3
+
+
+def _runs_per_week_from_desc(frequency_desc: str) -> float:
+    """Estimate runs per week from a human-readable frequency description."""
     freq_lower = frequency_desc.lower()
-    runs_per_week = 3  # default
     if "daily" in freq_lower:
-        runs_per_week = 7
+        return 7
     elif "every 2 days" in freq_lower:
-        runs_per_week = 3.5
+        return 3.5
     elif "every 3 days" in freq_lower:
-        runs_per_week = 2.3
+        return 2.3
     elif "every" in freq_lower:
         m = re.search(r"every\s+(\d+)\s+days", freq_lower)
         if m:
-            runs_per_week = 7 / int(m.group(1))
+            return 7 / int(m.group(1))
     else:
-        # Count named days
         day_names = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
         count = sum(1 for d in day_names if d in freq_lower)
         if count > 0:
-            runs_per_week = count
+            return count
+    return 3  # default
 
-    weekly_minutes = duration_minutes * runs_per_week
+
+async def _aggregate_zone_watering(person_data: dict) -> dict:
+    """Aggregate total daily watering per zone across all Rachio schedules.
+
+    Returns: {zone_id: {"name": str, "total_minutes_per_day": float, "schedule_count": int, "schedules": [...]}}
+    """
+    zone_totals: dict = {}
+
+    for device in person_data.get("devices", []):
+        zones = {z["id"]: z for z in device.get("zones", []) if z.get("enabled")}
+
+        for schedule in device.get("scheduleRules", []):
+            if not schedule.get("enabled"):
+                continue
+            runs_per_week = _runs_per_week_from_rule(schedule)
+            freq_desc = _describe_frequency(schedule)
+
+            for zone_duration in schedule.get("zones", []):
+                zone_id = zone_duration.get("zoneId")
+                duration = zone_duration.get("duration", 0)  # seconds
+
+                if zone_id not in zone_totals:
+                    zone_name = zones.get(zone_id, {}).get("name", "Unknown")
+                    zone_totals[zone_id] = {
+                        "name": zone_name,
+                        "total_seconds_per_run": 0,
+                        "runs_per_week": 0,
+                        "schedules": [],
+                    }
+
+                zone_totals[zone_id]["total_seconds_per_run"] += duration
+                zone_totals[zone_id]["schedules"].append({
+                    "name": schedule.get("name", ""),
+                    "duration_seconds": duration,
+                    "runs_per_week": runs_per_week,
+                    "frequency": freq_desc,
+                })
+
+    # Calculate daily totals
+    for zid, zt in zone_totals.items():
+        total_daily_seconds = sum(
+            s["duration_seconds"] * s["runs_per_week"] / 7 for s in zt["schedules"]
+        )
+        zt["total_minutes_per_day"] = round(total_daily_seconds / 60, 1)
+        zt["schedule_count"] = len(zt["schedules"])
+
+    return zone_totals
+
+
+def _analyze_water_mismatch(plants: list, total_minutes_per_day: float, schedule_count: int, frequency_desc: str) -> list:
+    """Flag mismatches between plant water needs and aggregated zone watering.
+
+    Args:
+        plants: list of plant dicts with 'name' and 'water' keys
+        total_minutes_per_day: aggregated daily watering across all schedules for the zone
+        schedule_count: number of schedules contributing to this zone
+        frequency_desc: human-readable description for display (e.g. "4 schedules, daily")
+    """
+    mismatches = []
+    weekly_minutes = total_minutes_per_day * 7
 
     for plant in plants:
         water = (plant.get("water") or "moderate").lower()
         if water == "high" and weekly_minutes < 20:
             mismatches.append(
-                f"{plant['name']} needs high water but zone only runs {duration_minutes:.0f}min, "
-                f"{frequency_desc} ({weekly_minutes:.0f} min/week)"
+                f"{plant['name']} needs high water but zone only gets {total_minutes_per_day:.1f}min/day "
+                f"({schedule_count} schedule{'s' if schedule_count != 1 else ''}, {weekly_minutes:.0f} min/week)"
             )
         elif water == "low" and weekly_minutes > 60:
             mismatches.append(
-                f"{plant['name']} needs low water but zone runs {duration_minutes:.0f}min, "
-                f"{frequency_desc} ({weekly_minutes:.0f} min/week) — risk of overwatering"
+                f"{plant['name']} needs low water but zone gets {total_minutes_per_day:.1f}min/day "
+                f"({schedule_count} schedule{'s' if schedule_count != 1 else ''}, {weekly_minutes:.0f} min/week) — risk of overwatering"
             )
     return mismatches
 
@@ -1715,20 +1789,40 @@ async def get_irrigation_schedules():
     }
 
 
+@router.get("/api/irrigation/zone-totals")
+async def get_zone_totals(request: Request):
+    """Get aggregated daily watering totals per Rachio zone."""
+    require_user(request)
+    person_data = await _fetch_rachio_person_data()
+    if not person_data:
+        return {"zones": [], "error": "Rachio not configured"}
+    totals = await _aggregate_zone_watering(person_data)
+    return {"zones": [{"zone_id": k, **v} for k, v in totals.items()]}
+
+
 @router.get("/api/irrigation/zone/{zone_name}/schedule")
 async def get_zone_schedule(zone_name: str):
-    """Get schedule details for a specific irrigation zone."""
+    """Get schedule details for a specific irrigation zone, with aggregated mismatch analysis."""
     person_data = await _fetch_rachio_person_data()
     hose_programs = await _fetch_hose_timer_programs()
 
     matching_schedules = []
     assigned = _get_beds_for_zone(zone_name)
 
+    # Pre-compute aggregated zone totals for accurate mismatch analysis
+    zone_totals = await _aggregate_zone_watering(person_data)
+    # Build a lookup by zone name (lowered) -> aggregated data
+    zone_totals_by_name: dict = {}
+    for _zid, zt in zone_totals.items():
+        zone_totals_by_name[zt["name"].lower()] = zt
+
+    agg = zone_totals_by_name.get(zone_name.lower())
+    agg_total_min_per_day = agg["total_minutes_per_day"] if agg else 0
+    agg_schedule_count = agg["schedule_count"] if agg else 0
+
     # Check controller schedules
     for device in person_data.get("devices", []):
         zone_map = {z["id"]: z for z in device.get("zones", []) if z.get("enabled")}
-        zone_by_name = {z.get("name", "").lower(): z for z in zone_map.values()}
-        matched_zone = zone_by_name.get(zone_name.lower())
 
         for rule in device.get("scheduleRules", []):
             if not rule.get("enabled"):
@@ -1739,11 +1833,6 @@ async def get_zone_schedule(zone_name: str):
                 if zone_info.get("name", "").lower() == zone_name.lower():
                     duration_min = zone_entry.get("duration", 0) / 60
                     freq = _describe_frequency(rule)
-                    mismatches = _analyze_water_mismatch(
-                        [p for b in assigned for p in b.get("plants", [])],
-                        duration_min,
-                        freq
-                    )
                     matching_schedules.append({
                         "schedule_name": rule.get("name"),
                         "source": "controller",
@@ -1751,7 +1840,6 @@ async def get_zone_schedule(zone_name: str):
                         "duration_minutes": round(duration_min, 1),
                         "start_hour": rule.get("startHour"),
                         "start_minute": rule.get("startMinute"),
-                        "mismatches": mismatches,
                     })
 
     # Check hose timer programs if zone_name matches hose timer
@@ -1771,19 +1859,22 @@ async def get_zone_schedule(zone_name: str):
             else:
                 freq_desc = "unknown"
             total_dur = sum(rt.get("duration", 0) for rt in prog.get("runTimes", [])) / 60
-            mismatches = _analyze_water_mismatch(
-                [p for b in assigned for p in b.get("plants", [])],
-                total_dur,
-                freq_desc
-            )
+            runs_pw = _runs_per_week_from_desc(freq_desc)
+            # For hose timer, aggregate across all programs
+            agg_total_min_per_day += total_dur * runs_pw / 7
+            agg_schedule_count += 1
             matching_schedules.append({
                 "schedule_name": prog.get("name"),
                 "source": "hose_timer",
                 "frequency": freq_desc,
                 "duration_minutes": round(total_dur, 1),
                 "run_times": prog.get("runTimes", []),
-                "mismatches": mismatches,
             })
+
+    # Run mismatch analysis once using aggregated totals
+    all_plants = [p for b in assigned for p in b.get("plants", [])]
+    freq_summary = f"{agg_schedule_count} schedule{'s' if agg_schedule_count != 1 else ''}"
+    mismatches = _analyze_water_mismatch(all_plants, agg_total_min_per_day, agg_schedule_count, freq_summary)
 
     # Get next run from HA calendar
     next_run = None
@@ -1809,6 +1900,9 @@ async def get_zone_schedule(zone_name: str):
         "schedules": matching_schedules,
         "assigned_beds": assigned,
         "next_run": next_run,
+        "mismatches": mismatches,
+        "aggregated_total_minutes_per_day": round(agg_total_min_per_day, 1),
+        "aggregated_schedule_count": agg_schedule_count,
     }
 
 
@@ -1892,18 +1986,21 @@ async def get_bed_irrigation_schedule(bed_id: int):
         result["schedules"] = zone_data.get("schedules", [])
         result["next_watering"] = zone_data.get("next_run")
 
-        # Build watering summary from first enabled schedule
-        if result["schedules"]:
+        # Build watering summary from aggregated totals
+        agg_min = zone_data.get("aggregated_total_minutes_per_day", 0)
+        agg_count = zone_data.get("aggregated_schedule_count", 0)
+        if agg_count > 0:
+            result["watering_summary"] = (
+                f"{agg_min:.1f} min/day ({agg_count} schedule{'s' if agg_count != 1 else ''})"
+            )
+        elif result["schedules"]:
             sched = result["schedules"][0]
             dur = sched.get("duration_minutes", 0)
             freq = sched.get("frequency", "unknown")
             result["watering_summary"] = f"Watered for {dur:.0f} min, {freq}"
 
-            # Collect all mismatches
-            all_mismatches = []
-            for s in result["schedules"]:
-                all_mismatches.extend(s.get("mismatches", []))
-            result["mismatches"] = list(set(all_mismatches))
+        # Use zone-level aggregated mismatches
+        result["mismatches"] = zone_data.get("mismatches", [])
 
         # Get last 7 days of watering history
         cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")

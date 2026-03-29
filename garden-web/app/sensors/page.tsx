@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { getSensorWeather, getSensorRachio, getSensorMoisture, getSensorSummary, getSensorHistoryChart, getIrrigationSummary, getIrrigationSchedules, getIrrigationScheduleHistory, getIrrigationZones, getTempestLocal } from '../api';
+import { getSensorWeather, getSensorRachio, getSensorMoisture, getSensorSummary, getSensorHistoryChart, getIrrigationSummary, getIrrigationSchedules, getIrrigationScheduleHistory, getIrrigationZones, getIrrigationZoneTotals, getTempestLocal } from '../api';
 import { CardSkeleton } from '../skeleton';
 import { formatGardenTime, formatGardenDate, formatGardenDateTime, formatGardenTimeFromDate, getGardenToday } from '../timezone';
 
@@ -391,11 +391,12 @@ export default function SensorsPage() {
   const [scheduleData, setScheduleData] = useState<any>(null);
   const [wateringHistory, setWateringHistory] = useState<any>(null);
   const [zonesData, setZonesData] = useState<any>(null);
+  const [zoneTotals, setZoneTotals] = useState<any>(null);
   const [tempestLocal, setTempestLocal] = useState<{ receiving: boolean; observation: Record<string, any> } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [w, r, m, s, irr, sched, hist, zones, tl] = await Promise.all([
+      const [w, r, m, s, irr, sched, hist, zones, zt, tl] = await Promise.all([
         getSensorWeather().catch(() => null),
         getSensorRachio().catch(() => null),
         getSensorMoisture().catch(() => null),
@@ -404,6 +405,7 @@ export default function SensorsPage() {
         getIrrigationSchedules().catch(() => null),
         getIrrigationScheduleHistory(7).catch(() => null),
         getIrrigationZones().catch(() => null),
+        getIrrigationZoneTotals().catch(() => null),
         getTempestLocal().catch(() => null),
       ]);
       setWeather(w);
@@ -414,6 +416,7 @@ export default function SensorsPage() {
       setScheduleData(sched);
       setWateringHistory(hist);
       setZonesData(zones);
+      setZoneTotals(zt);
       setTempestLocal(tl);
       setError(null);
       setLastUpdated(new Date());
@@ -447,6 +450,14 @@ export default function SensorsPage() {
   const zoneScheduleMap = buildZoneScheduleMap(scheduleData, wateringHistory);
   const upcomingSchedule = buildUpcomingSchedule(scheduleData);
 
+  // Build zone totals lookup by zone name
+  const zoneTotalsMap: Record<string, { total_minutes_per_day: number; schedule_count: number; schedules: any[] }> = {};
+  if (zoneTotals?.zones) {
+    for (const zt of zoneTotals.zones) {
+      zoneTotalsMap[zt.name] = zt;
+    }
+  }
+
   // Build zone cards: merge Rachio API zone data with schedule/assignment data
   const controllerZones: {
     name: string;
@@ -457,6 +468,8 @@ export default function SensorsPage() {
     nextRun: string;
     lastRun: string | null;
     isRunning: boolean;
+    totalMinPerDay: number | null;
+    scheduleCount: number;
   }[] = [];
 
   const hoseTimerValves: typeof controllerZones = [];
@@ -478,6 +491,7 @@ export default function SensorsPage() {
         }
       }
 
+      const zt = zoneTotalsMap[z.name];
       controllerZones.push({
         name: z.name,
         zoneNumber: z.zone_number,
@@ -487,6 +501,8 @@ export default function SensorsPage() {
         nextRun: formatNextRun(schedInfo.nextRunISO),
         lastRun: schedInfo.lastRunLabel,
         isRunning: false,
+        totalMinPerDay: zt?.total_minutes_per_day ?? null,
+        scheduleCount: zt?.schedule_count ?? 0,
       });
     }
 
@@ -514,6 +530,8 @@ export default function SensorsPage() {
         nextRun: formatNextRun(schedInfo.nextRunISO),
         lastRun: schedInfo.lastRunLabel,
         isRunning: false,
+        totalMinPerDay: null,
+        scheduleCount: 0,
       });
     }
   }
@@ -928,6 +946,12 @@ export default function SensorsPage() {
                             <span>{desc}</span>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {zone.totalMinPerDay != null && zone.scheduleCount > 0 && (
+                      <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1.5 bg-blue-50 dark:bg-blue-900/20 rounded px-2 py-1">
+                        Total: {zone.totalMinPerDay} min/day ({zone.scheduleCount} schedule{zone.scheduleCount !== 1 ? 's' : ''})
                       </div>
                     )}
 
