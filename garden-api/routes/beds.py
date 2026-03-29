@@ -565,7 +565,7 @@ def get_bed(bed_id: int):
 
 @router.get("/api/beds/{bed_id}/grid")
 def get_bed_grid(bed_id: int):
-    """Get the bed as a 2D grid with plant placements."""
+    """Get the bed as a 2D grid with plant placements (or flat list for freeform beds)."""
     with get_db() as db:
         bed = db.execute("SELECT * FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
         if not bed:
@@ -589,6 +589,38 @@ def get_bed_grid(bed_id: int):
             GROUP BY planting_id
         """, (bed_id,)).fetchall()
         photo_counts = {r["planting_id"]: r["cnt"] for r in photo_counts_rows}
+
+        # Freeform beds return a flat list with positions instead of a 2D grid
+        if bed.get("bed_type") == "freeform":
+            freeform_plantings = []
+            for p in plantings:
+                p = dict(p)
+                # Load companion/antagonist data for this plant
+                companions_list = db.execute(
+                    "SELECT companion_name, relationship FROM companions WHERE plant_id = ?",
+                    (p["plant_id"],)
+                ).fetchall()
+                entry = {
+                    "planting_id": p["id"],
+                    "plant_id": p["plant_id"],
+                    "plant_name": p["plant_name"],
+                    "category": p["plant_category"],
+                    "status": p["status"],
+                    "planted_date": p["planted_date"],
+                    "photo_count": photo_counts.get(p["id"], 0),
+                    "variety_id": p.get("variety_id"),
+                    "variety_name": p.get("variety_name"),
+                    "variety_desert_rating": p.get("variety_desert_rating"),
+                    "cell_role": p.get("cell_role", "primary"),
+                    "companion_of": p.get("companion_of"),
+                    "position_x_inches": p.get("position_x_inches"),
+                    "position_y_inches": p.get("position_y_inches"),
+                    "spacing_inches": p.get("spacing_inches"),
+                    "companions": [c["companion_name"] for c in companions_list if c["relationship"] == "companion"],
+                    "antagonists": [c["companion_name"] for c in companions_list if c["relationship"] == "antagonist"],
+                }
+                freeform_plantings.append(entry)
+            return {"bed": bed, "grid": [], "freeform_plantings": freeform_plantings}
 
         grid = [[None for _ in range(bed["width_cells"])] for _ in range(bed["height_cells"])]
         companions_grid = [[[] for _ in range(bed["width_cells"])] for _ in range(bed["height_cells"])]
@@ -747,14 +779,16 @@ def create_planting(planting: PlantingCreate, request: Request):
         cursor = db.execute("""
             INSERT INTO plantings (bed_id, plant_id, variety_id, cell_x, cell_y, planted_date,
                                    expected_harvest_date, status, season, year, notes,
-                                   cell_role, companion_of, source, effective_planted_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   cell_role, companion_of, source, effective_planted_date,
+                                   position_x_inches, position_y_inches)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             planting.bed_id, planting.plant_id, planting.variety_id,
             planting.cell_x, planting.cell_y,
             planting.planted_date, expected_harvest,
             initial_status, planting.season, planting.year or CURRENT_YEAR, planting.notes,
             cell_role, companion_of, source, effective_planted_date,
+            planting.position_x_inches, planting.position_y_inches,
         ))
         planting_id = cursor.lastrowid
 
@@ -836,6 +870,27 @@ def delete_planting(planting_id: int, request: Request):
         db.commit()
         return {"ok": True, "undo_id": undo_id}
 
+
+
+@router.patch("/api/plantings/{planting_id}/position")
+async def update_planting_position(planting_id: int, request: Request):
+    """Update a freeform planting's position (x/y in inches)."""
+    require_user(request)
+    body = await request.json()
+    x = body.get("position_x_inches")
+    y = body.get("position_y_inches")
+    if x is None or y is None:
+        raise HTTPException(400, "position_x_inches and position_y_inches are required")
+    with get_db() as db:
+        existing = db.execute("SELECT * FROM plantings WHERE id = ?", (planting_id,)).fetchone()
+        if not existing:
+            raise HTTPException(404, "Planting not found")
+        db.execute(
+            "UPDATE plantings SET position_x_inches = ?, position_y_inches = ? WHERE id = ?",
+            (x, y, planting_id)
+        )
+        db.commit()
+    return {"ok": True}
 
 
 @router.post("/api/plantings/{planting_id}/move")

@@ -132,6 +132,8 @@ class PlantingCreate(BaseModel):
     companion_of: Optional[int] = None
     source: Optional[str] = "seed"
     plant_age_weeks: Optional[int] = None
+    position_x_inches: Optional[float] = None
+    position_y_inches: Optional[float] = None
 
 class PlantingUpdate(BaseModel):
     status: Optional[str] = None

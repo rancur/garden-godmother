@@ -111,6 +111,9 @@ export interface Planting {
   cell_role?: string;
   companion_of?: number | null;
   companions?: Planting[];
+  position_x_inches?: number | null;
+  position_y_inches?: number | null;
+  spacing_inches?: number;
 }
 
 /** Journal feed entry */

@@ -135,10 +135,17 @@ export function deleteBed(id: number) {
 }
 
 // Plantings
-export function createPlanting(data: { bed_id: number; plant_id: number; cell_x: number; cell_y: number; planted_date: string; variety_id?: number; cell_role?: string; companion_of?: number; source?: string; plant_age_weeks?: number }) {
+export function createPlanting(data: { bed_id: number; plant_id: number; cell_x?: number; cell_y?: number; planted_date: string; variety_id?: number; cell_role?: string; companion_of?: number; source?: string; plant_age_weeks?: number; position_x_inches?: number; position_y_inches?: number }) {
   return apiFetch('/api/plantings', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export function updatePlantingPosition(plantingId: number, position_x_inches: number, position_y_inches: number) {
+  return apiFetch(`/api/plantings/${plantingId}/position`, {
+    method: 'PATCH',
+    body: JSON.stringify({ position_x_inches, position_y_inches }),
   });
 }
 

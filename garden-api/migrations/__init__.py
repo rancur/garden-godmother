@@ -2471,4 +2471,15 @@ def startup_run_migrations():
 
         run_migration(db, 53, "all_plant_task_templates", [], callback=_all_plant_templates)
 
+        # ── Migration 054: freeform planting position columns ──
+        def _freeform_planting(db):
+            for col in ["position_x_inches", "position_y_inches"]:
+                try:
+                    db.execute(f"ALTER TABLE plantings ADD COLUMN {col} REAL")
+                except Exception:
+                    pass
+            db.commit()
+
+        run_migration(db, 54, "freeform_planting_positions", [], callback=_freeform_planting)
+
         logger.info("Migration system: all migrations checked/applied")

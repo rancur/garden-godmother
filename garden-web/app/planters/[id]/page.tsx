@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, resizeBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate, getCompanionSuggestions, addCompanion } from '../../api';
+import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, resizeBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate, getCompanionSuggestions, addCompanion, updatePlantingPosition } from '../../api';
+import FreeformPlanterView from '../../components/FreeformPlanterView';
 import SoilAmendments from '../../components/SoilAmendments';
 import SensorReadings from '../../components/SensorReadings';
 import PlantTimeline from '../../components/PlantTimeline';
@@ -305,6 +306,10 @@ export default function BedDetailPage() {
   const [moveGroundAreaId, setMoveGroundAreaId] = useState<number | null>(null);
   const [movingPlant, setMovingPlant] = useState(false);
 
+  // Freeform planting state
+  const [freeformPlantings, setFreeformPlantings] = useState<any[]>([]);
+  const [freeformTapPos, setFreeformTapPos] = useState<{ x: number; y: number } | null>(null);
+
   // Fetch harvest info for a plant (cached)
   const fetchHarvestInfo = useCallback(async (plantId: number) => {
     if (harvestInfoCache[plantId]) return harvestInfoCache[plantId];
@@ -327,11 +332,15 @@ export default function BedDetailPage() {
   const loadBed = useCallback(() => {
     getBedGrid(bedId)
       .then((bedData) => {
-        const grid = normalizePlantingGrid(bedData.grid);
+        const grid = normalizePlantingGrid(bedData.grid || []);
         if (bedData.bed) {
           setBed({ ...bedData.bed, grid });
         } else {
           setBed({ ...bedData, grid: grid || [] });
+        }
+        // Handle freeform plantings
+        if (bedData.freeform_plantings) {
+          setFreeformPlantings(bedData.freeform_plantings.map((p: any) => ({ ...p, id: p.planting_id ?? p.id })));
         }
         // Refresh selectedPlanting from updated grid (e.g. after adding companion)
         if (selectedCell) {
@@ -352,9 +361,13 @@ export default function BedDetailPage() {
         // API returns { bed: { id, name, ... }, grid: [...] }
         // Flatten into BedData shape
         if (bedData.bed) {
-          setBed({ ...bedData.bed, grid: normalizePlantingGrid(bedData.grid) });
+          setBed({ ...bedData.bed, grid: normalizePlantingGrid(bedData.grid || []) });
         } else {
-          setBed({ ...bedData, grid: normalizePlantingGrid(bedData.grid) });
+          setBed({ ...bedData, grid: normalizePlantingGrid(bedData.grid || []) });
+        }
+        // Handle freeform plantings
+        if (bedData.freeform_plantings) {
+          setFreeformPlantings(bedData.freeform_plantings.map((p: any) => ({ ...p, id: p.planting_id ?? p.id })));
         }
         setPlants(plantsData);
         setBedAreas(areasData);
@@ -1904,7 +1917,52 @@ export default function BedDetailPage() {
                 })}
               </div>
             )}
-            {bed.bed_type !== 'vertical' && (<div
+            {/* Freeform layout */}
+            {bed.bed_type === 'freeform' && (
+              <FreeformPlanterView
+                bed={bed}
+                plantings={freeformPlantings}
+                onPlantingClick={(p) => {
+                  setSelectedPlanting(p as any);
+                  setSelectedCell(null);
+                  setFreeformTapPos(null);
+                  setSelectedPlant(null);
+                  setShowCompanionPanel(false);
+                  setCompanionSuggestions(null);
+                  setAddingCompanionMode(false);
+                  setShowSidebar(true);
+                }}
+                onEmptyClick={(x, y) => {
+                  if (selectedPlant) {
+                    // Place selected plant at this position
+                    setPlacing(true);
+                    createPlanting({
+                      bed_id: bedId,
+                      plant_id: selectedPlant.id,
+                      planted_date: getGardenToday(),
+                      position_x_inches: x,
+                      position_y_inches: y,
+                    }).then(() => {
+                      loadBed();
+                      setSelectedPlant(null);
+                      setFreeformTapPos(null);
+                      toast('Plant placed!');
+                    }).catch(() => {
+                      toast('Failed to place plant', 'error');
+                    }).finally(() => setPlacing(false));
+                  } else {
+                    // Open sidebar with plant picker at this position
+                    setFreeformTapPos({ x, y });
+                    setSelectedPlanting(null);
+                    setSelectedCell(null);
+                    setShowSidebar(true);
+                  }
+                }}
+                onRefresh={loadBed}
+                toast={toast}
+              />
+            )}
+            {bed.bed_type !== 'vertical' && bed.bed_type !== 'freeform' && (<div
               className="grid gap-1"
               role="grid"
               aria-label={`${bed.name} planting grid, ${bed.width_cells} columns by ${bed.height_cells} rows`}
@@ -2007,14 +2065,14 @@ export default function BedDetailPage() {
           {/* Mobile overlay backdrop */}
           <div
             className="fixed inset-0 bg-black/30 z-40 lg:hidden"
-            onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
+            onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setFreeformTapPos(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
           />
           <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl p-4 lg:static lg:max-h-none lg:rounded-xl lg:shadow-sm lg:p-0 lg:bg-transparent lg:dark:bg-transparent lg:z-auto w-full lg:w-80 lg:flex-shrink-0 space-y-4">
 
           {/* Close button */}
           <div className="flex justify-end mb-1">
             <button
-              onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
+              onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setFreeformTapPos(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
               className="text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300 text-sm font-bold px-2 py-1 rounded hover:bg-earth-100 dark:hover:bg-gray-700 transition-colors"
               title="Close sidebar"
             >
@@ -2042,7 +2100,11 @@ export default function BedDetailPage() {
                     </p>
                   )}
                   <p className="text-xs text-earth-400 dark:text-gray-500">
-                    Cell ({selectedPlanting.cell_x}, {selectedPlanting.cell_y}) &middot; Planted {selectedPlanting.planted_date}
+                    {bed.bed_type === 'freeform' && selectedPlanting.position_x_inches != null
+                      ? <>Position ({Math.round(selectedPlanting.position_x_inches!)}&quot;, {Math.round(selectedPlanting.position_y_inches!)}&quot;)</>
+                      : <>Cell ({selectedPlanting.cell_x}, {selectedPlanting.cell_y})</>
+                    }
+                    {' '}&middot; Planted {selectedPlanting.planted_date}
                   </p>
                 </div>
               </div>
@@ -2441,7 +2503,7 @@ export default function BedDetailPage() {
                   Remove
                 </button>
                 <button
-                  onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
+                  onClick={() => { setShowSidebar(false); setSelectedPlanting(null); setSelectedPlant(null); setSelectedCell(null); setFreeformTapPos(null); setShowCompanionPanel(false); setCompanionSuggestions(null); setAddingCompanionMode(false); }}
                   className="text-xs text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300"
                 >
                   Close
@@ -2506,6 +2568,13 @@ export default function BedDetailPage() {
             </div>
           )}
 
+          {/* Freeform tap position prompt */}
+          {freeformTapPos && !selectedPlanting && !selectedPlant && bed?.bed_type === 'freeform' && (
+            <div className="bg-garden-50 border border-garden-200 rounded-xl p-4 text-sm text-garden-700">
+              Position ({Math.round(freeformTapPos.x)}&quot;, {Math.round(freeformTapPos.y)}&quot;) &mdash; select a plant below to place it here.
+            </div>
+          )}
+
           {/* Plant picker - only show when no planting is selected (empty cell) */}
           {!selectedPlanting && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 shadow-sm">
@@ -2544,6 +2613,29 @@ export default function BedDetailPage() {
                       if (selectedPlant?.id === plant.id) {
                         // Deselect
                         setSelectedPlant(null);
+                        return;
+                      }
+                      // Freeform: place at tapped position
+                      if (bed?.bed_type === 'freeform' && freeformTapPos) {
+                        setPlacing(true);
+                        try {
+                          await createPlanting({
+                            bed_id: bedId,
+                            plant_id: plant.id,
+                            planted_date: getGardenToday(),
+                            position_x_inches: freeformTapPos.x,
+                            position_y_inches: freeformTapPos.y,
+                          });
+                          loadBed();
+                          setSelectedPlant(null);
+                          setFreeformTapPos(null);
+                          setShowSidebar(false);
+                          toast('Plant placed!');
+                        } catch {
+                          toast('Failed to place plant', 'error');
+                        } finally {
+                          setPlacing(false);
+                        }
                         return;
                       }
                       // If an empty cell is already highlighted, check for varieties first
