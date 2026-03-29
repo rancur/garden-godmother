@@ -426,6 +426,10 @@ export function getIrrigationZoneTotals() {
   return apiFetch('/api/irrigation/zone-totals');
 }
 
+export function getWateringAdequacy() {
+  return apiFetch('/api/irrigation/adequacy');
+}
+
 export function getSensorHistorySummary() {
   return apiFetch('/api/sensors/history/summary');
 }
@@ -740,6 +744,14 @@ export function completeTask(id: number) {
 
 export function skipTask(id: number) {
   return apiFetch(`/api/tasks/${id}/skip`, { method: 'POST' });
+}
+
+export function snoozeTask(id: number, days: number = 1) {
+  return apiFetch(`/api/tasks/${id}/snooze`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ days }),
+  });
 }
 
 export function generateTasks() {

@@ -2482,4 +2482,14 @@ def startup_run_migrations():
 
         run_migration(db, 54, "freeform_planting_positions", [], callback=_freeform_planting)
 
+        # ── Migration 055: task snooze column ──
+        def _task_snooze(db):
+            try:
+                db.execute("ALTER TABLE garden_tasks ADD COLUMN snoozed_until TEXT")
+            except Exception:
+                pass
+            db.commit()
+
+        run_migration(db, 55, "task_snooze", [], callback=_task_snooze)
+
         logger.info("Migration system: all migrations checked/applied")

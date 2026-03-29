@@ -163,6 +163,27 @@ def complete_task(task_id: int):
         return _enrich_tasks(db, tasks)[0]
 
 
+@router.patch("/api/tasks/{task_id}/snooze")
+async def snooze_task(task_id: int, request: Request):
+    """Snooze a task for N days (default 1)."""
+    require_user(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    days = body.get("days", 1)
+    if not isinstance(days, int) or days < 1:
+        raise HTTPException(400, "days must be a positive integer")
+    snooze_until = (date.today() + timedelta(days=days)).isoformat()
+    with get_db() as db:
+        existing = db.execute("SELECT id FROM garden_tasks WHERE id = ?", (task_id,)).fetchone()
+        if not existing:
+            raise HTTPException(404, "Task not found")
+        db.execute("UPDATE garden_tasks SET snoozed_until = ? WHERE id = ?", (snooze_until, task_id))
+        db.commit()
+    return {"ok": True, "snoozed_until": snooze_until}
+
+
 @router.post("/api/tasks/{task_id}/skip")
 def skip_task(task_id: int):
     with get_db() as db:
@@ -1101,6 +1122,52 @@ def generate_tasks():
         except Exception:
             pass
 
+        # ── Sensor-driven watering tasks ──
+        try:
+            assignments = db.execute(
+                "SELECT sa.*, gb.name as bed_name FROM sensor_assignments sa LEFT JOIN garden_beds gb ON sa.target_type = 'bed' AND sa.target_id = gb.id WHERE sa.sensor_role = 'soil_moisture'"
+            ).fetchall()
+
+            ha_cfg = get_ha_config()
+            ha_url = ha_cfg.get("url", "") if ha_cfg else ""
+            ha_token = ha_cfg.get("token", "") if ha_cfg else ""
+
+            for sa in assignments:
+                sa = dict(sa)
+                entity_id = sa.get("entity_id")
+                if not entity_id or not ha_url or not ha_token:
+                    continue
+                try:
+                    import httpx
+                    resp = httpx.get(
+                        f"{ha_url}/api/states/{entity_id}",
+                        headers={"Authorization": f"Bearer {ha_token}"},
+                        timeout=5,
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    state_data = resp.json()
+                    state_val = state_data.get("state")
+                    if state_val in ("unavailable", "unknown", None):
+                        continue
+                    moisture = float(state_val)
+                except Exception:
+                    continue
+
+                bed_id = sa.get("target_id") if sa.get("target_type") == "bed" else None
+                bed_name = sa.get("bed_name") or "garden area"
+
+                if moisture < 20:
+                    title = f"Urgent: Water {bed_name} (moisture {moisture:.0f}%)"
+                    insert_task("water", title, f"Soil moisture sensor reading {moisture:.0f}% — critically low. Water immediately.",
+                               "urgent", today_str, bed_id=bed_id, source="auto:sensor_moisture")
+                elif moisture < 30:
+                    title = f"Water {bed_name} (moisture {moisture:.0f}%)"
+                    insert_task("water", title, f"Soil moisture sensor reading {moisture:.0f}% — getting low.",
+                               "high", today_str, bed_id=bed_id, source="auto:sensor_moisture")
+        except Exception:
+            pass
+
         # Mark overdue tasks
         db.execute(
             "UPDATE garden_tasks SET status = 'overdue' WHERE due_date < ? AND status = 'pending'",
@@ -1208,8 +1275,9 @@ def tasks_today():
         rows = db.execute(
             """SELECT * FROM garden_tasks
                WHERE (due_date <= ? OR status = 'overdue') AND status NOT IN ('completed', 'skipped')
+               AND (snoozed_until IS NULL OR snoozed_until <= ?)
                ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, due_date ASC""",
-            (today_str,)
+            (today_str, today_str)
         ).fetchall()
         tasks = [_task_row_to_dict(r) for r in rows]
         # Belt + suspenders: filter out water tasks for auto-watered or empty planters
@@ -1249,8 +1317,9 @@ def tasks_week():
         rows = db.execute(
             """SELECT * FROM garden_tasks
                WHERE ((due_date >= ? AND due_date <= ?) OR status = 'overdue') AND status NOT IN ('completed', 'skipped')
+               AND (snoozed_until IS NULL OR snoozed_until <= ?)
                ORDER BY due_date ASC, CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END""",
-            (today_str, week_end)
+            (today_str, week_end, today_str)
         ).fetchall()
         tasks = [_task_row_to_dict(r) for r in rows]
         enriched = _enrich_tasks(db, tasks)
@@ -1269,16 +1338,16 @@ def tasks_summary():
         total = db.execute("SELECT COUNT(*) as c FROM garden_tasks").fetchone()["c"]
         by_status = db.execute("SELECT status, COUNT(*) as c FROM garden_tasks GROUP BY status").fetchall()
         overdue = db.execute(
-            "SELECT COUNT(*) as c FROM garden_tasks WHERE (status = 'overdue' OR (due_date < ? AND status = 'pending'))",
-            (today_str,)
+            "SELECT COUNT(*) as c FROM garden_tasks WHERE (status = 'overdue' OR (due_date < ? AND status = 'pending')) AND (snoozed_until IS NULL OR snoozed_until <= ?)",
+            (today_str, today_str)
         ).fetchone()["c"]
         due_today = db.execute(
-            "SELECT COUNT(*) as c FROM garden_tasks WHERE due_date = ? AND status NOT IN ('completed', 'skipped')",
-            (today_str,)
+            "SELECT COUNT(*) as c FROM garden_tasks WHERE due_date = ? AND status NOT IN ('completed', 'skipped') AND (snoozed_until IS NULL OR snoozed_until <= ?)",
+            (today_str, today_str)
         ).fetchone()["c"]
         due_this_week = db.execute(
-            "SELECT COUNT(*) as c FROM garden_tasks WHERE due_date >= ? AND due_date <= ? AND status NOT IN ('completed', 'skipped')",
-            (today_str, week_end)
+            "SELECT COUNT(*) as c FROM garden_tasks WHERE due_date >= ? AND due_date <= ? AND status NOT IN ('completed', 'skipped') AND (snoozed_until IS NULL OR snoozed_until <= ?)",
+            (today_str, week_end, today_str)
         ).fetchone()["c"]
         return {
             "total": total,

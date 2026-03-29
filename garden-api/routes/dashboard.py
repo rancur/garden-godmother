@@ -91,12 +91,12 @@ def get_dashboard(request: Request):
 
         # Tasks
         tasks_due_today = db.execute(
-            "SELECT COUNT(*) as c FROM garden_tasks WHERE due_date = ? AND status NOT IN ('completed','skipped')",
-            (today_str,)
+            "SELECT COUNT(*) as c FROM garden_tasks WHERE due_date = ? AND status NOT IN ('completed','skipped') AND (snoozed_until IS NULL OR snoozed_until <= ?)",
+            (today_str, today_str)
         ).fetchone()["c"]
         tasks_overdue = db.execute(
-            "SELECT COUNT(*) as c FROM garden_tasks WHERE (status = 'overdue' OR (due_date < ? AND status = 'pending'))",
-            (today_str,)
+            "SELECT COUNT(*) as c FROM garden_tasks WHERE (status = 'overdue' OR (due_date < ? AND status = 'pending')) AND (snoozed_until IS NULL OR snoozed_until <= ?)",
+            (today_str, today_str)
         ).fetchone()["c"]
 
         # ── Recent Activity (from audit_log) ──

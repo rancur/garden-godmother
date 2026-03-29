@@ -9,6 +9,7 @@ import {
   createTask,
   completeTask,
   skipTask,
+  snoozeTask,
   deleteTask,
   updateTask,
   generateTasks,
@@ -39,6 +40,7 @@ interface Task {
   auto_generated: number;
   source: string | null;
   notes: string | null;
+  snoozed_until: string | null;
   created_at: string;
   plant_name: string | null;
   bed_name: string | null;
@@ -222,6 +224,25 @@ export default function TasksPage() {
     } catch { toast('Failed to skip task', 'error'); }
   };
 
+  const [snoozeMenuId, setSnoozeMenuId] = useState<number | null>(null);
+
+  const handleSnooze = async (id: number, days: number) => {
+    setSnoozeMenuId(null);
+    try {
+      const result = await snoozeTask(id, days);
+      await loadData();
+      toast(`Snoozed until ${result.snoozed_until}`);
+    } catch { toast('Failed to snooze task', 'error'); }
+  };
+
+  // Close snooze menu when clicking outside
+  useEffect(() => {
+    if (snoozeMenuId === null) return;
+    const handler = () => setSnoozeMenuId(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [snoozeMenuId]);
+
   const handleDelete = async (id: number) => {
     if (!await showConfirm({ title: 'Delete Task', message: 'Delete this task?', confirmText: 'Delete', destructive: true })) return;
     try {
@@ -335,6 +356,22 @@ export default function TasksPage() {
                   from template
                 </span>
               )}
+              {task.source === 'auto:stage_trigger' && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                  growth stage
+                </span>
+              )}
+              {task.source === 'auto:sensor_moisture' && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-300">
+                  sensor
+                </span>
+              )}
+              {task.snoozed_until && task.snoozed_until > getGardenToday() && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center gap-0.5">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  snoozed until {formatDate(task.snoozed_until)}
+                </span>
+              )}
             </div>
 
             {task.description && (
@@ -393,7 +430,34 @@ export default function TasksPage() {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0 relative">
+            {task.status !== 'completed' && task.status !== 'skipped' && (
+              <div className="relative">
+                <button
+                  onClick={() => handleSnooze(task.id, 1)}
+                  onContextMenu={(e) => { e.preventDefault(); setSnoozeMenuId(snoozeMenuId === task.id ? null : task.id); }}
+                  className="p-1.5 rounded text-earth-400 dark:text-gray-500 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-500 dark:hover:text-amber-400 transition-colors"
+                  title="Snooze 1 day (right-click for more options)"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+                {snoozeMenuId === task.id && (
+                  <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-earth-200 dark:border-gray-600 rounded-lg shadow-lg z-50 py-1 min-w-[120px]">
+                    {[1, 2, 3, 7].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => handleSnooze(task.id, d)}
+                        className="w-full text-left px-3 py-1.5 text-sm text-earth-700 dark:text-gray-300 hover:bg-earth-50 dark:hover:bg-gray-700"
+                      >
+                        {d === 1 ? 'Tomorrow' : `${d} days`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {task.status !== 'completed' && task.status !== 'skipped' && (
               <button
                 onClick={() => handleSkip(task.id)}

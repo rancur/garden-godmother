@@ -12,6 +12,7 @@ from db import get_db, row_to_dict
 from auth import require_user, audit_log
 from models import HarvestCreate
 from constants import create_undo_action
+from routes.beds import _trigger_growth_stage_tasks
 
 router = APIRouter()
 
@@ -122,6 +123,10 @@ def create_harvest(harvest: HarvestCreate, request: Request):
         if harvest.final_harvest:
             if planting_id:
                 db.execute("UPDATE plantings SET status = 'harvested' WHERE id = ?", (planting_id,))
+                try:
+                    _trigger_growth_stage_tasks(db, planting_id, 'harvested', date.today().isoformat())
+                except Exception:
+                    pass
             if instance_id:
                 db.execute("UPDATE plant_instances SET status = 'harvested' WHERE id = ?", (instance_id,))
             elif planting_id:

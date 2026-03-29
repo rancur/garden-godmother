@@ -22,6 +22,35 @@ from constants import CURRENT_YEAR, create_undo_action
 router = APIRouter()
 
 
+def _trigger_growth_stage_tasks(db, planting_id, new_status, today_str):
+    """Generate template tasks triggered by a growth stage change."""
+    planting = db.execute(
+        "SELECT p.*, pl.name as plant_name, pl.id as plant_id_ref FROM plantings p JOIN plants pl ON p.plant_id = pl.id WHERE p.id = ?",
+        (planting_id,)
+    ).fetchone()
+    if not planting:
+        return
+    p = dict(planting)
+
+    templates = db.execute(
+        "SELECT * FROM plant_task_templates WHERE (plant_id = ? OR plant_name = ?) AND trigger_type = 'growth_stage' AND trigger_value = ?",
+        (p["plant_id_ref"], p["plant_name"], new_status)
+    ).fetchall()
+
+    for t in templates:
+        t = dict(t)
+        title = t["title_template"].replace("{plant_name}", p["plant_name"])
+        existing = db.execute(
+            "SELECT id FROM garden_tasks WHERE title = ? AND plant_id = ? AND bed_id = ? AND status IN ('pending','overdue')",
+            (title, p["plant_id_ref"], p.get("bed_id"))
+        ).fetchone()
+        if not existing:
+            db.execute(
+                "INSERT INTO garden_tasks (task_type, title, description, priority, due_date, plant_id, bed_id, auto_generated, source) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'auto:stage_trigger')",
+                (t["task_type"], title, t["description_template"] or "", t["priority"], today_str, p["plant_id_ref"], p.get("bed_id"))
+            )
+
+
 # ──────────────── GARDEN BED TEMPLATES ────────────────
 
 GARDEN_TEMPLATES = [
@@ -839,6 +868,12 @@ def update_planting(planting_id: int, update: PlantingUpdate, request: Request):
                 audit_log(db, user['id'], 'update', 'planting', planting_id,
                           details,
                           request.client.host if request.client else None)
+            # Trigger growth-stage tasks when status changes
+            if update.status and update.status != existing['status']:
+                try:
+                    _trigger_growth_stage_tasks(db, planting_id, update.status, date.today().isoformat())
+                except Exception:
+                    pass
             db.commit()
 
         return {"ok": True}
