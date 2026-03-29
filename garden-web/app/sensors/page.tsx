@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { getSensorWeather, getSensorRachio, getSensorMoisture, getSensorSummary, getSensorHistoryChart, getIrrigationSummary, getIrrigationSchedules, getIrrigationScheduleHistory, getIrrigationZones, getIrrigationZoneTotals, getTempestLocal } from '../api';
+import { getSensorWeather, getSensorRachio, getSensorMoisture, getSensorSummary, getSensorHistoryChart, getTempestLocal } from '../api';
 import { CardSkeleton } from '../skeleton';
-import { formatGardenTime, formatGardenDate, formatGardenDateTime, formatGardenTimeFromDate, getGardenToday } from '../timezone';
+import { formatGardenTimeFromDate } from '../timezone';
 
 /** Returns true if value is null, undefined, "unknown", or "unavailable" */
 function isInvalid(v: unknown): boolean {
@@ -171,213 +171,6 @@ function recommendationIcon(action: string): string {
   }
 }
 
-/** Format a time like "7:00 AM" from hour/minute numbers */
-function formatTime(hour: number | null | undefined, minute: number | null | undefined): string {
-  if (hour == null) return '';
-  const h = hour % 12 || 12;
-  const m = String(minute ?? 0).padStart(2, '0');
-  const ampm = hour < 12 ? 'AM' : 'PM';
-  return `${h}:${m} ${ampm}`;
-}
-
-/** Build a lookup: zone_name -> { schedules, next_run_time, last_run } from schedule + history data */
-function buildZoneScheduleMap(scheduleData: any, wateringHistory: any): Record<string, {
-  scheduleDescriptions: string[];
-  nextRunISO: string | null;
-  lastRunLabel: string | null;
-}> {
-  const map: Record<string, { scheduleDescriptions: string[]; nextRunISO: string | null; lastRunLabel: string | null }> = {};
-
-  const ensure = (name: string) => {
-    if (!map[name]) map[name] = { scheduleDescriptions: [], nextRunISO: null, lastRunLabel: null };
-  };
-
-  // Controller schedules
-  if (scheduleData?.controller_schedules) {
-    for (const sched of scheduleData.controller_schedules) {
-      if (!sched.enabled) continue;
-      for (const z of sched.zones || []) {
-        const name = z.zone_name;
-        ensure(name);
-        const timeStr = formatTime(sched.start_hour, sched.start_minute);
-        map[name].scheduleDescriptions.push(
-          `${sched.frequency}, ${z.duration_minutes}min${timeStr ? ` @ ${timeStr}` : ''} (${sched.name})`
-        );
-        // Compute next run from schedule data
-        if (sched.start_hour != null) {
-          const nextRun = computeNextRun(sched.start_hour, sched.start_minute ?? 0);
-          if (!map[name].nextRunISO || nextRun < map[name].nextRunISO!) {
-            map[name].nextRunISO = nextRun;
-          }
-        }
-      }
-    }
-  }
-
-  // Hose timer schedules
-  if (scheduleData?.hose_timer_schedules) {
-    for (const prog of scheduleData.hose_timer_schedules) {
-      if (!prog.enabled) continue;
-      for (const rt of prog.run_times || []) {
-        // Hose timer run times apply to the valve itself
-        const name = '__hose_timer__';
-        ensure(name);
-        const durMin = Math.round((rt.duration_seconds || 0) / 60);
-        const timeStr = formatTime(rt.start_hour, rt.start_minute);
-        map[name].scheduleDescriptions.push(
-          `${prog.frequency}, ${durMin}min${timeStr ? ` @ ${timeStr}` : ''} (${prog.name})`
-        );
-        if (rt.start_hour != null) {
-          const nextRun = computeNextRun(rt.start_hour, rt.start_minute ?? 0);
-          if (!map[name].nextRunISO || nextRun < map[name].nextRunISO!) {
-            map[name].nextRunISO = nextRun;
-          }
-        }
-      }
-    }
-  }
-
-  // Last run from history
-  if (wateringHistory?.controller_events) {
-    for (const evt of wateringHistory.controller_events) {
-      const name = evt.zone_name;
-      if (!name) continue;
-      ensure(name);
-      if (!map[name].lastRunLabel) {
-        const d = new Date(evt.recorded_at);
-        const durStr = evt.duration_minutes != null ? ` (${evt.duration_minutes} min)` : '';
-        map[name].lastRunLabel = `${formatRelativeDate(d)}${durStr}`;
-      }
-    }
-  }
-
-  if (wateringHistory?.hose_timer_daily?.length > 0) {
-    const latest = wateringHistory.hose_timer_daily[0];
-    ensure('__hose_timer__');
-    if (!map['__hose_timer__'].lastRunLabel) {
-      map['__hose_timer__'].lastRunLabel = `${latest.date} (${latest.total_duration_minutes} min, ${latest.run_count} runs)`;
-    }
-  }
-
-  return map;
-}
-
-function computeNextRun(startHour: number, startMinute: number): string {
-  const now = new Date();
-  const next = new Date(now);
-  next.setHours(startHour, startMinute, 0, 0);
-  if (next <= now) {
-    next.setDate(next.getDate() + 1);
-  }
-  return next.toISOString();
-}
-
-function formatRelativeDate(d: Date): string {
-  const todayStr = getGardenToday();
-  const targetStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix' }).format(d);
-  const todayDate = new Date(todayStr + 'T00:00:00');
-  const targetDate = new Date(targetStr + 'T00:00:00');
-  const diffDays = Math.round((todayDate.getTime() - targetDate.getTime()) / 86400000);
-
-  const timeStr = formatGardenTimeFromDate(d, { hour: 'numeric', minute: '2-digit' });
-  if (diffDays === 0) return `Today ${timeStr}`;
-  if (diffDays === 1) return `Yesterday ${timeStr}`;
-  return `${formatGardenDate(d.toISOString())} ${timeStr}`;
-}
-
-function formatNextRun(isoStr: string | null): string {
-  if (!isoStr) return 'No upcoming run';
-  const d = new Date(isoStr);
-  const todayStr = getGardenToday();
-  const targetStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix' }).format(d);
-  const todayDate = new Date(todayStr + 'T00:00:00');
-  const targetDate = new Date(targetStr + 'T00:00:00');
-  const diffDays = Math.round((targetDate.getTime() - todayDate.getTime()) / 86400000);
-  const timeStr = formatGardenTimeFromDate(d, { hour: 'numeric', minute: '2-digit' });
-
-  if (diffDays === 0) return `Today ${timeStr}`;
-  if (diffDays === 1) return `Tomorrow ${timeStr}`;
-  return `${formatGardenDate(isoStr, { weekday: 'short', month: 'short', day: 'numeric' })} ${timeStr}`;
-}
-
-/** Build a 7-day upcoming schedule view grouped by day */
-function buildUpcomingSchedule(scheduleData: any): { day: string; dateStr: string; runs: { zoneName: string; time: string; durationMin: number }[] }[] {
-  if (!scheduleData) return [];
-
-  const days: { day: string; dateStr: string; runs: { zoneName: string; time: string; durationMin: number }[] }[] = [];
-
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(Date.now() + i * 86400000);
-    const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix' }).format(d);
-    const dayLabel = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : formatGardenDate(d.toISOString(), { weekday: 'short', month: 'short', day: 'numeric' });
-    const runs: { zoneName: string; time: string; durationMin: number }[] = [];
-
-    // Controller schedules
-    for (const sched of scheduleData.controller_schedules || []) {
-      if (!sched.enabled) continue;
-      if (!shouldRunOnDate(sched, d)) continue;
-      for (const z of sched.zones || []) {
-        runs.push({
-          zoneName: z.zone_name,
-          time: formatTime(sched.start_hour, sched.start_minute),
-          durationMin: z.duration_minutes,
-        });
-      }
-    }
-
-    // Hose timer schedules
-    for (const prog of scheduleData.hose_timer_schedules || []) {
-      if (!prog.enabled) continue;
-      if (!shouldHoseRunOnDate(prog, d)) continue;
-      for (const rt of prog.run_times || []) {
-        runs.push({
-          zoneName: 'Seed Trays (Hose Timer)',
-          time: formatTime(rt.start_hour, rt.start_minute),
-          durationMin: Math.round((rt.duration_seconds || 0) / 60),
-        });
-      }
-    }
-
-    if (runs.length > 0) {
-      // Sort by time
-      runs.sort((a, b) => a.time.localeCompare(b.time));
-      days.push({ day: dayLabel, dateStr, runs });
-    }
-  }
-
-  return days;
-}
-
-function shouldRunOnDate(sched: any, date: Date): boolean {
-  // Simple heuristic based on frequency description
-  const freq = (sched.frequency || '').toLowerCase();
-  if (freq === 'daily') return true;
-  if (freq.includes('every 2 days')) return true; // approximate
-  if (freq.includes('every')) return true; // approximate for interval-based
-  // Check specific days
-  const dayMap: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
-  const dayOfWeek = date.getDay();
-  for (const [name, num] of Object.entries(dayMap)) {
-    if (freq.includes(name) && dayOfWeek === num) return true;
-  }
-  // If frequency contains day names but none match, skip
-  if (Object.keys(dayMap).some(d => freq.includes(d))) return false;
-  return true; // default to showing
-}
-
-function shouldHoseRunOnDate(prog: any, date: Date): boolean {
-  const freq = (prog.frequency || '').toLowerCase();
-  if (freq === 'daily') return true;
-  if (freq.includes('every')) return true;
-  const dayMap: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
-  const dayOfWeek = date.getDay();
-  for (const [name, num] of Object.entries(dayMap)) {
-    if (freq.includes(name) && dayOfWeek === num) return true;
-  }
-  if (Object.keys(dayMap).some(d => freq.includes(d))) return false;
-  return true;
-}
-
 export default function SensorsPage() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [rachio, setRachio] = useState<RachioData | null>(null);
@@ -387,36 +180,21 @@ export default function SensorsPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
-  const [irrigationSummary, setIrrigationSummary] = useState<any>(null);
-  const [scheduleData, setScheduleData] = useState<any>(null);
-  const [wateringHistory, setWateringHistory] = useState<any>(null);
-  const [zonesData, setZonesData] = useState<any>(null);
-  const [zoneTotals, setZoneTotals] = useState<any>(null);
   const [tempestLocal, setTempestLocal] = useState<{ receiving: boolean; observation: Record<string, any> } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [w, r, m, s, irr, sched, hist, zones, zt, tl] = await Promise.all([
+      const [w, r, m, s, tl] = await Promise.all([
         getSensorWeather().catch(() => null),
         getSensorRachio().catch(() => null),
         getSensorMoisture().catch(() => null),
         getSensorSummary().catch(() => null),
-        getIrrigationSummary().catch(() => null),
-        getIrrigationSchedules().catch(() => null),
-        getIrrigationScheduleHistory(7).catch(() => null),
-        getIrrigationZones().catch(() => null),
-        getIrrigationZoneTotals().catch(() => null),
         getTempestLocal().catch(() => null),
       ]);
       setWeather(w);
       setRachio(r);
       setMoisture(m);
       setSummary(s);
-      setIrrigationSummary(irr);
-      setScheduleData(sched);
-      setWateringHistory(hist);
-      setZonesData(zones);
-      setZoneTotals(zt);
       setTempestLocal(tl);
       setError(null);
       setLastUpdated(new Date());
@@ -445,109 +223,6 @@ export default function SensorsPage() {
     const interval = setInterval(fetchData, 60_000);
     return () => clearInterval(interval);
   }, [fetchData]);
-
-  // Build zone schedule map for zone cards
-  const zoneScheduleMap = buildZoneScheduleMap(scheduleData, wateringHistory);
-  const upcomingSchedule = buildUpcomingSchedule(scheduleData);
-
-  // Build zone totals lookup by zone name
-  const zoneTotalsMap: Record<string, { total_minutes_per_day: number; schedule_count: number; schedules: any[] }> = {};
-  if (zoneTotals?.zones) {
-    for (const zt of zoneTotals.zones) {
-      zoneTotalsMap[zt.name] = zt;
-    }
-  }
-
-  // Build zone cards: merge Rachio API zone data with schedule/assignment data
-  const controllerZones: {
-    name: string;
-    zoneNumber: number | null;
-    deviceName: string;
-    assignedBeds: string[];
-    scheduleDesc: string[];
-    nextRun: string;
-    lastRun: string | null;
-    isRunning: boolean;
-    totalMinPerDay: number | null;
-    scheduleCount: number;
-  }[] = [];
-
-  const hoseTimerValves: typeof controllerZones = [];
-
-  if (zonesData) {
-    // Controller zones
-    for (const z of zonesData.zones || []) {
-      const schedInfo = zoneScheduleMap[z.name] || { scheduleDescriptions: [], nextRunISO: null, lastRunLabel: null };
-      // Find assigned beds from irrigation summary
-      const assignedBeds: string[] = [];
-      if (irrigationSummary?.beds) {
-        for (const b of irrigationSummary.beds) {
-          if (b.irrigation_zone_name === z.name) assignedBeds.push(b.name);
-        }
-      }
-      if (irrigationSummary?.ground_plants) {
-        for (const gp of irrigationSummary.ground_plants) {
-          if (gp.irrigation_zone_name === z.name) assignedBeds.push(gp.name);
-        }
-      }
-
-      const zt = zoneTotalsMap[z.name];
-      controllerZones.push({
-        name: z.name,
-        zoneNumber: z.zone_number,
-        deviceName: z.device_name,
-        assignedBeds,
-        scheduleDesc: schedInfo.scheduleDescriptions,
-        nextRun: formatNextRun(schedInfo.nextRunISO),
-        lastRun: schedInfo.lastRunLabel,
-        isRunning: false,
-        totalMinPerDay: zt?.total_minutes_per_day ?? null,
-        scheduleCount: zt?.schedule_count ?? 0,
-      });
-    }
-
-    // Hose timer valves
-    for (const v of zonesData.valves || []) {
-      const schedInfo = zoneScheduleMap['__hose_timer__'] || { scheduleDescriptions: [], nextRunISO: null, lastRunLabel: null };
-      const assignedBeds: string[] = [];
-      if (irrigationSummary?.beds) {
-        for (const b of irrigationSummary.beds) {
-          if (b.irrigation_type === 'rachio_hose_timer') assignedBeds.push(b.name);
-        }
-      }
-      if (irrigationSummary?.trays) {
-        for (const t of irrigationSummary.trays) {
-          if (t.irrigation_type === 'rachio_hose_timer') assignedBeds.push(`${t.name} (tray)`);
-        }
-      }
-
-      hoseTimerValves.push({
-        name: v.name,
-        zoneNumber: null,
-        deviceName: v.device_name,
-        assignedBeds,
-        scheduleDesc: schedInfo.scheduleDescriptions,
-        nextRun: formatNextRun(schedInfo.nextRunISO),
-        lastRun: schedInfo.lastRunLabel,
-        isRunning: false,
-        totalMinPerDay: null,
-        scheduleCount: 0,
-      });
-    }
-  }
-
-  // Check if any zone is currently running
-  if (rachio?.next_scheduled_run?.active && rachio.next_scheduled_run.message) {
-    const runningMsg = rachio.next_scheduled_run.message.toLowerCase();
-    for (const z of controllerZones) {
-      if (runningMsg.includes(z.name.toLowerCase())) {
-        z.isRunning = true;
-      }
-    }
-  }
-
-  // Sort controller zones by zone number
-  controllerZones.sort((a, b) => (a.zoneNumber ?? 99) - (b.zoneNumber ?? 99));
 
   if (loading) {
     return (
@@ -853,8 +528,11 @@ export default function SensorsPage() {
         </div>
       </div>
 
-      {/* ===== SECTION 3: IRRIGATION ===== */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-earth-200 dark:border-gray-700 overflow-hidden">
+      {/* ===== SECTION 3: IRRIGATION (link to dedicated page) ===== */}
+      <Link
+        href="/irrigation"
+        className="block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-earth-200 dark:border-gray-700 overflow-hidden hover:border-garden-400 dark:hover:border-garden-600 transition-colors group"
+      >
         <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -874,197 +552,22 @@ export default function SensorsPage() {
             )}
           </div>
         </div>
-        <div className="p-6 space-y-6">
-          {/* Currently Running Banner */}
-          {rachio?.next_scheduled_run?.active && (
-            <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg animate-pulse">
-              <span className="text-xl">{'\uD83D\uDCA7'}</span>
-              <div>
-                <div className="font-semibold text-blue-800 dark:text-blue-300">Currently Watering</div>
-                {rachio.next_scheduled_run.message && (
-                  <div className="text-sm text-blue-600 dark:text-blue-400">{rachio.next_scheduled_run.message}</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Manual Watering Alert */}
-          {irrigationSummary?.manual_needing_water_today?.length > 0 && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <div className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-1">
-                {'\uD83E\uDEA3'} Needs Manual Watering Today
-              </div>
-              <div className="text-sm text-amber-600 dark:text-amber-400">
-                {irrigationSummary.manual_needing_water_today.map((b: any) => b.name).join(', ')}
-              </div>
-            </div>
-          )}
-
-          {/* Controller Zones */}
-          {controllerZones.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-earth-600 dark:text-gray-300 mb-3 flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
-                Controller: &ldquo;{zonesData?.device || 'Our Forest'}&rdquo;
-                <span className="text-xs font-normal text-earth-400 dark:text-gray-500">&mdash; {controllerZones.length} zones</span>
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {controllerZones.map((zone) => (
-                  <div
-                    key={zone.name}
-                    className={`border rounded-lg p-4 ${
-                      zone.isRunning
-                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
-                        : 'bg-white dark:bg-gray-800 border-earth-200 dark:border-gray-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-semibold text-earth-800 dark:text-gray-200 flex items-center gap-2">
-                        {'\uD83D\uDCA7'} {zone.name}
-                        {zone.zoneNumber != null && (
-                          <span className="text-xs font-normal text-earth-400 dark:text-gray-500">(Zone {zone.zoneNumber})</span>
-                        )}
-                      </div>
-                      {zone.isRunning && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 animate-pulse">
-                          Running
-                        </span>
-                      )}
-                    </div>
-
-                    {zone.assignedBeds.length > 0 && (
-                      <div className="text-xs text-earth-500 dark:text-gray-400 mb-2">
-                        <span className="font-medium">Waters:</span> {zone.assignedBeds.join(', ')}
-                      </div>
-                    )}
-
-                    {zone.scheduleDesc.length > 0 && (
-                      <div className="text-xs text-earth-500 dark:text-gray-400 mb-1.5 space-y-0.5">
-                        {zone.scheduleDesc.map((desc, i) => (
-                          <div key={i} className="flex items-start gap-1">
-                            <span className="text-green-500 mt-0.5">{'\u2022'}</span>
-                            <span>{desc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {zone.totalMinPerDay != null && zone.scheduleCount > 0 && (
-                      <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1.5 bg-blue-50 dark:bg-blue-900/20 rounded px-2 py-1">
-                        Total: {zone.totalMinPerDay} min/day ({zone.scheduleCount} schedule{zone.scheduleCount !== 1 ? 's' : ''})
-                      </div>
-                    )}
-
-                    <div className="mt-2 pt-2 border-t border-earth-100 dark:border-gray-700 text-xs space-y-0.5">
-                      <div className="flex justify-between text-earth-500 dark:text-gray-400">
-                        <span>Next run</span>
-                        <span className="font-medium text-earth-700 dark:text-gray-300">{zone.nextRun}</span>
-                      </div>
-                      {zone.lastRun && (
-                        <div className="flex justify-between text-earth-500 dark:text-gray-400">
-                          <span>Last run</span>
-                          <span>{zone.lastRun}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Hose Timer */}
-          {hoseTimerValves.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-earth-600 dark:text-gray-300 mb-3 flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-teal-500"></span>
-                Hose Timer: &ldquo;Seed Trays&rdquo;
-                <span className="text-xs font-normal text-earth-400 dark:text-gray-500">&mdash; {hoseTimerValves.length} valve</span>
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {hoseTimerValves.map((valve) => (
-                  <div
-                    key={valve.name}
-                    className="border rounded-lg p-4 bg-white dark:bg-gray-800 border-earth-200 dark:border-gray-700"
-                  >
-                    <div className="font-semibold text-earth-800 dark:text-gray-200 flex items-center gap-2 mb-2">
-                      {'\uD83D\uDCA7'} {valve.name}
-                    </div>
-
-                    {valve.assignedBeds.length > 0 && (
-                      <div className="text-xs text-earth-500 dark:text-gray-400 mb-2">
-                        <span className="font-medium">Waters:</span> {valve.assignedBeds.join(', ')}
-                      </div>
-                    )}
-
-                    {valve.scheduleDesc.length > 0 && (
-                      <div className="text-xs text-earth-500 dark:text-gray-400 mb-1.5 space-y-0.5">
-                        {valve.scheduleDesc.map((desc, i) => (
-                          <div key={i} className="flex items-start gap-1">
-                            <span className="text-teal-500 mt-0.5">{'\u2022'}</span>
-                            <span>{desc}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-2 pt-2 border-t border-earth-100 dark:border-gray-700 text-xs space-y-0.5">
-                      <div className="flex justify-between text-earth-500 dark:text-gray-400">
-                        <span>Next run</span>
-                        <span className="font-medium text-earth-700 dark:text-gray-300">{valve.nextRun}</span>
-                      </div>
-                      {valve.lastRun && (
-                        <div className="flex justify-between text-earth-500 dark:text-gray-400">
-                          <span>Last run</span>
-                          <span>{valve.lastRun}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Upcoming Schedule (7 days) */}
-          {upcomingSchedule.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-earth-600 dark:text-gray-300 mb-3">
-                Upcoming Schedule (7 days)
-              </h3>
-              <div className="space-y-3">
-                {upcomingSchedule.map((day) => (
-                  <div key={day.dateStr}>
-                    <div className="text-xs font-semibold text-earth-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
-                      {day.day}
-                    </div>
-                    <div className="space-y-1">
-                      {day.runs.map((run, i) => (
-                        <div
-                          key={`${day.dateStr}-${i}`}
-                          className="flex items-center justify-between text-sm bg-green-50 dark:bg-green-900/10 rounded px-3 py-1.5"
-                        >
-                          <span className="text-earth-700 dark:text-gray-300">{run.zoneName}</span>
-                          <span className="text-earth-500 dark:text-gray-400 text-xs">
-                            {run.time} &middot; {run.durationMin} min
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Fallback if no zone data */}
-          {controllerZones.length === 0 && hoseTimerValves.length === 0 && !rachio && (
-            <div className="text-center text-earth-400 dark:text-gray-500 py-8">
-              Irrigation data unavailable
-            </div>
-          )}
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {rachio?.next_scheduled_run?.active && (
+              <span className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 font-medium animate-pulse">
+                {'\uD83D\uDCA7'} Currently Watering
+              </span>
+            )}
+            <span className="text-sm text-earth-500 dark:text-gray-400">
+              View zones, schedules, and watering adequacy
+            </span>
+          </div>
+          <span className="text-garden-600 dark:text-garden-400 group-hover:translate-x-1 transition-transform font-medium">
+            {'\u2192'}
+          </span>
         </div>
-      </div>
+      </Link>
     </div>
   );
 }

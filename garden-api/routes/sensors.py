@@ -2033,6 +2033,77 @@ async def get_bed_irrigation_schedule(bed_id: int):
     return result
 
 
+@router.get("/api/irrigation/adequacy")
+async def get_watering_adequacy(request: Request):
+    """Analyze watering adequacy per planter based on zone totals vs plant needs."""
+    require_user(request)
+
+    person_data = await _fetch_rachio_person_data()
+    zone_totals = await _aggregate_zone_watering(person_data) if person_data else {}
+
+    with get_db() as db:
+        beds = db.execute("""
+            SELECT gb.id, gb.name, gb.irrigation_type, gb.irrigation_zone_name,
+                   gb.width_cells, gb.height_cells, gb.cell_size_inches
+            FROM garden_beds gb
+        """).fetchall()
+
+        results = []
+        for bed in beds:
+            b = dict(bed)
+            # Get plants in this bed
+            plants = db.execute("""
+                SELECT p.plant_id, pl.name, pl.water, pl.category
+                FROM plantings p JOIN plants pl ON p.plant_id = pl.id
+                WHERE p.bed_id = ? AND p.status NOT IN ('removed','died','harvested')
+            """, (b["id"],)).fetchall()
+
+            if not plants:
+                continue
+
+            # Find zone total for this bed
+            zone_name = b.get("irrigation_zone_name")
+            zone_data = None
+            for zid, zt in zone_totals.items():
+                if zt["name"] == zone_name:
+                    zone_data = zt
+                    break
+
+            # Calculate need vs supply
+            water_needs = [dict(p) for p in plants]
+            high_need_count = sum(1 for p in water_needs if (p.get("water") or "").lower() == "high")
+            low_need_count = sum(1 for p in water_needs if (p.get("water") or "").lower() == "low")
+
+            supply_minutes = zone_data["total_minutes_per_day"] if zone_data else 0
+
+            # Simple adequacy rating
+            if b["irrigation_type"] in ("manual", None):
+                status = "manual"
+            elif supply_minutes == 0:
+                status = "no_data"
+            elif supply_minutes >= 8 or (supply_minutes >= 4 and high_need_count == 0):
+                status = "adequate"
+            elif supply_minutes >= 4:
+                status = "marginal"
+            else:
+                status = "insufficient"
+
+            results.append({
+                "bed_id": b["id"],
+                "bed_name": b["name"],
+                "irrigation_type": b["irrigation_type"],
+                "zone_name": zone_name,
+                "supply_minutes_per_day": supply_minutes,
+                "schedule_count": zone_data["schedule_count"] if zone_data else 0,
+                "plant_count": len(plants),
+                "high_water_plants": high_need_count,
+                "low_water_plants": low_need_count,
+                "status": status,
+            })
+
+        return results
+
+
 @router.get("/api/irrigation/usage")
 async def get_irrigation_usage(request: Request, days: int = 30):
     """Pull per-zone water usage (gallons, duration) from Rachio cloud API."""

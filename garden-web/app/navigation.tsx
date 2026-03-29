@@ -53,6 +53,7 @@ export const navGroups: NavGroup[] = [
     emoji: '\u{1F4CA}',
     items: [
       { href: '/sensors', label: 'Sensors', description: 'Live sensor readings', emoji: '\u{1F321}' },
+      { href: '/irrigation', label: 'Irrigation', description: 'Watering zones and adequacy', emoji: '\u{1F4A7}' },
       { href: '/sensors/history', label: 'Sensor History', description: 'Historical sensor data', emoji: '\u{1F4C8}' },
       { href: '/alerts', label: 'Alerts', description: 'Notifications and warnings', emoji: '\u{1F514}' },
       { href: '/analytics', label: 'Analytics', description: 'Yield comparison, water & season reviews', emoji: '\u{1F4CA}' },
