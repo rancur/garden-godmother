@@ -237,6 +237,13 @@ class ExpenseCreate(BaseModel):
     purchase_date: Optional[str] = None
     notes: Optional[str] = None
 
+class ExpenseUpdate(BaseModel):
+    category: Optional[str] = None
+    description: Optional[str] = None
+    amount_cents: Optional[int] = None
+    purchase_date: Optional[str] = None
+    notes: Optional[str] = None
+
 
 # ──── Planting Note Models ────
 

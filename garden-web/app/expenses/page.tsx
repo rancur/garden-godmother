@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getExpenses, createExpense, deleteExpense, getExpenseSummary, getExportUrl, undoAction } from '../api';
+import { getExpenses, createExpense, updateExpense, deleteExpense, getExpenseSummary, getExportUrl, undoAction } from '../api';
 import { useModal } from '../confirm-modal';
 import { useToast } from '../toast';
 import { getGardenToday } from '../timezone';
@@ -68,6 +68,7 @@ export default function ExpensesPage() {
     notes: '',
   };
   const [formData, setFormData] = useState(emptyForm);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const loadData = () => {
     const expensePromise = filterCategory ? getExpenses(filterCategory) : getExpenses();
@@ -87,22 +88,48 @@ export default function ExpensesPage() {
     if (!formData.category || !formData.description || !formData.amount) return;
     setSubmitting(true);
     try {
-      await createExpense({
+      const payload = {
         category: formData.category,
         description: formData.description,
         amount_cents: Math.round(parseFloat(formData.amount) * 100),
         purchase_date: formData.purchase_date || undefined,
         notes: formData.notes || undefined,
-      });
+      };
+      if (editingId) {
+        await updateExpense(editingId, payload);
+        toast('Expense updated', 'success');
+      } else {
+        await createExpense(payload);
+      }
       setFormData(emptyForm);
+      setEditingId(null);
       setShowForm(false);
       setLoading(true);
       loadData();
     } catch {
-      setError('Failed to log expense');
+      setError(editingId ? 'Failed to update expense' : 'Failed to log expense');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEdit = (exp: Expense) => {
+    setFormData({
+      category: exp.category,
+      description: exp.description,
+      amount: (exp.amount_cents / 100).toFixed(2),
+      purchase_date: exp.purchase_date || '',
+      notes: exp.notes || '',
+    });
+    setEditingId(exp.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setFormData(emptyForm);
+    setEditingId(null);
+    setShowForm(false);
   };
 
   const handleDeleteExpense = async (id: number) => {
@@ -141,7 +168,7 @@ export default function ExpensesPage() {
             Export CSV
           </a>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => { if (showForm) { handleCancelEdit(); } else { setShowForm(true); } }}
             className="px-4 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 transition-colors font-medium"
           >
             {showForm ? 'Cancel' : '+ Log Expense'}
@@ -152,7 +179,7 @@ export default function ExpensesPage() {
       {/* Log Expense Form */}
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 sm:p-6 space-y-4 border border-earth-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-earth-800 dark:text-gray-200">Log an Expense</h2>
+          <h2 className="text-lg font-semibold text-earth-800 dark:text-gray-200">{editingId ? 'Edit Expense' : 'Log an Expense'}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-earth-700 dark:text-gray-300 mb-1">Category *</label>
@@ -212,13 +239,24 @@ export default function ExpensesPage() {
               />
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={submitting || !formData.category || !formData.description || !formData.amount}
-            className="px-6 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 disabled:opacity-50 transition-colors font-medium"
-          >
-            {submitting ? 'Saving...' : 'Save Expense'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={submitting || !formData.category || !formData.description || !formData.amount}
+              className="px-6 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 disabled:opacity-50 transition-colors font-medium"
+            >
+              {submitting ? 'Saving...' : editingId ? 'Save Changes' : 'Save Expense'}
+            </button>
+            {editingId && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="px-4 py-2 text-earth-600 dark:text-gray-400 hover:text-earth-800 dark:hover:text-gray-200 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       )}
 
@@ -296,7 +334,13 @@ export default function ExpensesPage() {
                     <td className="p-3 sm:p-4 font-medium text-earth-800 dark:text-gray-200">{exp.description}</td>
                     <td className="p-3 sm:p-4 text-right text-earth-700 dark:text-gray-300">{formatMoney(exp.amount_cents)}</td>
                     <td className="p-3 sm:p-4 text-earth-500 dark:text-gray-400 max-w-[200px] truncate">{exp.notes || ''}</td>
-                    <td className="p-3 sm:p-4 text-right">
+                    <td className="p-3 sm:p-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleEdit(exp)}
+                        className="text-garden-600 hover:text-garden-800 dark:text-garden-400 dark:hover:text-garden-300 text-xs font-medium"
+                      >
+                        Edit
+                      </button>
                       <button
                         onClick={() => handleDeleteExpense(exp.id)}
                         className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs font-medium"

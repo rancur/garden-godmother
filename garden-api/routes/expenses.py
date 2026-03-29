@@ -10,7 +10,7 @@ from fastapi.responses import Response
 
 from db import get_db
 from auth import require_user
-from models import ExpenseCreate
+from models import ExpenseCreate, ExpenseUpdate
 from constants import create_undo_action
 from routes.harvest import _estimate_price_per_oz
 
@@ -55,6 +55,23 @@ def delete_expense(expense_id: int):
         db.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
         db.commit()
         return {"ok": True, "undo_id": undo_id}
+
+
+@router.patch("/api/expenses/{expense_id}")
+def update_expense(expense_id: int, update: ExpenseUpdate):
+    with get_db() as db:
+        existing = db.execute("SELECT * FROM expenses WHERE id = ?", (expense_id,)).fetchone()
+        if not existing:
+            raise HTTPException(404, "Expense not found")
+        data = update.model_dump(exclude_none=True)
+        if not data:
+            raise HTTPException(400, "No fields to update")
+        set_clause = ", ".join(f"{k} = ?" for k in data.keys())
+        values = list(data.values()) + [expense_id]
+        db.execute(f"UPDATE expenses SET {set_clause} WHERE id = ?", values)
+        db.commit()
+        row = db.execute("SELECT * FROM expenses WHERE id = ?", (expense_id,)).fetchone()
+        return dict(row)
 
 
 @router.get("/api/expenses/summary")

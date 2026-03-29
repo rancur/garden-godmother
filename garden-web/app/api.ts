@@ -466,6 +466,10 @@ export function getExpenseSummary() {
   return apiFetch('/api/expenses/summary');
 }
 
+export function updateExpense(id: number, data: { category?: string; description?: string; amount_cents?: number; purchase_date?: string; notes?: string }) {
+  return apiFetch(`/api/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
 export function deleteExpense(id: number) {
   return apiFetch(`/api/expenses/${id}`, { method: 'DELETE' });
 }
