@@ -15,6 +15,7 @@ import {
   getTasksSummary,
   getPlants,
   getBeds,
+  quickAddJournal,
 } from '../api';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { getPlantIcon } from '../plant-icons';
@@ -110,6 +111,13 @@ export default function TasksPage() {
   const [filterType, setFilterType] = useState<string>('');
   const [editingDueDate, setEditingDueDate] = useState<number | null>(null);
 
+  // Post-completion journal suggestion
+  const [completedTaskPrompt, setCompletedTaskPrompt] = useState<{
+    task: Task;
+    visible: boolean;
+  } | null>(null);
+  const [journalSubmitting, setJournalSubmitting] = useState(false);
+
   // New task form
   const [newType, setNewType] = useState('custom');
   const [newTitle, setNewTitle] = useState('');
@@ -173,11 +181,37 @@ export default function TasksPage() {
   };
 
   const handleComplete = async (id: number) => {
+    const task = tasks.find(t => t.id === id);
     try {
       await completeTask(id);
       await loadData();
       toast('Task completed');
+      // Show journal prompt for completed task
+      if (task) {
+        setCompletedTaskPrompt({ task, visible: true });
+        // Auto-dismiss after 10 seconds
+        setTimeout(() => setCompletedTaskPrompt(prev => prev?.task.id === id ? null : prev), 10000);
+      }
     } catch { toast('Failed to complete task', 'error'); }
+  };
+
+  const handlePostTaskJournal = async (entryType: string, content: string, severity?: string) => {
+    if (!completedTaskPrompt) return;
+    setJournalSubmitting(true);
+    try {
+      const data: Record<string, unknown> = { entry_type: entryType, content };
+      if (severity) data.severity = severity;
+      const task = completedTaskPrompt.task;
+      if (task.planting_id) data.planting_id = task.planting_id;
+      if (task.plant_id) data.plant_id = task.plant_id;
+      await quickAddJournal(data as any);
+      toast('Journal entry saved');
+      setCompletedTaskPrompt(null);
+    } catch {
+      toast('Failed to save entry', 'error');
+    } finally {
+      setJournalSubmitting(false);
+    }
   };
 
   const handleSkip = async (id: number) => {
@@ -585,6 +619,48 @@ export default function TasksPage() {
           ))}
         </select>
       </div>
+
+      {/* Post-completion Journal Suggestion */}
+      {completedTaskPrompt?.visible && (
+        <div className="bg-garden-50 dark:bg-garden-900/20 rounded-xl border border-garden-200 dark:border-garden-800 p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 flex-1">
+              <span className="text-xl mt-0.5">{'\uD83D\uDCD3'}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-earth-800 dark:text-gray-100">
+                  How do things look after &ldquo;{completedTaskPrompt.task.title}&rdquo;?
+                </p>
+                {completedTaskPrompt.task.plant_name && (
+                  <p className="text-xs text-earth-500 dark:text-gray-400 mt-0.5">{completedTaskPrompt.task.plant_name}{completedTaskPrompt.task.bed_name ? ` \u00B7 ${completedTaskPrompt.task.bed_name}` : ''}</p>
+                )}
+                <div className="flex flex-wrap gap-2 mt-2.5">
+                  <button
+                    onClick={() => handlePostTaskJournal('observation', `Completed "${completedTaskPrompt.task.title}" \u2014 everything looks good`)}
+                    disabled={journalSubmitting}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-gray-700 text-earth-700 dark:text-gray-300 border border-earth-200 dark:border-gray-600 hover:bg-earth-100 dark:hover:bg-gray-600 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {journalSubmitting ? 'Saving...' : 'All good'}
+                  </button>
+                  <button
+                    onClick={() => handlePostTaskJournal('problem', `After "${completedTaskPrompt.task.title}" \u2014 spotted an issue`, 'medium')}
+                    disabled={journalSubmitting}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    Spotted issue
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setCompletedTaskPrompt(null)}
+              className="text-earth-400 dark:text-gray-500 hover:text-earth-600 dark:hover:text-gray-300 p-1 shrink-0"
+              title="Dismiss"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Task Groups */}
       {loading ? (

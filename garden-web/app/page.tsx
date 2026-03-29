@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getDashboard, getTasksToday, getTasksSummary, generateTasks, completeTask, getSensorForecast, getSensorWeather, getWeatherInsights } from './api';
+import { getDashboard, getTasksToday, getTasksSummary, generateTasks, completeTask, getSensorForecast, getSensorWeather, getWeatherInsights, getJournalSuggestions, quickAddJournal } from './api';
 import { useToast } from './toast';
 import { CardSkeleton, Skeleton } from './skeleton';
 import { taskTypeIcons } from './constants';
@@ -124,6 +124,31 @@ interface WeatherInsight {
   reason: string;
 }
 
+interface QuickAction {
+  label: string;
+  entry_type: string;
+  content: string;
+  severity?: string;
+  mood?: string;
+  milestone_type?: string;
+}
+
+interface JournalSuggestion {
+  id: string;
+  type: string;
+  title: string;
+  subtitle: string;
+  prompt: string;
+  quick_actions: QuickAction[];
+  priority: number;
+  planting_id?: number;
+  ground_plant_id?: number;
+  plant_id?: number;
+  plant_name?: string;
+  category?: string;
+  container_type?: string;
+}
+
 const priorityBadge: Record<string, string> = {
   urgent: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
   high: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
@@ -183,6 +208,9 @@ export default function Dashboard() {
   const [forecast, setForecast] = useState<ForecastDay[]>([]);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherInsights, setWeatherInsights] = useState<WeatherInsight[]>([]);
+  const [journalSuggestions, setJournalSuggestions] = useState<JournalSuggestion[]>([]);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
+  const [submittingActionId, setSubmittingActionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -197,12 +225,40 @@ export default function Dashboard() {
     try { await completeTask(id); loadTasks(); toast('Task completed'); } catch { toast('Failed to complete task', 'error'); }
   };
 
+  const handleSuggestionAction = async (suggestion: JournalSuggestion, action: QuickAction) => {
+    const actionId = `${suggestion.id}-${action.label}`;
+    setSubmittingActionId(actionId);
+    try {
+      const data: Record<string, unknown> = { entry_type: action.entry_type, content: action.content };
+      if (action.severity) data.severity = action.severity;
+      if (action.mood) data.mood = action.mood;
+      if (action.milestone_type) data.milestone_type = action.milestone_type;
+      if (suggestion.plant_id) data.plant_id = suggestion.plant_id;
+      if (suggestion.container_type === 'ground' && suggestion.ground_plant_id) {
+        data.ground_plant_id = suggestion.ground_plant_id;
+      } else if (suggestion.planting_id) {
+        data.planting_id = suggestion.planting_id;
+      }
+      await quickAddJournal(data as any);
+      setDismissedSuggestions(prev => new Set(prev).add(suggestion.id));
+      toast('Journal entry saved');
+    } catch {
+      toast('Failed to save entry', 'error');
+    } finally {
+      setSubmittingActionId(null);
+    }
+  };
+
   const loadAllData = async () => {
     generateTasks().catch(() => {});
     loadTasks();
     getSensorForecast().then((data: any) => setForecast(data?.forecast || [])).catch(() => {});
     getSensorWeather().then((data: WeatherData) => setWeather(data)).catch(() => {});
     getWeatherInsights().then((data: any) => setWeatherInsights(data?.adjustments || [])).catch(() => {});
+    getJournalSuggestions().then((data: JournalSuggestion[]) => {
+      setJournalSuggestions(Array.isArray(data) ? data : []);
+      setDismissedSuggestions(new Set());
+    }).catch(() => {});
     try {
       const data = await getDashboard();
       setDashData(data);
@@ -411,6 +467,71 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {/* ── Quick Journal Suggestions ── */}
+      {(() => {
+        const visible = journalSuggestions.filter(s => !dismissedSuggestions.has(s.id)).slice(0, 3);
+        if (visible.length === 0) return null;
+        const typeIcons: Record<string, string> = {
+          weather: '\uD83C\uDF24\uFE0F',
+          follow_up: '\uD83D\uDD04',
+          time_context: '\u23F0',
+          'check-in': '\uD83C\uDF3B',
+          'harvest-check': '\uD83C\uDF3D',
+        };
+        return (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-garden-600 dark:text-garden-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                <h2 className="text-sm font-bold text-earth-800 dark:text-gray-100">Quick Journal</h2>
+                <span className="text-xs text-earth-400 dark:text-gray-500 bg-earth-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{visible.length}</span>
+              </div>
+              <Link href="/journal" className="text-garden-600 dark:text-garden-400 hover:text-garden-700 dark:hover:text-garden-300 text-xs font-medium">
+                See all &rarr;
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {visible.map((s) => (
+                <div key={s.id} className="rounded-xl border border-earth-100 dark:border-gray-700 p-3 bg-earth-50 dark:bg-gray-750">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-base">{typeIcons[s.type] || '\uD83D\uDCD3'}</span>
+                    <span className="font-semibold text-earth-800 dark:text-gray-100 text-xs truncate">{s.title}</span>
+                  </div>
+                  <p className="text-[11px] text-earth-500 dark:text-gray-400 mb-1">{s.subtitle}</p>
+                  <p className="text-xs text-earth-600 dark:text-gray-300 italic mb-2 line-clamp-2">&ldquo;{s.prompt}&rdquo;</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {s.quick_actions.slice(0, 3).map((action) => {
+                      const actionId = `${s.id}-${action.label}`;
+                      const isSubmitting = submittingActionId === actionId;
+                      return (
+                        <button
+                          key={action.label}
+                          onClick={() => handleSuggestionAction(s, action)}
+                          disabled={!!submittingActionId}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all active:scale-95 disabled:opacity-50 ${
+                            action.entry_type === 'problem'
+                              ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                              : action.entry_type === 'milestone' || action.entry_type === 'harvest'
+                              ? 'bg-garden-50 dark:bg-garden-900/20 text-garden-700 dark:text-garden-300 border border-garden-200 dark:border-garden-800'
+                              : 'bg-white dark:bg-gray-700 text-earth-700 dark:text-gray-300 border border-earth-200 dark:border-gray-600'
+                          }`}
+                        >
+                          {isSubmitting ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="animate-spin w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full" />
+                            </span>
+                          ) : action.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Main Content Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

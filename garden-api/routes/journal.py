@@ -23,7 +23,7 @@ router = APIRouter()
 
 
 @router.get("/api/journal/suggestions")
-def get_journal_suggestions(request: Request):
+async def get_journal_suggestions(request: Request):
     """Generate context-aware journal suggestions based on garden state."""
     require_user(request)
     with get_db() as db:
@@ -186,9 +186,270 @@ def get_journal_suggestions(request: Request):
                 ],
             })
 
+        # ── Weather-aware prompts ──
+        try:
+            from routes.sensors import (
+                _ha_is_configured, _ha_get_states_bulk, _get_entity_mappings,
+                WEATHER_SENSORS, WEATHER_ENTITY, _safe_float, fetch_weather_forecast,
+            )
+            if _ha_is_configured():
+                mappings = _get_entity_mappings()
+                effective = dict(WEATHER_SENSORS)
+                _role_map = {
+                    "outdoor_temperature": "temperature",
+                    "outdoor_humidity": "humidity",
+                    "wind_speed": "wind_speed",
+                    "rain_accumulation": "rain_today",
+                }
+                for role, key in _role_map.items():
+                    mapped = mappings.get(role)
+                    if mapped:
+                        effective[key] = mapped
+
+                weather_entity = WEATHER_ENTITY
+                temp_entity = mappings.get("outdoor_temperature", "")
+                if temp_entity:
+                    station_name = temp_entity.replace("sensor.", "")
+                    for suffix in ("_air_temperature", "_temperature"):
+                        if station_name.endswith(suffix):
+                            station_name = station_name[: -len(suffix)]
+                            break
+                    candidate = f"weather.{station_name}"
+                    if candidate != "weather.":
+                        weather_entity = candidate
+
+                needed = [effective.get("temperature", ""), effective.get("wind_speed", ""),
+                          effective.get("rain_today", ""), weather_entity]
+                states = await _ha_get_states_bulk([e for e in needed if e])
+
+                temp_val = _safe_float(states.get(effective.get("temperature", ""), {}).get("state") if states.get(effective.get("temperature", "")) else None)
+                wind_val = _safe_float(states.get(effective.get("wind_speed", ""), {}).get("state") if states.get(effective.get("wind_speed", "")) else None)
+                rain_val = _safe_float(states.get(effective.get("rain_today", ""), {}).get("state") if states.get(effective.get("rain_today", "")) else None)
+                condition = (states.get(weather_entity) or {}).get("state")
+
+                if temp_val is not None and temp_val > 105:
+                    suggestions.append({
+                        "id": "weather_extreme_heat",
+                        "type": "weather",
+                        "title": "Extreme Heat",
+                        "subtitle": f"{temp_val:.0f}\u00b0F today",
+                        "prompt": "Extreme heat \u2014 did you add shade cloth?",
+                        "quick_actions": [
+                            {"label": "Shade cloth up", "entry_type": "observation", "content": "Shade cloth deployed for extreme heat"},
+                            {"label": "Some wilting", "entry_type": "problem", "content": "Seeing wilting from extreme heat", "severity": "medium"},
+                            {"label": "Heat damage", "entry_type": "problem", "content": "Heat damage visible \u2014 need shade cloth ASAP", "severity": "high"},
+                        ],
+                        "priority": 0,
+                    })
+                elif temp_val is not None and temp_val > 100:
+                    suggestions.append({
+                        "id": "weather_heat",
+                        "type": "weather",
+                        "title": "Heat Check",
+                        "subtitle": f"{temp_val:.0f}\u00b0F today",
+                        "prompt": "Any heat stress signs? Wilting, sunburn, or leaf curl?",
+                        "quick_actions": [
+                            {"label": "All good", "entry_type": "observation", "content": "Plants handling the heat well"},
+                            {"label": "Some wilting", "entry_type": "problem", "content": "Seeing wilting from the heat", "severity": "medium"},
+                            {"label": "Need shade", "entry_type": "problem", "content": "Plants need shade cloth \u2014 heat damage visible", "severity": "high"},
+                        ],
+                        "priority": 2,
+                    })
+
+                if rain_val is not None and rain_val > 0:
+                    suggestions.append({
+                        "id": "weather_rain",
+                        "type": "weather",
+                        "title": "Rain Check",
+                        "subtitle": f"{rain_val:.2f} in rain today",
+                        "prompt": "How did plants handle the rain?",
+                        "quick_actions": [
+                            {"label": "Loved it", "entry_type": "observation", "content": "Plants look refreshed after the rain", "mood": "good"},
+                            {"label": "Some damage", "entry_type": "problem", "content": "Some rain/wind damage to plants", "severity": "medium"},
+                            {"label": "Drainage issue", "entry_type": "problem", "content": "Standing water or drainage issues after rain", "severity": "medium"},
+                        ],
+                        "priority": 3,
+                    })
+
+                if wind_val is not None and wind_val > 20:
+                    suggestions.append({
+                        "id": "weather_wind",
+                        "type": "weather",
+                        "title": "Wind Alert",
+                        "subtitle": f"{wind_val:.0f} mph winds",
+                        "prompt": "High winds today \u2014 check stakes and supports",
+                        "quick_actions": [
+                            {"label": "All secure", "entry_type": "observation", "content": "Stakes and supports holding up in high winds"},
+                            {"label": "Need staking", "entry_type": "problem", "content": "Plants need additional staking \u2014 wind damage risk", "severity": "medium"},
+                            {"label": "Wind damage", "entry_type": "problem", "content": "Wind damage to plants or supports", "severity": "high"},
+                        ],
+                        "priority": 2,
+                    })
+
+                # Check forecast for frost
+                try:
+                    forecast = await fetch_weather_forecast(days=2)
+                    if forecast:
+                        for day in forecast[:2]:
+                            low_f = day.get("low_f") or day.get("templow")
+                            if low_f is not None and low_f < 40:
+                                suggestions.append({
+                                    "id": f"weather_frost_{day.get('date', 'soon')}",
+                                    "type": "weather",
+                                    "title": "Frost Warning",
+                                    "subtitle": f"Low of {low_f}\u00b0F forecast",
+                                    "prompt": "Frost coming \u2014 are tender plants protected?",
+                                    "quick_actions": [
+                                        {"label": "Protected", "entry_type": "observation", "content": "Frost protection in place for tender plants"},
+                                        {"label": "Need to cover", "entry_type": "observation", "content": "Need to cover tender plants before frost tonight"},
+                                        {"label": "Lost plants", "entry_type": "problem", "content": "Frost damage to unprotected plants", "severity": "high"},
+                                    ],
+                                    "priority": 1,
+                                })
+                                break  # Only one frost warning
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # ── Follow-up prompts for recent problems ──
+        try:
+            recent_problems = db.execute("""
+                SELECT je.id, je.title, je.content, je.created_at, je.planting_id, je.ground_plant_id,
+                       p.name as plant_name, pi.id as instance_id
+                FROM journal_entries je
+                LEFT JOIN plantings pl ON je.planting_id = pl.id
+                LEFT JOIN plant_instances pi ON pl.id IS NOT NULL AND pi.id = (SELECT instance_id FROM plantings WHERE id = pl.id LIMIT 1)
+                LEFT JOIN plants p ON (pl.plant_id = p.id OR je.ground_plant_id IS NOT NULL AND p.id = (SELECT plant_id FROM ground_plants WHERE id = je.ground_plant_id))
+                WHERE je.entry_type = 'problem'
+                AND je.created_at > datetime('now', '-5 days')
+                AND je.created_at < datetime('now', '-1 day')
+                ORDER BY je.created_at DESC
+                LIMIT 3
+            """).fetchall()
+
+            for prob in recent_problems:
+                d = dict(prob)
+                try:
+                    created = datetime.fromisoformat(d["created_at"].replace("Z", "+00:00").replace("+00:00", ""))
+                    days_ago = (now - created).days
+                except (ValueError, TypeError):
+                    days_ago = 3
+                plant_name = d.get("plant_name") or "a plant"
+                content_preview = (d.get("content") or "an issue")[:60]
+                suggestions.append({
+                    "id": f"followup_{d['id']}",
+                    "type": "follow_up",
+                    "title": f"Follow up: {plant_name}",
+                    "subtitle": f"Problem logged {days_ago} day{'s' if days_ago != 1 else ''} ago",
+                    "prompt": f"You noted: \"{content_preview}\" \u2014 any improvement?",
+                    "quick_actions": [
+                        {"label": "Resolved!", "entry_type": "observation", "content": f"Follow-up: issue with {plant_name} resolved", "mood": "good"},
+                        {"label": "Still an issue", "entry_type": "problem", "content": f"Follow-up: issue with {plant_name} persists", "severity": "medium"},
+                        {"label": "Getting worse", "entry_type": "problem", "content": f"Follow-up: issue with {plant_name} worsening", "severity": "high"},
+                    ],
+                    "priority": 1,
+                    "planting_id": d.get("planting_id"),
+                    "ground_plant_id": d.get("ground_plant_id"),
+                })
+        except Exception:
+            pass
+
+        # ── Recent transplants needing check-in ──
+        try:
+            recent_transplants = db.execute("""
+                SELECT pl.id as planting_id, pl.planted_date, pl.source,
+                       p.name as plant_name, gb.name as bed_name
+                FROM plantings pl
+                JOIN plants p ON pl.plant_id = p.id
+                LEFT JOIN garden_beds gb ON pl.bed_id = gb.id
+                WHERE pl.source = 'nursery'
+                AND pl.planted_date > date('now', '-7 days')
+                AND pl.status NOT IN ('removed', 'failed', 'harvested')
+                AND NOT EXISTS (
+                    SELECT 1 FROM journal_entries je
+                    WHERE je.planting_id = pl.id
+                    AND je.created_at > datetime(pl.planted_date, '+1 day')
+                )
+                LIMIT 3
+            """).fetchall()
+
+            for t in recent_transplants:
+                d = dict(t)
+                plant_name = d.get("plant_name") or "plant"
+                bed = d.get("bed_name") or "garden"
+                suggestions.append({
+                    "id": f"transplant_{d['planting_id']}",
+                    "type": "follow_up",
+                    "title": f"Transplant check: {plant_name}",
+                    "subtitle": f"Nursery transplant in {bed}",
+                    "prompt": f"How is {plant_name} settling in after transplant?",
+                    "quick_actions": [
+                        {"label": "Settling in", "entry_type": "observation", "content": f"{plant_name} adjusting well after transplant", "mood": "good"},
+                        {"label": "Some stress", "entry_type": "problem", "content": f"{plant_name} showing transplant shock", "severity": "medium"},
+                        {"label": "Not looking good", "entry_type": "problem", "content": f"{plant_name} struggling after transplant", "severity": "high"},
+                    ],
+                    "priority": 2,
+                    "planting_id": d["planting_id"],
+                })
+        except Exception:
+            pass
+
+        # ── Time-of-day context suggestions ──
+        try:
+            import zoneinfo
+            # Use Phoenix timezone since this is a Phoenix garden
+            tz = zoneinfo.ZoneInfo("America/Phoenix")
+            local_hour = datetime.now(tz).hour
+
+            if 5 <= local_hour < 10:
+                suggestions.append({
+                    "id": "time_morning",
+                    "type": "time_context",
+                    "title": "Morning Check",
+                    "subtitle": "Start of day",
+                    "prompt": "Morning garden check \u2014 anything new overnight?",
+                    "quick_actions": [
+                        {"label": "All good", "entry_type": "observation", "content": "Morning check: garden looking good overnight"},
+                        {"label": "New growth", "entry_type": "observation", "content": "Morning check: noticed new growth overnight", "mood": "good"},
+                        {"label": "Issue spotted", "entry_type": "problem", "content": "Morning check: spotted an issue"},
+                    ],
+                    "priority": 4,
+                })
+            elif 10 <= local_hour < 15:
+                suggestions.append({
+                    "id": "time_midday",
+                    "type": "time_context",
+                    "title": "Midday Observation",
+                    "subtitle": "Peak sun hours",
+                    "prompt": "How are plants handling the midday sun and heat?",
+                    "quick_actions": [
+                        {"label": "Thriving", "entry_type": "observation", "content": "Midday check: plants thriving in the sun", "mood": "good"},
+                        {"label": "Need water", "entry_type": "observation", "content": "Midday check: some plants look thirsty"},
+                        {"label": "Wilting", "entry_type": "problem", "content": "Midday check: wilting in the heat", "severity": "medium"},
+                    ],
+                    "priority": 4,
+                })
+            elif 17 <= local_hour < 20:
+                suggestions.append({
+                    "id": "time_evening",
+                    "type": "time_context",
+                    "title": "Evening Walkthrough",
+                    "subtitle": "End of day",
+                    "prompt": "Evening walkthrough \u2014 how did everything do today?",
+                    "quick_actions": [
+                        {"label": "Great day", "entry_type": "observation", "content": "Evening check: garden had a great day", "mood": "great"},
+                        {"label": "Some issues", "entry_type": "problem", "content": "Evening check: noticed some issues today", "severity": "medium"},
+                        {"label": "Watered", "entry_type": "observation", "content": "Evening check: gave everything a good watering"},
+                    ],
+                    "priority": 4,
+                })
+        except Exception:
+            pass
+
         # Sort by priority (lower = more important), then by days_since_observed desc
         suggestions.sort(key=lambda s: (s.get("priority", 5), -s.get("days_since_observed", 0)))
-        return suggestions[:10]
+        return suggestions[:15]
 
 
 # ──────────────── JOURNAL ────────────────
