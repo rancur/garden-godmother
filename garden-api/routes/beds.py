@@ -482,7 +482,7 @@ def get_bed(bed_id: int):
             FROM plantings p
             JOIN plants pl ON p.plant_id = pl.id
             LEFT JOIN varieties v ON p.variety_id = v.id
-            WHERE p.bed_id = ? AND p.status != 'removed'
+            WHERE p.bed_id = ? AND p.status NOT IN ('removed', 'failed', 'harvested', 'died')
             ORDER BY p.cell_y, p.cell_x
         """, (bed_id,)).fetchall()
         return {**dict(bed), "plantings": [dict(p) for p in plantings]}
@@ -504,7 +504,7 @@ def get_bed_grid(bed_id: int):
             FROM plantings p
             JOIN plants pl ON p.plant_id = pl.id
             LEFT JOIN varieties v ON p.variety_id = v.id
-            WHERE p.bed_id = ? AND p.status NOT IN ('removed', 'failed')
+            WHERE p.bed_id = ? AND p.status NOT IN ('removed', 'failed', 'harvested', 'died')
         """, (bed_id,)).fetchall()
 
         # Get photo counts per planting
@@ -560,7 +560,7 @@ def get_companion_suggestions(bed_id: int, x: int, y: int, request: Request):
         primary = db.execute(
             "SELECT p.*, pl.name as plant_name FROM plantings p JOIN plants pl ON p.plant_id = pl.id "
             "WHERE p.bed_id = ? AND p.cell_x = ? AND p.cell_y = ? AND p.cell_role = 'primary' "
-            "AND p.status NOT IN ('removed', 'failed')",
+            "AND p.status NOT IN ('removed', 'failed', 'harvested', 'died')",
             (bed_id, x, y)
         ).fetchone()
         if not primary:
