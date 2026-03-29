@@ -1187,4 +1187,33 @@ def startup_run_migrations():
             db.commit()
         run_migration(db, 48, "journal_voice_notes", [], callback=_journal_voice_notes)
 
+        def _fix_expense_check_constraint(db):
+            """Remove restrictive CHECK constraint on expenses.category to allow new categories like 'transplants'."""
+            schema = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='expenses'").fetchone()
+            if not schema or "transplants" in schema[0]:
+                return  # Already fixed or doesn't exist
+            # Get current columns
+            cols = [r[1] for r in db.execute("PRAGMA table_info(expenses)").fetchall()]
+            # Recreate without CHECK constraint
+            db.execute("ALTER TABLE expenses RENAME TO expenses_old")
+            db.execute("""CREATE TABLE expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                description TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL,
+                purchase_date TEXT,
+                notes TEXT,
+                plant_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER REFERENCES users(id),
+                updated_by INTEGER REFERENCES users(id)
+            )""")
+            shared = [c for c in cols if c in ['id','category','description','amount_cents','purchase_date','notes','plant_id','created_at','created_by','updated_by']]
+            cols_str = ", ".join(shared)
+            db.execute(f"INSERT INTO expenses ({cols_str}) SELECT {cols_str} FROM expenses_old")
+            db.execute("DROP TABLE expenses_old")
+            db.commit()
+
+        run_migration(db, 49, "fix_expense_check_constraint", [], callback=_fix_expense_check_constraint)
+
         logger.info("Migration system: all migrations checked/applied")
