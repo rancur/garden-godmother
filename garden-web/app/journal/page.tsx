@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import {
   getJournalFeed,
@@ -24,6 +24,8 @@ import {
   undoAction,
   generateJournalSummary,
   getPlantTimeline,
+  createVoiceNote,
+  createPhotoJournalEntry,
 } from '../api';
 import { getPlantIcon } from '../plant-icons';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
@@ -31,6 +33,7 @@ import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
 import { formatGardenDate, getGardenYear } from '../timezone';
 import { PullToRefresh } from '../components/PullToRefresh';
+import { VoiceRecorder } from '../components/VoiceRecorder';
 
 // -- Types --
 
@@ -248,6 +251,18 @@ export default function JournalPage() {
   const [summaryActivity, setSummaryActivity] = useState<{ journal_entries: number; tasks_completed: number; harvests: number } | null>(null);
   const [summaryDays, setSummaryDays] = useState(7);
   const [summaryLoading, setSummaryLoading] = useState(false);
+
+  // Quick input state (voice + photo)
+  const [voiceTranscribing, setVoiceTranscribing] = useState(false);
+  const [photoFlowOpen, setPhotoFlowOpen] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoCaption, setPhotoCaption] = useState('');
+  const [photoPlantingId, setPhotoPlantingId] = useState('');
+  const [photoSubmitting, setPhotoSubmitting] = useState(false);
+  const [photoAiSuggestion, setPhotoAiSuggestion] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const loadFeed = useCallback(() => {
     setLoading(true);
@@ -553,6 +568,80 @@ export default function JournalPage() {
     }
   };
 
+  // Voice note handler
+  const handleVoiceRecording = useCallback(async (blob: Blob) => {
+    setVoiceTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', blob, 'voice-note.webm');
+      const result = await createVoiceNote(formData);
+      const preview = result.transcription?.substring(0, 30) || 'Voice note';
+      toast(`Voice note saved: ${preview}${result.transcription?.length > 30 ? '...' : ''}`, 'success');
+      loadFeed();
+      loadSuggestions();
+    } catch {
+      toast('Failed to save voice note', 'error');
+    } finally {
+      setVoiceTranscribing(false);
+    }
+  }, [toast, loadFeed, loadSuggestions]);
+
+  // Photo capture handler
+  const handlePhotoCaptured = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setPhotoCaption('');
+    setPhotoPlantingId('');
+    setPhotoAiSuggestion(null);
+    setPhotoFlowOpen(true);
+  }, []);
+
+  const handlePhotoSubmit = useCallback(async () => {
+    if (!photoFile) return;
+    setPhotoSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', photoFile);
+      if (photoCaption) formData.append('content', photoCaption);
+      if (photoPlantingId) {
+        if (photoPlantingId.startsWith('planting:')) {
+          formData.append('planting_id', photoPlantingId.split(':')[1]);
+        } else if (photoPlantingId.startsWith('ground:')) {
+          formData.append('ground_plant_id', photoPlantingId.split(':')[1]);
+        }
+      }
+      const result = await createPhotoJournalEntry(formData);
+      if (result.ai_suggestion && !photoCaption) {
+        setPhotoAiSuggestion(result.ai_suggestion);
+      }
+      toast('Photo entry saved!', 'success');
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+      setPhotoFlowOpen(false);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setPhotoCaption('');
+      setPhotoPlantingId('');
+      setPhotoAiSuggestion(null);
+      loadFeed();
+    } catch {
+      toast('Failed to save photo entry', 'error');
+    } finally {
+      setPhotoSubmitting(false);
+    }
+  }, [photoFile, photoCaption, photoPlantingId, photoPreview, toast, loadFeed]);
+
+  const handlePhotoCancelFlow = useCallback(() => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFlowOpen(false);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setPhotoCaption('');
+    setPhotoPlantingId('');
+    setPhotoAiSuggestion(null);
+  }, [photoPreview]);
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     const now = new Date();
@@ -727,6 +816,115 @@ export default function JournalPage() {
         </div>
       ) : null}
 
+      {/* Quick Input Row */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-earth-500 dark:text-gray-400 uppercase tracking-wide">Quick Input</span>
+          {voiceTranscribing && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-garden-600 dark:text-garden-400">
+              <span className="animate-spin w-3 h-3 border-2 border-garden-600 dark:border-garden-400 border-t-transparent rounded-full" />
+              Transcribing...
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Voice note */}
+          <VoiceRecorder onRecordingComplete={handleVoiceRecording} disabled={voiceTranscribing} />
+
+          {/* Photo capture */}
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            className="w-14 h-14 rounded-full bg-garden-600 hover:bg-garden-700 text-white flex items-center justify-center transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoCaptured}
+            className="hidden"
+          />
+          <span className="text-xs text-earth-400 dark:text-gray-500">Photo</span>
+
+          {/* Text entry shortcut */}
+          <button
+            type="button"
+            onClick={() => { setShowForm(true); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 100); }}
+            className="w-14 h-14 rounded-full bg-garden-600 hover:bg-garden-700 text-white flex items-center justify-center transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
+          <span className="text-xs text-earth-400 dark:text-gray-500">Write</span>
+        </div>
+      </div>
+
+      {/* Photo-First Flow Modal */}
+      {photoFlowOpen && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 space-y-4 shadow-md">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-300 uppercase tracking-wide">Photo Journal Entry</h2>
+            <button onClick={handlePhotoCancelFlow} className="text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg">&times;</button>
+          </div>
+          {photoPreview && (
+            <img src={photoPreview} alt="Captured" className="w-full max-h-64 object-contain rounded-lg border border-earth-200 dark:border-gray-600" />
+          )}
+          {photoAiSuggestion && !photoCaption && (
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                <span className="text-xs font-medium text-purple-700 dark:text-purple-300">AI Suggestion</span>
+              </div>
+              <p className="text-sm text-purple-700 dark:text-purple-300">{photoAiSuggestion}</p>
+              <button
+                onClick={() => setPhotoCaption(photoAiSuggestion || '')}
+                className="mt-2 text-xs text-purple-600 dark:text-purple-400 underline hover:no-underline"
+              >
+                Use this as caption
+              </button>
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-medium text-earth-500 dark:text-gray-400 mb-1 block">Link to plant (optional)</label>
+            <TypeaheadSelect
+              options={allPlantingOptions}
+              value={photoPlantingId}
+              onChange={(val) => setPhotoPlantingId(val)}
+              placeholder="Search plantings, ground plants..."
+            />
+          </div>
+          <textarea
+            value={photoCaption}
+            onChange={(e) => setPhotoCaption(e.target.value)}
+            placeholder="Add a note (optional, AI will describe if left blank)..."
+            rows={2}
+            className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 outline-none text-sm resize-y"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={handlePhotoCancelFlow}
+              className="px-4 py-2 text-sm font-medium text-earth-600 dark:text-gray-400 border border-earth-300 dark:border-gray-600 rounded-lg hover:bg-earth-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handlePhotoSubmit}
+              disabled={photoSubmitting}
+              className="px-5 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              {photoSubmitting ? 'Saving...' : 'Save Entry'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300 flex items-center justify-between">
@@ -737,7 +935,7 @@ export default function JournalPage() {
 
       {/* Add Entry Form */}
       {showForm && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 space-y-4 shadow-sm">
+        <div ref={formRef} className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 space-y-4 shadow-sm">
           <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-300 uppercase tracking-wide">New Journal Entry</h2>
 
           {/* Entry type selector - visual cards */}

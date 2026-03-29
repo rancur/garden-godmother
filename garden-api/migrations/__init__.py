@@ -1179,4 +1179,12 @@ def startup_run_migrations():
             db.commit()
         run_migration(db, 47, "companion_planting", [], callback=_companion_planting)
 
+        # ── Migration 048: voice_note_filename on journal_entries ──
+        def _journal_voice_notes(db):
+            _migration_add_columns_if_missing(db, "journal_entries", {
+                "voice_note_filename": "TEXT",
+            })
+            db.commit()
+        run_migration(db, 48, "journal_voice_notes", [], callback=_journal_voice_notes)
+
         logger.info("Migration system: all migrations checked/applied")

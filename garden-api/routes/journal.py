@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -291,6 +292,171 @@ async def quick_add_journal(request: Request):
         return {"ok": True, "id": cursor.lastrowid, "title": title}
 
 
+# ──────────────── VOICE NOTE ────────────────
+
+
+@router.post("/api/journal/voice-note")
+async def create_voice_note(
+    request: Request,
+    file: UploadFile = File(...),
+    planting_id: int = Form(None),
+    ground_plant_id: int = Form(None),
+    entry_type: str = Form("observation"),
+):
+    """Upload a voice note, transcribe with Whisper, create journal entry."""
+    require_user(request)
+
+    openai_key = get_openai_key()
+    if not openai_key:
+        raise HTTPException(400, "OpenAI not configured — needed for voice transcription")
+
+    # Save the audio file
+    audio_dir = Path("/app/data/voice-notes")
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex[:12]}.webm"
+    audio_path = audio_dir / filename
+    content = await file.read()
+    with open(audio_path, "wb") as f:
+        f.write(content)
+
+    # Transcribe with Whisper
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {openai_key}"},
+            files={"file": (filename, content, file.content_type or "audio/webm")},
+            data={"model": "whisper-1", "response_format": "text"},
+        )
+        if resp.status_code != 200:
+            raise HTTPException(500, f"Transcription failed: {resp.status_code}")
+        transcription = resp.text.strip()
+
+    if not transcription:
+        raise HTTPException(400, "Could not transcribe any speech from the recording")
+
+    # Create journal entry with transcription as content
+    with get_db() as db:
+        title_text = transcription[:50] + ("..." if len(transcription) > 50 else "")
+        title = f"Voice: {title_text}"
+
+        cursor = db.execute(
+            """INSERT INTO journal_entries (title, content, entry_type, planting_id, ground_plant_id, voice_note_filename)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (title, transcription, entry_type, planting_id or None, ground_plant_id or None, filename),
+        )
+        user = getattr(request.state, "user", None)
+        if user:
+            audit_log(
+                db, user["id"], "create", "journal", cursor.lastrowid,
+                {"title": title, "entry_type": entry_type, "source": "voice_note"},
+                request.client.host if request.client else None,
+            )
+        db.commit()
+        return {
+            "ok": True,
+            "id": cursor.lastrowid,
+            "transcription": transcription,
+            "title": title,
+        }
+
+
+# ──────────────── PHOTO-FIRST ENTRY ────────────────
+
+
+@router.post("/api/journal/photo-entry")
+async def create_photo_journal_entry(
+    request: Request,
+    file: UploadFile = File(...),
+    planting_id: int = Form(None),
+    ground_plant_id: int = Form(None),
+    content: str = Form(""),
+):
+    """Upload a photo, optionally run AI analysis, create journal entry."""
+    require_user(request)
+
+    if file.content_type not in ALLOWED_PHOTO_TYPES:
+        raise HTTPException(400, f"File type {file.content_type} not allowed. Use JPEG, PNG, or WebP.")
+
+    contents = await file.read()
+    if len(contents) > MAX_PHOTO_SIZE:
+        raise HTTPException(400, "File too large. Maximum size is 10MB.")
+
+    ext = PHOTO_EXTENSIONS.get(file.content_type, ".jpg")
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    photo_path = PHOTOS_DIR / unique_name
+
+    # Resize if Pillow is available
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(contents))
+        if img.width > 1200:
+            ratio = 1200 / img.width
+            new_size = (1200, int(img.height * ratio))
+            img = img.resize(new_size, Image.LANCZOS)
+        buf = io.BytesIO()
+        fmt = "JPEG" if ext in (".jpg", ".jpeg") else "PNG" if ext == ".png" else "WEBP"
+        img.save(buf, format=fmt, quality=85, optimize=True)
+        contents = buf.getvalue()
+    except ImportError:
+        pass
+
+    photo_path.write_bytes(contents)
+
+    # AI analysis if OpenAI configured
+    openai_key = get_openai_key()
+    ai_suggestion = None
+    if openai_key and not content:
+        try:
+            import base64
+            b64 = base64.b64encode(contents).decode()
+            mime = file.content_type or "image/jpeg"
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {openai_key}"},
+                    json={
+                        "model": "gpt-4o-mini",
+                        "max_tokens": 200,
+                        "messages": [
+                            {"role": "system", "content": "You are a garden journal assistant. Describe what you see in the garden photo in 1-2 concise sentences suitable for a journal entry. Focus on plant health, growth stage, and any notable observations."},
+                            {"role": "user", "content": [
+                                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"}},
+                            ]},
+                        ],
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ai_suggestion = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        except Exception:
+            pass  # AI analysis is optional
+
+    entry_content = content or ai_suggestion or "Photo observation"
+    title = entry_content[:50] + ("..." if len(entry_content) > 50 else "")
+
+    with get_db() as db:
+        cursor = db.execute(
+            "INSERT INTO journal_entries (title, content, entry_type, planting_id, ground_plant_id) VALUES (?, ?, 'observation', ?, ?)",
+            (title, entry_content, planting_id or None, ground_plant_id or None),
+        )
+        entry_id = cursor.lastrowid
+
+        # Link photo to journal entry
+        db.execute(
+            "INSERT INTO journal_entry_photos (journal_entry_id, filename, original_filename) VALUES (?, ?, ?)",
+            (entry_id, unique_name, file.filename),
+        )
+
+        user = getattr(request.state, "user", None)
+        if user:
+            audit_log(
+                db, user["id"], "create", "journal", entry_id,
+                {"title": title, "entry_type": "observation", "source": "photo_entry"},
+                request.client.host if request.client else None,
+            )
+        db.commit()
+        return {"ok": True, "id": entry_id, "ai_suggestion": ai_suggestion, "title": title}
 
 
 

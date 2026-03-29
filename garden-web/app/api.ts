@@ -1278,6 +1278,46 @@ export function quickAddJournal(data: { planting_id?: number; ground_plant_id?: 
   return apiFetch('/api/journal/quick-add', { method: 'POST', body: JSON.stringify(data) });
 }
 
+// Voice note journal entry (upload audio, transcribe, create entry)
+export async function createVoiceNote(formData: FormData) {
+  const res = await fetch(`${API_URL}/api/journal/voice-note`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+  if (res.status === 401) {
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+    throw new Error('Not authenticated');
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+// Photo-first journal entry (upload photo, optional AI analysis, create entry)
+export async function createPhotoJournalEntry(formData: FormData) {
+  const res = await fetch(`${API_URL}/api/journal/photo-entry`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+  if (res.status === 401) {
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+    throw new Error('Not authenticated');
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
 // My Plantings (unified view)
 export function getMyPlantings(status?: string, includeHistorical?: boolean) {
   const params = new URLSearchParams();
