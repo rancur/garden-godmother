@@ -717,16 +717,44 @@ export default function BedDetailPage() {
     }
   };
 
-  const placeWithVariety = async (plant: Plant, cellX: number, cellY: number, varietyId?: number) => {
+  const placeWithVariety = (plant: Plant, cellX: number, cellY: number, varietyId?: number) => {
+    // Show source picker instead of placing immediately
+    setSourcePickerPlant(plant);
+    setSourcePickerCell({ x: cellX, y: cellY });
+    setSourcePickerVarietyId(varietyId);
+    setSelectedSource('seed');
+    setPlantAgeWeeks(null);
+    setCustomAgeWeeks('');
+    setShowSourcePicker(true);
+    // Hide variety picker
+    setVarietyPickerPlant(null);
+    setVarietyPickerCell(null);
+    setPlantVarieties([]);
+  };
+
+  const cancelSourcePicker = () => {
+    setShowSourcePicker(false);
+    setSourcePickerPlant(null);
+    setSourcePickerCell(null);
+    setSourcePickerVarietyId(undefined);
+    setSelectedSource('seed');
+    setPlantAgeWeeks(null);
+    setCustomAgeWeeks('');
+  };
+
+  const placeWithSource = async () => {
+    if (!sourcePickerPlant || !sourcePickerCell) return;
     setPlacing(true);
     try {
       await createPlanting({
         bed_id: bedId,
-        plant_id: plant.id,
-        cell_x: cellX,
-        cell_y: cellY,
+        plant_id: sourcePickerPlant.id,
+        cell_x: sourcePickerCell.x,
+        cell_y: sourcePickerCell.y,
         planted_date: getGardenToday(),
-        ...(varietyId ? { variety_id: varietyId } : {}),
+        ...(sourcePickerVarietyId ? { variety_id: sourcePickerVarietyId } : {}),
+        source: selectedSource,
+        ...(selectedSource === 'nursery' && plantAgeWeeks ? { plant_age_weeks: plantAgeWeeks } : {}),
       });
       loadBed();
       setSelectedPlant(null);
@@ -734,10 +762,10 @@ export default function BedDetailPage() {
       setSelectedCell(null);
       setCompanionOverlay({});
       setRotationWarning(null);
-      setVarietyPickerPlant(null);
-      setVarietyPickerCell(null);
-      setPlantVarieties([]);
-      toast('Plant placed!');
+      cancelSourcePicker();
+      setSinglePlantPickerOpen(false);
+      setSinglePlantSearch('');
+      toast(selectedSource === 'nursery' ? 'Transplant placed!' : 'Plant placed!');
     } catch {
       setError('Failed to place plant');
     } finally {
@@ -1631,7 +1659,7 @@ export default function BedDetailPage() {
                           <div className="relative">
                             <div className="space-y-0.5 max-h-[40vh] overflow-y-auto scrollbar-thin">
                               <button
-                                onClick={async () => { await placeWithVariety(varietyPickerPlant, 0, 0); setSinglePlantPickerOpen(false); setSinglePlantSearch(''); }}
+                                onClick={() => { placeWithVariety(varietyPickerPlant, 0, 0); }}
                                 disabled={placing}
                                 className="w-full text-left px-2 py-2.5 min-h-[44px] rounded text-xs hover:bg-garden-100 dark:hover:bg-gray-700 text-earth-600 dark:text-gray-300"
                               >
@@ -1640,7 +1668,7 @@ export default function BedDetailPage() {
                               {plantVarieties.map((v) => (
                                 <button
                                   key={v.id}
-                                  onClick={async () => { await placeWithVariety(varietyPickerPlant, 0, 0, v.id); setSinglePlantPickerOpen(false); setSinglePlantSearch(''); }}
+                                  onClick={() => { placeWithVariety(varietyPickerPlant, 0, 0, v.id); }}
                                   disabled={placing}
                                   className="w-full text-left px-2 py-2.5 min-h-[44px] rounded text-xs hover:bg-garden-100 dark:hover:bg-gray-700 flex items-center justify-between"
                                 >
@@ -1657,8 +1685,69 @@ export default function BedDetailPage() {
                           </div>
                         </div>
                       )}
+                      {showSourcePicker && sourcePickerPlant && (
+                        <div className="mt-2 bg-garden-50 dark:bg-gray-750 border border-garden-300 dark:border-garden-700 rounded-lg p-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-earth-800 dark:text-gray-100">
+                              {getPlantIcon(sourcePickerPlant.name, sourcePickerPlant.category)} {sourcePickerPlant.name} — How was it started?
+                            </span>
+                            <button onClick={cancelSourcePicker} className="text-earth-400 text-xs font-bold px-1">&#10005;</button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 mb-1.5">
+                            {([['seed', 'From seed'], ['nursery', 'From nursery'], ['cutting', 'From cutting'], ['division', 'Division']] as const).map(([val, label]) => (
+                              <button
+                                key={val}
+                                onClick={() => { setSelectedSource(val); if (val !== 'nursery') setPlantAgeWeeks(null); }}
+                                className={`px-2 py-1.5 rounded text-xs font-medium transition-colors ${
+                                  selectedSource === val
+                                    ? 'bg-garden-600 text-white'
+                                    : 'bg-white dark:bg-gray-700 text-earth-600 dark:text-gray-300 hover:bg-garden-100 dark:hover:bg-gray-600 border border-earth-200 dark:border-gray-600'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {selectedSource === 'nursery' && (
+                            <div className="mb-1.5">
+                              <p className="text-[10px] text-earth-500 dark:text-gray-400 mb-1">How old is this plant?</p>
+                              <div className="flex flex-wrap gap-1 mb-1">
+                                {[2, 4, 6, 8].map((w) => (
+                                  <button
+                                    key={w}
+                                    onClick={() => { setPlantAgeWeeks(w); setCustomAgeWeeks(''); }}
+                                    className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                                      plantAgeWeeks === w && !customAgeWeeks
+                                        ? 'bg-garden-600 text-white'
+                                        : 'bg-white dark:bg-gray-700 text-earth-600 dark:text-gray-300 hover:bg-garden-100 dark:hover:bg-gray-600 border border-earth-200 dark:border-gray-600'
+                                    }`}
+                                  >
+                                    ~{w}wk
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                type="number"
+                                min="1"
+                                max="52"
+                                placeholder="Custom weeks..."
+                                value={customAgeWeeks}
+                                onChange={(e) => { setCustomAgeWeeks(e.target.value); if (e.target.value) setPlantAgeWeeks(parseInt(e.target.value)); else setPlantAgeWeeks(null); }}
+                                className="w-full px-2 py-1 text-[10px] rounded border border-earth-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-100 placeholder-earth-400 dark:placeholder-gray-500"
+                              />
+                            </div>
+                          )}
+                          <button
+                            onClick={placeWithSource}
+                            disabled={placing || (selectedSource === 'nursery' && !plantAgeWeeks)}
+                            className="w-full py-1.5 rounded text-xs font-semibold transition-colors bg-garden-600 text-white hover:bg-garden-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {placing ? 'Placing...' : selectedSource === 'nursery' ? 'Place transplant' : 'Place plant'}
+                          </button>
+                        </div>
+                      )}
                       <button
-                        onClick={() => { setSinglePlantPickerOpen(false); setSinglePlantSearch(''); setVarietyPickerPlant(null); setVarietyPickerCell(null); setPlantVarieties([]); }}
+                        onClick={() => { setSinglePlantPickerOpen(false); setSinglePlantSearch(''); setVarietyPickerPlant(null); setVarietyPickerCell(null); setPlantVarieties([]); cancelSourcePicker(); }}
                         className="text-xs text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300"
                       >
                         Cancel
@@ -2483,6 +2572,74 @@ export default function BedDetailPage() {
                 ))
               )}
             </div>
+
+            {/* Source picker overlay */}
+            {showSourcePicker && sourcePickerPlant && sourcePickerCell && (
+              <div className="mt-3 bg-garden-50 dark:bg-gray-750 border border-garden-300 dark:border-garden-700 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-earth-800 dark:text-gray-100">
+                    {getPlantIcon(sourcePickerPlant.name, sourcePickerPlant.category)} {sourcePickerPlant.name} — How was it started?
+                  </span>
+                  <button
+                    onClick={cancelSourcePicker}
+                    className="text-earth-400 hover:text-earth-600 dark:text-gray-500 dark:hover:text-gray-300 text-xs font-bold px-1"
+                  >
+                    &#10005;
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 mb-2">
+                  {([['seed', 'From seed'], ['nursery', 'From nursery'], ['cutting', 'From cutting'], ['division', 'Division']] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => { setSelectedSource(val); if (val !== 'nursery') setPlantAgeWeeks(null); }}
+                      className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                        selectedSource === val
+                          ? 'bg-garden-600 text-white'
+                          : 'bg-white dark:bg-gray-700 text-earth-600 dark:text-gray-300 hover:bg-garden-100 dark:hover:bg-gray-600 border border-earth-200 dark:border-gray-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {selectedSource === 'nursery' && (
+                  <div className="mb-2">
+                    <p className="text-xs text-earth-500 dark:text-gray-400 mb-1.5">How old is this plant?</p>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {[2, 4, 6, 8].map((w) => (
+                        <button
+                          key={w}
+                          onClick={() => { setPlantAgeWeeks(w); setCustomAgeWeeks(''); }}
+                          className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                            plantAgeWeeks === w && !customAgeWeeks
+                              ? 'bg-garden-600 text-white'
+                              : 'bg-white dark:bg-gray-700 text-earth-600 dark:text-gray-300 hover:bg-garden-100 dark:hover:bg-gray-600 border border-earth-200 dark:border-gray-600'
+                          }`}
+                        >
+                          ~{w} weeks
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="52"
+                      placeholder="Custom weeks..."
+                      value={customAgeWeeks}
+                      onChange={(e) => { setCustomAgeWeeks(e.target.value); if (e.target.value) setPlantAgeWeeks(parseInt(e.target.value)); else setPlantAgeWeeks(null); }}
+                      className="w-full px-2 py-1.5 text-xs rounded border border-earth-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-100 placeholder-earth-400 dark:placeholder-gray-500"
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={placeWithSource}
+                  disabled={placing || (selectedSource === 'nursery' && !plantAgeWeeks)}
+                  className="w-full py-2 rounded text-sm font-semibold transition-colors bg-garden-600 text-white hover:bg-garden-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {placing ? 'Placing...' : selectedSource === 'nursery' ? 'Place transplant' : 'Place plant'}
+                </button>
+              </div>
+            )}
 
             {/* Variety picker overlay */}
             {varietyPickerPlant && varietyPickerCell && (
