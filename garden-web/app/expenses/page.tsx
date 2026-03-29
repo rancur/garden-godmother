@@ -7,11 +7,12 @@ import { useToast } from '../toast';
 import { getGardenToday } from '../timezone';
 
 const EXPENSE_CATEGORIES = [
-  'seeds', 'soil', 'fertilizer', 'tools', 'pest_control', 'infrastructure', 'water', 'other',
+  'seeds', 'transplants', 'soil', 'fertilizer', 'tools', 'pest_control', 'infrastructure', 'water', 'other',
 ] as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
   seeds: 'Seeds',
+  transplants: 'Transplants',
   soil: 'Soil',
   fertilizer: 'Fertilizer',
   tools: 'Tools',
