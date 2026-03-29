@@ -1324,4 +1324,1151 @@ def startup_run_migrations():
 
         run_migration(db, 52, "plant_task_templates", [], callback=_task_templates)
 
+        # ── Migration 053: task templates for ALL remaining plants ──
+        def _all_plant_templates(db):
+            # Get all plants
+            plants = db.execute("SELECT id, name, category FROM plants").fetchall()
+            # Get plant names that already have templates
+            existing = set(
+                row[0] for row in db.execute(
+                    "SELECT DISTINCT plant_name FROM plant_task_templates"
+                ).fetchall()
+            )
+
+            # ── Plant-specific templates (override category defaults) ──
+            # Format: (task_type, title, description, trigger_type, trigger_value, priority, season_filter)
+            specific = {
+                # ── VEGETABLES ──
+                'Watermelon': [
+                    ('custom', 'Set up trellis or ground support for {plant_name}', 'Use straw mulch under fruit to prevent rot, or trellis with slings for vertical growing', 'days_after_planting', '14', 'high', None),
+                    ('custom', 'Hand pollinate {plant_name}', 'Transfer pollen from male to female flowers (female has small fruit behind bloom) with paintbrush in morning', 'growth_stage', 'flowering', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Switch to low-nitrogen, high-potassium fertilizer once fruit sets', 'recurring', '21', 'medium', None),
+                    ('custom', 'Thump test {plant_name} for ripeness', 'Ripe melons sound hollow when thumped. Also check: tendril nearest fruit turns brown, ground spot turns yellow', 'days_after_planting', '80', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for pests', 'Watch for aphids, cucumber beetles, and squash vine borers', 'recurring', '10', 'low', None),
+                ],
+                'Cantaloupe': [
+                    ('custom', 'Mulch under {plant_name} fruit', 'Place straw or cardboard under developing fruit to prevent rot', 'days_after_planting', '21', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer, switch to low-nitrogen once flowering begins', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Check {plant_name} for harvest', 'Ripe when stem slips easily from fruit with gentle pressure and smells sweet at blossom end', 'days_after_planting', '75', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for pests', 'Watch for cucumber beetles and squash bugs', 'recurring', '10', 'low', None),
+                ],
+                'Pumpkin': [
+                    ('custom', 'Train {plant_name} vines', 'Direct vine growth to keep plants organized. Pinch side runners if space is limited', 'days_after_planting', '21', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Heavy feeder — apply compost tea or balanced fertilizer regularly', 'recurring', '14', 'medium', None),
+                    ('custom', 'Elevate {plant_name} fruit', 'Place cardboard or straw under developing pumpkins to prevent rot', 'days_after_planting', '45', 'medium', None),
+                    ('harvest', 'Check {plant_name} for harvest', 'Harvest when skin is hard, deep color, and stem begins to dry. Cut with 4 inches of stem', 'days_after_planting', '100', 'medium', None),
+                ],
+                'Snap Pea': [
+                    ('stake', 'Install trellis for {plant_name}', 'Peas need support — install trellis, netting, or stakes at planting time', 'days_after_planting', '7', 'high', None),
+                    ('harvest', 'Harvest {plant_name} frequently', 'Pick pods when plump but still bright green. Harvest daily to encourage continued production', 'days_after_planting', '60', 'high', None),
+                    ('pest_check', 'Check {plant_name} for pests', 'Watch for aphids and powdery mildew', 'recurring', '10', 'low', None),
+                ],
+                'Snow Pea': [
+                    ('stake', 'Install trellis for {plant_name}', 'Snow peas need support — install trellis or netting', 'days_after_planting', '7', 'high', None),
+                    ('harvest', 'Harvest {plant_name} when flat', 'Pick when pods are flat and peas are barely visible inside. Don\'t let them get fat', 'days_after_planting', '55', 'high', None),
+                    ('pest_check', 'Check {plant_name} for powdery mildew', 'Ensure good airflow. Remove affected leaves immediately', 'recurring', '10', 'low', None),
+                ],
+                'Pea': [
+                    ('stake', 'Install trellis for {plant_name}', 'Most pea varieties benefit from support — install at planting time', 'days_after_planting', '7', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick regularly to encourage continued production. Timing depends on variety', 'days_after_planting', '60', 'medium', None),
+                    ('custom', 'Inoculate {plant_name} seeds', 'Use rhizobium inoculant at planting for better nitrogen fixation', 'one_time', '0', 'medium', None),
+                ],
+                'Artichoke': [
+                    ('fertilize', 'Feed {plant_name}', 'Heavy feeder — apply balanced fertilizer or compost monthly', 'recurring', '30', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} buds', 'Cut buds when tight and firm, before scales open. Cut 3 inches below bud', 'growth_stage', 'flowering', 'high', None),
+                    ('prune', 'Cut back {plant_name} after harvest', 'After main harvest, cut stalks to ground to encourage fall resprout', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Asparagus': [
+                    ('fertilize', 'Feed {plant_name} bed', 'Apply compost and balanced fertilizer in early spring before spears emerge', 'recurring', '90', 'medium', 'spring'),
+                    ('custom', 'Stop harvesting {plant_name}', 'Stop cutting spears after 8 weeks to let ferns grow and feed roots for next year', 'days_after_planting', '60', 'high', 'spring'),
+                    ('prune', 'Cut back {plant_name} ferns', 'Cut brown ferns to ground in late fall or early winter', 'recurring', '365', 'medium', 'fall'),
+                ],
+                'Potato': [
+                    ('custom', 'Hill {plant_name}', 'Mound soil around stems when plants are 6-8 inches tall. Repeat as they grow. Prevents green tubers', 'days_after_planting', '21', 'high', None),
+                    ('pest_check', 'Check {plant_name} for Colorado potato beetle', 'Inspect leaves for yellow-striped beetles and orange egg clusters. Hand-pick or use BT', 'recurring', '7', 'medium', 'spring,summer'),
+                    ('harvest', 'Harvest {plant_name}', 'Dig when foliage dies back. New potatoes can be harvested earlier while plants are still green', 'days_after_planting', '90', 'medium', None),
+                ],
+                'Sweet Potato': [
+                    ('custom', 'Train {plant_name} vines', 'Redirect vines back toward the mound to prevent rooting at nodes (reduces tuber size)', 'days_after_planting', '30', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} before frost', 'Dig carefully before first frost. Cure in warm humid spot for 10 days before storing', 'days_after_planting', '100', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Use low-nitrogen fertilizer — too much nitrogen makes vines not tubers', 'recurring', '30', 'low', None),
+                ],
+                'Garlic': [
+                    ('custom', 'Remove {plant_name} scapes', 'Cut curly flower stalks (scapes) when they form to direct energy to bulb. Scapes are edible!', 'growth_stage', 'flowering', 'high', None),
+                    ('custom', 'Stop watering {plant_name}', 'Stop irrigation 2 weeks before harvest to let bulbs cure in ground', 'days_after_planting', '200', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Dig when lower 1/3 of leaves are brown. Cure in dry shaded area for 2-3 weeks', 'days_after_planting', '220', 'high', None),
+                ],
+                'Onion': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply nitrogen-rich fertilizer every 2-3 weeks during leaf growth phase', 'recurring', '21', 'medium', None),
+                    ('custom', 'Stop fertilizing {plant_name}', 'When bulbs start swelling, stop nitrogen to encourage bulb formation', 'days_after_planting', '90', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Ready when tops fall over and start yellowing. Pull and cure in sun for a few days', 'days_after_planting', '110', 'medium', None),
+                ],
+                'Beet': [
+                    ('custom', 'Thin {plant_name} seedlings', 'Thin to 3-4 inches apart when 2 inches tall. Eat the thinnings as microgreens', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pull when 1.5-3 inches diameter. Larger beets get woody. Greens are also edible', 'days_after_planting', '55', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with compost. Avoid high nitrogen which promotes tops over roots', 'recurring', '30', 'low', None),
+                ],
+                'Radish': [
+                    ('custom', 'Thin {plant_name} seedlings', 'Thin to 2 inches apart soon after germination for proper root development', 'days_after_planting', '7', 'high', None),
+                    ('harvest', 'Harvest {plant_name} promptly', 'Pull when roots reach marble to golf-ball size. Gets pithy and hot if left too long', 'days_after_planting', '25', 'high', None),
+                ],
+                'Spinach': [
+                    ('harvest', 'Harvest outer {plant_name} leaves', 'Cut outer leaves when 3-4 inches long, leaving center to keep growing', 'days_after_planting', '25', 'medium', None),
+                    ('custom', 'Watch {plant_name} for bolting', 'Bolts in heat — harvest entire plant if temperatures rise above 80F consistently', 'days_after_planting', '40', 'high', 'spring,summer'),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply nitrogen-rich fertilizer for lush leaf growth', 'recurring', '21', 'low', None),
+                ],
+                'Kale': [
+                    ('harvest', 'Harvest outer {plant_name} leaves', 'Pick lower/outer leaves first, leaving growing center. Gets sweeter after frost', 'days_after_planting', '30', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for cabbage worms', 'Inspect for green caterpillars and white butterflies. Use BT spray or row covers', 'recurring', '7', 'medium', 'spring,summer'),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with compost or nitrogen-rich fertilizer monthly', 'recurring', '30', 'low', None),
+                ],
+                'Broccoli': [
+                    ('harvest', 'Check {plant_name} for harvest', 'Cut main head when florets are tight and dark green, before any yellowing. Side shoots will follow', 'days_after_planting', '60', 'high', None),
+                    ('pest_check', 'Check {plant_name} for cabbage worms', 'Look for green caterpillars. Use row covers or BT spray', 'recurring', '7', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Heavy feeder — side-dress with nitrogen-rich fertilizer after transplanting', 'recurring', '21', 'medium', None),
+                ],
+                'Cauliflower': [
+                    ('custom', 'Blanch {plant_name} heads', 'When head is 2-3 inches, tie outer leaves over curd to keep it white. Check daily', 'growth_stage', 'flowering', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Cut when head is firm, white, and 6-8 inches across. Don\'t wait for it to separate', 'days_after_planting', '70', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Very heavy feeder — apply nitrogen-rich fertilizer every 2 weeks', 'recurring', '14', 'high', None),
+                ],
+                'Cabbage': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Heavy feeder — side-dress with nitrogen fertilizer every 3 weeks', 'recurring', '21', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for cabbage worms', 'Look for holes in leaves, green caterpillars, and white butterflies nearby', 'recurring', '7', 'medium', None),
+                    ('harvest', 'Check {plant_name} for harvest', 'Harvest when heads are firm and solid. Cut at base leaving a few outer leaves for possible second crop', 'days_after_planting', '70', 'medium', None),
+                ],
+                'Brussels Sprouts': [
+                    ('custom', 'Top {plant_name} plant', 'Cut off growing tip 3-4 weeks before expected harvest to force sprout development', 'days_after_planting', '90', 'high', None),
+                    ('harvest', 'Harvest {plant_name} from bottom up', 'Pick sprouts from bottom when firm and 1-2 inches. Taste improves after frost', 'days_after_planting', '100', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Heavy feeder — apply nitrogen fertilizer monthly', 'recurring', '30', 'medium', None),
+                ],
+                'Okra': [
+                    ('harvest', 'Harvest {plant_name} pods', 'Pick when 2-4 inches long every 1-2 days. Gets tough and fibrous if left too long', 'days_after_planting', '55', 'high', None),
+                    ('prune', 'Prune lower {plant_name} leaves', 'Remove leaves below lowest pod to improve airflow and make harvesting easier', 'recurring', '14', 'low', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with balanced fertilizer monthly during production', 'recurring', '30', 'medium', None),
+                ],
+                'Corn': [],  # Already has templates
+                'Tomatillo': [
+                    ('stake', 'Cage or stake {plant_name}', 'Plants get bushy and heavy with fruit. Support prevents sprawling', 'days_after_planting', '21', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when husk splits and fruit fills the papery covering. Fruit should be firm and bright green', 'days_after_planting', '70', 'medium', None),
+                    ('custom', 'Plant {plant_name} in pairs', 'Needs cross-pollination — ensure at least 2 plants for fruit set', 'one_time', '0', 'high', None),
+                ],
+                'Ground Cherry': [
+                    ('harvest', 'Harvest fallen {plant_name}', 'Pick fruit off ground when husks turn papery tan and fruit is golden. Don\'t pick green ones', 'days_after_planting', '70', 'medium', None),
+                    ('custom', 'Mulch under {plant_name}', 'Lay mulch or landscape fabric under plants to keep fallen fruit clean', 'days_after_planting', '14', 'medium', None),
+                ],
+                'Habanero': [
+                    ('custom', 'Pinch first flowers on {plant_name}', 'Remove early flowers to build stronger plant structure before fruiting', 'days_after_planting', '14', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Use low-nitrogen fertilizer once fruiting begins. Too much N = leaves, not peppers', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully colored (orange). Use gloves — oils cause burns', 'days_after_planting', '90', 'medium', None),
+                ],
+                'Jalapeno': [
+                    ('custom', 'Pinch first flowers on {plant_name}', 'Remove early blooms for stronger plant and bigger harvest later', 'days_after_planting', '14', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply low-nitrogen fertilizer. Switch to potassium-rich once fruiting', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when firm and dark green for mild heat, or wait for red for more heat', 'days_after_planting', '70', 'medium', None),
+                ],
+                'Serrano': [
+                    ('custom', 'Pinch first flowers on {plant_name}', 'Remove early flowers to develop stronger root system', 'days_after_planting', '14', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Low-nitrogen fertilizer once flowering starts', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick green for milder heat or red for full heat. Harvest regularly to encourage production', 'days_after_planting', '75', 'medium', None),
+                ],
+                'Bell Pepper': [
+                    ('custom', 'Pinch first flowers on {plant_name}', 'Remove early blooms to build plant strength', 'days_after_planting', '14', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply calcium-rich fertilizer to prevent blossom end rot', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick green for mild flavor or wait for color change (red/yellow) for sweeter taste', 'days_after_planting', '65', 'medium', None),
+                    ('stake', 'Stake {plant_name}', 'Support heavy plants to prevent branch breakage when loaded with fruit', 'days_after_planting', '30', 'medium', None),
+                ],
+                'Cherry Tomato': [
+                    ('stake', 'Cage or stake {plant_name}', 'These vigorous growers need strong support — use tall cages or stakes', 'days_after_planting', '14', 'high', None),
+                    ('prune', 'Prune suckers on {plant_name}', 'Remove suckers below first flower cluster to manage growth', 'days_after_planting', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully colored. Check daily — they ripen fast and split if left on vine', 'days_after_planting', '55', 'high', None),
+                    ('pest_check', 'Check {plant_name} for hornworms', 'Inspect stems and leaves for large green caterpillars', 'recurring', '7', 'medium', 'spring,summer'),
+                ],
+                'Roma Tomato': [
+                    ('stake', 'Cage {plant_name}', 'Determinate variety — shorter cage is fine', 'days_after_planting', '14', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply calcium-rich fertilizer — romas are prone to blossom end rot', 'recurring', '14', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when deep red and firm. Perfect for sauce-making when harvested in bulk', 'days_after_planting', '70', 'medium', None),
+                ],
+                'Squash (Summer)': [
+                    ('pest_check', 'Check {plant_name} for squash vine borers', 'Look for sawdust-like frass at stem base. Wrap stems with foil preventively', 'recurring', '7', 'medium', 'spring,summer'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick young and tender. Gets seedy and tough if left too long', 'days_after_planting', '45', 'medium', None),
+                    ('custom', 'Hand pollinate {plant_name}', 'Transfer pollen from male to female flowers in morning if fruit isn\'t setting', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Butternut Squash': [
+                    ('custom', 'Train {plant_name} vines', 'Direct vine growth and pinch growing tips after 3-4 fruit set per vine', 'days_after_planting', '30', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Cut when skin is hard, tan colored, and stem is dry. Leave 2 inches of stem', 'days_after_planting', '100', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for squash bugs', 'Look for bronze eggs on leaf undersides and gray adults. Hand-pick', 'recurring', '10', 'medium', None),
+                ],
+                'Spaghetti Squash': [
+                    ('harvest', 'Check {plant_name} for harvest', 'Ready when skin turns golden yellow and is hard to dent with fingernail', 'days_after_planting', '95', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with compost when vines begin to run', 'days_after_planting', '30', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for squash vine borers', 'Inspect stem base for entry holes and frass', 'recurring', '10', 'medium', 'spring,summer'),
+                ],
+                'Winter Squash': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut when skin is hard and colors are deep. Cure in sun for a week before storing', 'days_after_planting', '95', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply compost tea when vines begin to run', 'days_after_planting', '30', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for squash bugs', 'Inspect leaf undersides for eggs. Hand-pick adults', 'recurring', '10', 'medium', None),
+                ],
+                'Acorn Squash': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut when dark green with orange patch on ground side. Stem should be dry', 'days_after_planting', '85', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for squash bugs', 'Look under leaves for bronze egg clusters', 'recurring', '10', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with compost when vines start running', 'days_after_planting', '25', 'medium', None),
+                ],
+                'Delicata Squash': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when cream-colored with dark green stripes and skin resists puncture', 'days_after_planting', '80', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for squash bugs', 'Hand-pick adults and crush egg clusters on leaf undersides', 'recurring', '10', 'medium', None),
+                ],
+                'Kabocha Squash': [
+                    ('harvest', 'Harvest {plant_name}', 'Ready when stem is dry and corky and skin is dull not shiny', 'days_after_planting', '95', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer when vines begin to run', 'days_after_planting', '28', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for pests', 'Watch for squash bugs and vine borers', 'recurring', '10', 'medium', None),
+                ],
+                'Armenian Cucumber': [
+                    ('stake', 'Trellis {plant_name}', 'Vigorous vine — provide strong trellis for best fruit shape and easier harvest', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick at 12-18 inches for best flavor. Gets seedy if left too long', 'days_after_planting', '55', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Feed with balanced fertilizer every 2-3 weeks', 'recurring', '21', 'medium', None),
+                ],
+                'Luffa': [
+                    ('stake', 'Provide strong trellis for {plant_name}', 'Needs very sturdy support — fruit can be heavy. Chain link fence works well', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name} for sponges', 'Leave on vine until skin turns brown and dry, then peel and shake out seeds', 'days_after_planting', '120', 'medium', None),
+                    ('custom', 'Hand pollinate {plant_name}', 'Flowers open in evening — hand-pollinate if not getting fruit set', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Bitter Melon': [
+                    ('stake', 'Trellis {plant_name}', 'Vigorous climber — needs sturdy trellis or fence', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when green and firm, before turning yellow/orange. Gets more bitter as it matures', 'days_after_planting', '55', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer every 3 weeks', 'recurring', '21', 'medium', None),
+                ],
+                'Chayote': [
+                    ('stake', 'Provide strong trellis for {plant_name}', 'Very vigorous vine — needs sturdy arbor, fence, or trellis', 'days_after_planting', '21', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when 4-6 inches and still tender. Cook whole — skin is edible', 'days_after_planting', '120', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with compost monthly. Heavy feeder once established', 'recurring', '30', 'medium', None),
+                ],
+                'Edamame': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when pods are plump and bright green but before they start yellowing. Pull entire plant', 'days_after_planting', '80', 'high', None),
+                    ('custom', 'Inoculate {plant_name} soil', 'Use soybean-specific rhizobium inoculant for better nitrogen fixation', 'one_time', '0', 'medium', None),
+                ],
+                'Fava Bean': [
+                    ('custom', 'Pinch {plant_name} tops', 'Pinch growing tips when first pods set to redirect energy to beans and deter aphids', 'growth_stage', 'flowering', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when pods are plump and bright green. Shell and peel inner skin for best flavor', 'days_after_planting', '80', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for aphids', 'Black bean aphids love fava tips. Pinching tops helps, or blast with water', 'recurring', '7', 'medium', 'spring'),
+                ],
+                'Lima Bean': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when pods are plump and green for fresh limas, or let dry on vine for dry beans', 'days_after_planting', '70', 'medium', None),
+                    ('stake', 'Support pole {plant_name} varieties', 'Pole types need trellis or teepee. Bush types are self-supporting', 'days_after_planting', '14', 'medium', None),
+                ],
+                'Yard-Long Bean': [
+                    ('stake', 'Install tall trellis for {plant_name}', 'Vigorous climber — needs 6-8 foot support', 'days_after_planting', '10', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick at 12-18 inches before seeds bulge. Gets tough if too long. Harvest daily', 'days_after_planting', '60', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light feeder — avoid excess nitrogen. Fixes own nitrogen', 'recurring', '30', 'low', None),
+                ],
+                'Yardlong Bean': [
+                    ('stake', 'Install tall trellis for {plant_name}', 'Vigorous climber — needs 6-8 foot support', 'days_after_planting', '10', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick at 12-18 inches before seeds bulge. Harvest daily for best production', 'days_after_planting', '60', 'high', None),
+                ],
+                'Pole Bean': [
+                    ('stake', 'Install trellis for {plant_name}', 'Needs 6-8 foot support — teepee, trellis, or poles', 'days_after_planting', '7', 'high', None),
+                    ('harvest', 'Harvest {plant_name} regularly', 'Pick when pods snap cleanly. Harvest every 2-3 days to keep production going', 'days_after_planting', '60', 'high', None),
+                ],
+                'Green Bean': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when firm and snap cleanly. Harvest every 2-3 days for continued production', 'days_after_planting', '55', 'high', None),
+                    ('pest_check', 'Check {plant_name} for bean beetles', 'Look for copper-colored beetles and yellow egg clusters on leaf undersides', 'recurring', '10', 'medium', None),
+                ],
+                'Black-Eyed Pea': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick pods when plump for fresh peas, or let dry completely on vine for storage', 'days_after_planting', '60', 'medium', None),
+                    ('custom', '{plant_name} as cover crop', 'Fixes nitrogen — great for building soil. Can turn under as green manure', 'one_time', '0', 'low', None),
+                ],
+                'Cowpea': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when pods are plump for fresh use or let dry on vine for storage', 'days_after_planting', '60', 'medium', None),
+                    ('custom', '{plant_name} nitrogen fixation', 'Fixes own nitrogen — don\'t over-fertilize. Good cover crop', 'one_time', '0', 'low', None),
+                ],
+                'Cowpea (Black-eyed Pea)': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick fresh when plump or dry on vine for storage beans', 'days_after_planting', '60', 'medium', None),
+                ],
+                'Tepary Bean': [
+                    ('harvest', 'Harvest {plant_name}', 'Desert-adapted bean. Let pods dry completely on vine, then shell', 'days_after_planting', '75', 'medium', None),
+                    ('custom', '{plant_name} is drought-tolerant', 'Needs very little water once established — overwatering reduces yield', 'one_time', '0', 'medium', None),
+                ],
+                'Moringa': [
+                    ('prune', 'Prune {plant_name} aggressively', 'Cut back to 3-4 feet to keep bushy and harvestable. Grows very fast', 'recurring', '30', 'high', None),
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick tender leaves and tips regularly. Extremely nutritious superfood', 'recurring', '14', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Tropical plant — cover or bring inside when frost threatens', 'recurring', '365', 'high', 'fall,winter'),
+                ],
+                'Malabar Spinach': [
+                    ('stake', 'Trellis {plant_name}', 'Vigorous vine — provide trellis or let scramble on fence', 'days_after_planting', '14', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick young leaves and stem tips. Mucilaginous texture — great in stir-fries', 'days_after_planting', '45', 'medium', None),
+                ],
+                'Nopal Cactus': [
+                    ('harvest', 'Harvest {plant_name} pads', 'Cut young tender pads (nopales) when 6-8 inches. Use gloves and scrape off spines', 'recurring', '30', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for cochineal scale', 'Look for white cottony masses on pads. Remove with strong water spray', 'recurring', '30', 'low', None),
+                ],
+                'Prickly Pear': [
+                    ('harvest', 'Harvest {plant_name} fruit (tunas)', 'Pick ripe fruit with tongs when deeply colored. Wear gloves for tiny glochid spines', 'growth_stage', 'fruiting', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} pads (nopales)', 'Cut young green pads for cooking. Scrape off spines', 'recurring', '30', 'medium', None),
+                ],
+                'Arugula': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut outer leaves at 3-4 inches for mildest flavor. Gets spicier with heat and age', 'days_after_planting', '21', 'medium', None),
+                    ('custom', 'Watch {plant_name} for bolting', 'Bolts quickly in heat. Succession plant every 2-3 weeks for continuous harvest', 'days_after_planting', '35', 'high', 'spring,summer'),
+                ],
+                'Bok Choy': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut at base when heads are firm, or harvest outer leaves. Baby bok choy at 6 inches', 'days_after_planting', '30', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for flea beetles', 'Tiny holes in leaves indicate flea beetles. Use row covers as prevention', 'recurring', '7', 'medium', None),
+                ],
+                'Collard Greens': [
+                    ('harvest', 'Harvest lower {plant_name} leaves', 'Pick outer/lower leaves at 10-12 inches, leaving center to grow. Sweeter after frost', 'days_after_planting', '40', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for cabbage worms', 'Use BT spray or row covers against green caterpillars', 'recurring', '10', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with nitrogen-rich fertilizer for lush leaves', 'recurring', '30', 'medium', None),
+                ],
+                'Mustard Greens': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut outer leaves at 4-6 inches for baby greens, larger for cooking. Gets spicier in heat', 'days_after_planting', '25', 'medium', None),
+                    ('custom', 'Watch {plant_name} for bolting', 'Bolts in heat — harvest promptly or use as a cover crop', 'days_after_planting', '40', 'medium', 'spring,summer'),
+                ],
+                'Mizuna': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut outer leaves for mild mustard flavor. Great as baby green in salads', 'days_after_planting', '21', 'medium', None),
+                ],
+                'Tatsoi': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut outer rosette leaves or harvest whole plant. Very cold-tolerant', 'days_after_planting', '25', 'medium', None),
+                ],
+                'Endive': [
+                    ('custom', 'Blanch {plant_name}', 'Cover center with plate or tie leaves for 2-3 weeks before harvest to reduce bitterness', 'days_after_planting', '60', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Cut at base when heads are full. Inner blanched leaves are mildest', 'days_after_planting', '80', 'medium', None),
+                ],
+                'Radicchio': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut when heads are firm and colored. Some varieties need cold to form heads', 'days_after_planting', '70', 'medium', None),
+                ],
+                'Napa Cabbage': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut at base when heads are firm and tall. Won\'t store long — use promptly', 'days_after_planting', '60', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for aphids', 'Check between tight leaf layers for hidden aphid colonies', 'recurring', '10', 'medium', None),
+                ],
+                'Fennel': [
+                    ('custom', 'Hill soil around {plant_name} bulb', 'Mound soil around base as bulb forms to blanch and sweeten it', 'days_after_planting', '45', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} bulb', 'Cut at soil level when bulb is 3-4 inches across. Fronds are also edible', 'days_after_planting', '75', 'medium', None),
+                ],
+                'Leek': [
+                    ('custom', 'Hill soil around {plant_name}', 'Mound soil around stems as they grow to blanch more white shaft', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Dig when 1 inch or more in diameter. Can leave in ground through winter', 'days_after_planting', '90', 'medium', None),
+                ],
+                'Green Onion': [
+                    ('harvest', 'Harvest {plant_name}', 'Pull or cut at soil level when pencil-thick. Regrows if 1 inch of base is left', 'days_after_planting', '30', 'medium', None),
+                ],
+                'Shallot': [
+                    ('harvest', 'Harvest {plant_name}', 'Dig when tops fall over and dry. Cure in shade for 2 weeks before storing', 'days_after_planting', '90', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light feeder — apply balanced fertilizer once a month', 'recurring', '30', 'low', None),
+                ],
+                'Turnip': [
+                    ('custom', 'Thin {plant_name} seedlings', 'Thin to 4 inches apart for root crop, 2 inches if growing for greens only', 'days_after_planting', '10', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pull when 2-3 inches diameter. Greens are also delicious — harvest anytime', 'days_after_planting', '40', 'medium', None),
+                ],
+                'Parsnip': [
+                    ('custom', 'Be patient with {plant_name}', 'Very slow to germinate (2-3 weeks). Keep soil moist. Don\'t give up', 'days_after_planting', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} after frost', 'Gets sweeter after frost converts starches to sugar. Can overwinter in ground', 'days_after_planting', '100', 'medium', None),
+                ],
+                'Rutabaga': [
+                    ('custom', 'Thin {plant_name} seedlings', 'Thin to 6 inches apart for proper root development', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pull when 3-5 inches across. Sweeter after light frost', 'days_after_planting', '90', 'medium', None),
+                ],
+                'Daikon Radish': [
+                    ('custom', 'Thin {plant_name} seedlings', 'Thin to 4-6 inches apart for proper root development', 'days_after_planting', '10', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pull when 8-14 inches long. Gets pithy if left too long in warm soil', 'days_after_planting', '50', 'medium', None),
+                ],
+                'Jicama': [
+                    ('custom', 'Pinch {plant_name} flowers', 'Remove all flowers and runners to direct energy to tuber growth', 'growth_stage', 'flowering', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Dig tubers after 5-9 months. Needs long warm season. WARNING: all parts except tuber are toxic', 'days_after_planting', '150', 'medium', None),
+                    ('stake', 'Trellis {plant_name} vines', 'Provide support for the vigorous vine growth', 'days_after_planting', '21', 'medium', None),
+                ],
+                'Ginger': [
+                    ('custom', 'Mulch {plant_name} heavily', 'Needs consistent moisture and warmth. Heavy mulch retains both', 'days_after_planting', '7', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Dig after 8-10 months when leaves yellow and die back. Can harvest baby ginger earlier', 'days_after_planting', '240', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply liquid fertilizer every 2 weeks during active growth', 'recurring', '14', 'medium', None),
+                ],
+                'Turmeric': [
+                    ('custom', 'Mulch {plant_name} heavily', 'Tropical plant — needs warmth and consistent moisture. Mulch deeply', 'days_after_planting', '7', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Dig rhizomes 8-10 months after planting when leaves yellow and die back', 'days_after_planting', '240', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply liquid fertilizer regularly during growing season', 'recurring', '14', 'medium', None),
+                ],
+                'Horseradish': [
+                    ('harvest', 'Harvest {plant_name} roots', 'Dig roots in fall after frost for best flavor. Replant a piece for next year', 'days_after_planting', '150', 'medium', 'fall'),
+                    ('custom', 'Contain {plant_name} spread', 'Very aggressive grower — consider container growing or root barriers', 'one_time', '0', 'high', None),
+                ],
+                'Rhubarb': [
+                    ('harvest', 'Harvest {plant_name} stalks', 'Pull (don\'t cut) stalks when 12-18 inches. Never harvest more than 1/3 at once. LEAVES ARE TOXIC', 'days_after_planting', '365', 'medium', 'spring'),
+                    ('custom', 'Remove {plant_name} flower stalks', 'Cut flower stalks immediately to keep energy going to stalk production', 'growth_stage', 'flowering', 'high', None),
+                    ('fertilize', 'Feed {plant_name}', 'Top-dress with compost in early spring', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Celeriac': [
+                    ('custom', 'Remove {plant_name} side shoots', 'Pull off small side roots as bulb develops for cleaner root', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Dig when root is 3-4 inches across. Can tolerate light frost', 'days_after_planting', '110', 'medium', None),
+                ],
+                'Kohlrabi': [
+                    ('harvest', 'Harvest {plant_name}', 'Pull when bulb is 2-3 inches across (tennis ball size). Gets woody if too large', 'days_after_planting', '45', 'high', None),
+                ],
+                'Melon': [
+                    ('custom', 'Mulch under {plant_name} fruit', 'Place straw under developing fruit to prevent rot', 'days_after_planting', '30', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer; switch to low-nitrogen once fruiting', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Check {plant_name} for ripeness', 'Ripe when fragrant at blossom end and stem slips easily', 'days_after_planting', '75', 'medium', None),
+                ],
+                'Roselle': [
+                    ('harvest', 'Harvest {plant_name} calyces', 'Pick bright red calyces when plump, 10 days after flowers bloom. Used for hibiscus tea', 'days_after_planting', '120', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Pinch tips to encourage branching for more flower/calyx production', 'days_after_planting', '45', 'medium', None),
+                ],
+                'Sorghum': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut heads when grain is hard and dry on stalk', 'days_after_planting', '100', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Side-dress with nitrogen when knee-high', 'days_after_planting', '30', 'medium', None),
+                ],
+                'Amaranth': [
+                    ('harvest', 'Harvest {plant_name} leaves or grain', 'Pick young leaves as greens, or let seed heads mature and dry for grain harvest', 'days_after_planting', '45', 'medium', None),
+                    ('custom', 'Thin {plant_name} seedlings', 'Thin to 12-18 inches apart. Eat thinnings as microgreens', 'days_after_planting', '14', 'medium', None),
+                ],
+                'Taro': [
+                    ('custom', 'Keep {plant_name} in standing water', 'Wetland plant — needs consistently waterlogged soil or shallow standing water', 'one_time', '0', 'high', None),
+                    ('harvest', 'Harvest {plant_name} corms', 'Dig corms 7-12 months after planting when leaves yellow. MUST be cooked — raw is toxic', 'days_after_planting', '210', 'medium', None),
+                ],
+                'Chaya': [
+                    ('prune', 'Prune {plant_name}', 'Prune regularly to keep bushy and harvestable. Very vigorous grower', 'recurring', '30', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick mature leaves. MUST boil at least 20 minutes — raw leaves contain cyanide', 'recurring', '14', 'medium', None),
+                ],
+                'Purslane': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems above lowest leaves — regrows quickly. Rich in omega-3 fatty acids', 'recurring', '10', 'medium', None),
+                ],
+                'New Zealand Spinach': [
+                    ('harvest', 'Harvest {plant_name} tips', 'Pinch 3-4 inches of stem tips regularly. Heat-tolerant spinach alternative', 'recurring', '10', 'medium', None),
+                ],
+                'Watercress': [
+                    ('custom', 'Keep {plant_name} wet', 'Needs constantly moist to waterlogged conditions. Grow in shallow water tray', 'one_time', '0', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems at water level. Regrows quickly from base', 'recurring', '10', 'medium', None),
+                ],
+
+                # ── PEPPERS (specific varieties) ──
+                'Anaheim Pepper': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply low-nitrogen fertilizer once fruiting begins', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick green for mild, or wait for red for richer flavor. Great for roasting', 'days_after_planting', '70', 'medium', None),
+                ],
+                'Poblano Pepper': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Low-nitrogen fertilizer during fruiting', 'recurring', '21', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick dark green for poblano, or red for ancho. Great for stuffing', 'days_after_planting', '75', 'medium', None),
+                    ('stake', 'Stake {plant_name}', 'Large plants need support when heavy with fruit', 'days_after_planting', '30', 'medium', None),
+                ],
+                'Cayenne Pepper': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when bright red for drying. String into ristras or dehydrate for flakes', 'days_after_planting', '70', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light feeding with low-nitrogen fertilizer', 'recurring', '21', 'low', None),
+                ],
+                'Thai Pepper': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick red for full heat and flavor. Very productive — harvest frequently', 'days_after_planting', '70', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Low-nitrogen fertilizer once fruiting starts', 'recurring', '21', 'low', None),
+                ],
+                'Ghost Pepper': [
+                    ('custom', 'Be patient with {plant_name}', 'Extremely long season — needs 120+ days of heat. Start indoors very early', 'one_time', '0', 'high', None),
+                    ('harvest', 'Harvest {plant_name} carefully', 'Pick when fully colored. WEAR GLOVES — among hottest peppers in world', 'days_after_planting', '120', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light feeding — too much nitrogen delays fruiting', 'recurring', '21', 'low', None),
+                ],
+                'Scotch Bonnet': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully colored. Handle with gloves — very hot. Key ingredient in Caribbean cuisine', 'days_after_planting', '90', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Low-nitrogen fertilizer during fruiting phase', 'recurring', '21', 'low', None),
+                ],
+                'Shishito Pepper': [
+                    ('harvest', 'Harvest {plant_name} frequently', 'Pick when 3-4 inches and still green. Mostly mild but occasional hot one! Great blistered', 'days_after_planting', '60', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Balanced fertilizer every 3 weeks', 'recurring', '21', 'low', None),
+                ],
+                'Padron Pepper': [
+                    ('harvest', 'Harvest {plant_name} small', 'Pick at 2-3 inches for mildest flavor. Gets hotter as it grows. Blister in olive oil + salt', 'days_after_planting', '55', 'medium', None),
+                ],
+                'Chiltepin Pepper': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick tiny red berries when bright red. Native Arizona wild chile — extremely hot', 'days_after_planting', '90', 'medium', None),
+                    ('custom', 'Protect {plant_name} from birds... or don\'t', 'Birds love chiltepins and spread seeds naturally. Part of their ecology', 'one_time', '0', 'low', None),
+                ],
+                'Sweet Banana Pepper': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick yellow for mild sweet flavor, or let ripen to red for sweeter taste', 'days_after_planting', '65', 'medium', None),
+                ],
+
+                # ── HERBS ──
+                'Cilantro': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Cut outer stems at base. Use frequently — bolts fast in heat', 'days_after_planting', '21', 'medium', None),
+                    ('custom', 'Succession plant {plant_name}', 'Sow new seeds every 2-3 weeks for continuous supply. Bolts rapidly in heat', 'recurring', '21', 'high', 'spring,summer'),
+                    ('custom', 'Collect {plant_name} coriander seeds', 'After bolting, let seeds dry on plant, then collect as coriander spice', 'growth_stage', 'flowering', 'low', None),
+                ],
+                'Mint': [
+                    ('custom', 'Contain {plant_name} spread', 'VERY aggressive spreader — grow in container or use root barrier. Never plant in open bed', 'one_time', '0', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems frequently to encourage bushiness. Pinch flowers to prolong leaf production', 'recurring', '10', 'medium', None),
+                    ('prune', 'Cut back {plant_name}', 'Cut to ground level in late fall. Will resprout vigorously in spring', 'recurring', '365', 'medium', 'fall'),
+                ],
+                'Rosemary': [
+                    ('prune', 'Prune {plant_name}', 'Trim after flowering to maintain shape. Never cut into old wood — it won\'t resprout', 'recurring', '90', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} sprigs', 'Snip 4-6 inch tips as needed. Best harvested before flowering for strongest flavor', 'recurring', '14', 'low', None),
+                ],
+                'Oregano': [
+                    ('prune', 'Cut back {plant_name}', 'Trim regularly to prevent woodiness and encourage fresh growth', 'recurring', '30', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems when flower buds form — this is peak flavor. Dry for storage', 'recurring', '14', 'medium', None),
+                    ('custom', 'Prevent {plant_name} flowering', 'Pinch off flower buds to prolong leaf production, or let bloom for pollinators', 'growth_stage', 'flowering', 'low', None),
+                ],
+                'Thyme': [
+                    ('prune', 'Prune {plant_name}', 'Trim by one-third after flowering. Prevent woodiness by regular light pruning', 'recurring', '60', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Snip sprigs as needed. Best flavor just before flowering', 'recurring', '14', 'low', None),
+                ],
+                'Sage': [
+                    ('prune', 'Prune {plant_name}', 'Cut back by one-third in spring. Gets woody — replace every 4-5 years', 'recurring', '180', 'medium', 'spring'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick leaves as needed. Best before flowering. Don\'t harvest more than 1/3 at once', 'recurring', '14', 'low', None),
+                ],
+                'Dill': [
+                    ('harvest', 'Harvest {plant_name} fronds', 'Cut feathery leaves as needed. Harvest seed heads when brown for dill seed', 'days_after_planting', '25', 'medium', None),
+                    ('custom', 'Let {plant_name} self-seed', 'Allow some plants to go to seed — dill self-sows reliably for next season', 'growth_stage', 'flowering', 'low', None),
+                    ('custom', 'Succession plant {plant_name}', 'Sow every 3 weeks for continuous harvest as it bolts quickly', 'recurring', '21', 'medium', None),
+                ],
+                'Chive': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut leaves 2 inches above soil. Regrows repeatedly. Flowers are also edible', 'recurring', '14', 'medium', None),
+                    ('prune', 'Divide {plant_name} clumps', 'Divide congested clumps every 2-3 years in spring or fall', 'recurring', '730', 'medium', None),
+                ],
+                'Parsley': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut outer stems at base. Inner growth continues. Biennial — bolts in second year', 'recurring', '10', 'medium', None),
+                ],
+                'Lavender': [
+                    ('prune', 'Prune {plant_name} after flowering', 'Cut back by one-third after bloom. Never cut into old wood — it won\'t regrow', 'recurring', '180', 'high', None),
+                    ('harvest', 'Harvest {plant_name} blooms', 'Cut stems when about half the flowers have opened for best fragrance', 'growth_stage', 'flowering', 'medium', None),
+                    ('custom', 'Ensure {plant_name} drainage', 'Must have excellent drainage — will die in wet soil. Add gravel to planting hole', 'one_time', '0', 'high', None),
+                ],
+                'Lemongrass': [
+                    ('harvest', 'Harvest {plant_name} stalks', 'Twist and pull outer stalks at base when 1/2 inch thick. Use lower white portion', 'recurring', '30', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Cut back and mulch heavily before frost, or bring container inside', 'recurring', '365', 'high', 'fall'),
+                    ('prune', 'Cut back {plant_name}', 'Trim leaves to 6 inches in late winter to refresh growth', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Mexican Tarragon': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems as needed — excellent tarragon substitute that thrives in heat', 'recurring', '14', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Cut back by half after flowering to encourage fresh growth', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Catnip': [
+                    ('prune', 'Cut back {plant_name}', 'Trim regularly to prevent legginess and self-seeding', 'recurring', '30', 'medium', None),
+                    ('custom', 'Protect {plant_name} from cats', 'Cats will roll in and destroy young plants. Cage until established', 'one_time', '0', 'medium', None),
+                ],
+                'Lemon Balm': [
+                    ('prune', 'Cut back {plant_name}', 'Aggressive self-seeder — cut flower stalks before seeds set', 'growth_stage', 'flowering', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems as needed for tea. Best before flowering', 'recurring', '14', 'medium', None),
+                    ('custom', 'Contain {plant_name} spread', 'Self-seeds aggressively — grow in container or deadhead religiously', 'one_time', '0', 'medium', None),
+                ],
+                'Chamomile': [
+                    ('harvest', 'Harvest {plant_name} flowers', 'Pick when petals are flat or slightly reflexed. Dry for tea', 'growth_stage', 'flowering', 'medium', None),
+                    ('custom', 'Let {plant_name} self-seed', 'German chamomile self-sows reliably. Leave some flowers to go to seed', 'growth_stage', 'flowering', 'low', None),
+                ],
+                'Aloe Vera': [
+                    ('custom', 'Check {plant_name} for offsets', 'Remove pups (baby plants) when 3-4 inches and repot or share', 'recurring', '90', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Bring inside or cover when temps drop below 50F', 'recurring', '365', 'high', 'fall,winter'),
+                    ('pest_check', 'Check {plant_name} for mealybugs', 'Look in leaf crevices for white cottony insects. Treat with rubbing alcohol', 'recurring', '30', 'low', None),
+                ],
+                'Ashwagandha': [
+                    ('harvest', 'Harvest {plant_name} roots', 'Dig roots after 150-180 days when berries are red and leaves start yellowing', 'days_after_planting', '150', 'medium', None),
+                    ('custom', '{plant_name} is drought-tolerant', 'Don\'t overwater — prefers dry conditions. Perfect for desert gardens', 'one_time', '0', 'low', None),
+                ],
+                'Cuban Oregano': [
+                    ('prune', 'Pinch back {plant_name}', 'Pinch growing tips frequently to keep bushy. Very vigorous grower', 'recurring', '14', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick fleshy leaves as needed. Much stronger than regular oregano', 'recurring', '14', 'low', None),
+                ],
+                'Chervil': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut outer leaves. Cool-season herb — bolts in heat. Succession plant', 'days_after_planting', '30', 'medium', None),
+                ],
+                'Sorrel': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick young tender leaves for lemony flavor. Remove flower stalks to prolong leaf harvest', 'recurring', '14', 'medium', None),
+                ],
+                'Stevia': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick leaves before flowering for sweetest flavor. Dry and crush for sweetener', 'growth_stage', 'flowering', 'medium', None),
+                    ('prune', 'Pinch {plant_name} tips', 'Pinch growing tips to encourage branching', 'recurring', '21', 'medium', None),
+                ],
+                'Epazote': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick leaves as needed for cooking beans (traditional digestive aid). Strong flavor — use sparingly', 'recurring', '14', 'medium', None),
+                    ('custom', 'Control {plant_name} self-seeding', 'Prolific self-seeder — remove flower heads if you don\'t want it everywhere', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Marjoram': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems before flowers open for best flavor. Dry for storage', 'recurring', '14', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Trim regularly to prevent woodiness', 'recurring', '30', 'medium', None),
+                ],
+                'Tarragon': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems as needed. Best in spring when growth is fresh. Flavor fades in heat', 'recurring', '14', 'medium', None),
+                    ('prune', 'Divide {plant_name}', 'Divide every 2-3 years to maintain vigor. Propagate by division, not seed', 'recurring', '730', 'medium', 'spring'),
+                ],
+                'Hibiscus (Tea)': [
+                    ('harvest', 'Harvest {plant_name} calyces', 'Pick deep red calyces after flower fades. Dry for tea. Rich in vitamin C', 'growth_stage', 'flowering', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Cut back by one-third in late winter for bushy spring growth', 'recurring', '365', 'medium', 'winter'),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer monthly during growing season', 'recurring', '30', 'medium', None),
+                ],
+                'Feverfew': [
+                    ('harvest', 'Harvest {plant_name} flowers', 'Pick fresh flowers and leaves. Traditional migraine remedy herb', 'growth_stage', 'flowering', 'medium', None),
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent flowers to encourage more blooms and prevent self-seeding', 'recurring', '14', 'medium', None),
+                ],
+                'Tulsi (Holy Basil)': [
+                    ('prune', 'Pinch {plant_name} flower buds', 'Remove flower spikes to prolong leaf production', 'growth_stage', 'flowering', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick leaves and tender stems regularly. Sacred herb in Ayurveda', 'recurring', '10', 'medium', None),
+                ],
+                'Curry Leaf': [
+                    ('custom', 'Protect {plant_name} from cold', 'Bring inside when temps drop below 40F. Tropical plant', 'recurring', '365', 'high', 'fall,winter'),
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick whole stems of leaves as needed. Fresh is far superior to dried', 'recurring', '14', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Feed with iron-rich fertilizer — prone to chlorosis', 'recurring', '30', 'medium', None),
+                ],
+                'Mexican Oregano': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick leaves before flowering for best flavor. Different genus than Mediterranean oregano', 'recurring', '14', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Cut back after flowering to maintain shape. Very drought-tolerant', 'recurring', '90', 'medium', None),
+                ],
+                'Comfrey': [
+                    ('harvest', 'Cut {plant_name} for mulch/compost', 'Chop leaves 3-4 times per season for nutrient-rich mulch or compost activator', 'recurring', '60', 'medium', None),
+                    ('custom', 'Use {plant_name} as fertilizer tea', 'Steep cut leaves in water for 4-6 weeks for potent liquid fertilizer', 'recurring', '60', 'low', None),
+                ],
+                'Echinacea': [
+                    ('custom', 'Deadhead {plant_name} for longer bloom', 'Remove spent flowers to encourage reblooming through fall', 'recurring', '14', 'medium', None),
+                    ('custom', 'Divide {plant_name} every 3-4 years', 'Divide established clumps in spring or fall to maintain vigor', 'recurring', '1095', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} roots or flowers', 'Roots harvested in fall of 3rd year for tea. Flowers and leaves also usable', 'days_after_planting', '730', 'low', None),
+                ],
+                'Yarrow': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent flowers to prevent aggressive self-seeding and encourage reblooming', 'recurring', '14', 'medium', None),
+                    ('custom', 'Divide {plant_name} every 2-3 years', 'Divide clumps to prevent center from dying out', 'recurring', '730', 'medium', 'spring'),
+                ],
+                'Caper Bush': [
+                    ('harvest', 'Harvest {plant_name} buds', 'Pick flower buds before they open. Pickle in salt or brine. Harvest daily during season', 'growth_stage', 'flowering', 'high', None),
+                    ('prune', 'Prune {plant_name}', 'Cut back hard in late winter. Flowers on new wood', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Hoja Santa': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick large leaves for wrapping tamales and flavoring moles. Anise-sassafras flavor', 'recurring', '14', 'medium', None),
+                    ('custom', 'Contain {plant_name}', 'Spreads by underground runners — use root barrier or container', 'one_time', '0', 'medium', None),
+                ],
+                'Papalo': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick tender leaves as cilantro substitute for warm weather. Strong flavor', 'recurring', '10', 'medium', None),
+                ],
+                'Perilla (Shiso)': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick leaves as needed. Red or green varieties. Essential in Japanese cuisine', 'recurring', '10', 'medium', None),
+                    ('custom', 'Control {plant_name} self-seeding', 'Prolific self-seeder — remove flowers if you don\'t want it spreading everywhere', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Vietnamese Coriander': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut stems as needed. Heat-loving cilantro alternative that doesn\'t bolt', 'recurring', '10', 'medium', None),
+                    ('custom', 'Keep {plant_name} moist', 'Water-loving plant — keep soil consistently moist. Great in containers', 'one_time', '0', 'medium', None),
+                ],
+                'Culantro': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Cut outer leaves. Stronger than cilantro, used in Caribbean/Latin cooking. Heat-tolerant', 'recurring', '14', 'medium', None),
+                ],
+                'Garlic Chives': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut flat leaves at base. Garlic flavor. Flowers are also edible', 'recurring', '14', 'medium', None),
+                    ('custom', 'Deadhead {plant_name}', 'Remove spent flowers to prevent aggressive self-seeding', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Eucalyptus Baby Blue': [
+                    ('prune', 'Prune {plant_name}', 'Cut branches for arrangements. Stump-cut to maintain shrub form vs tree', 'recurring', '90', 'medium', None),
+                ],
+
+                # ── FLOWERS ──
+                'Sunflower': [
+                    ('stake', 'Stake tall {plant_name} varieties', 'Tie to stake when 3+ feet tall to prevent wind damage', 'days_after_planting', '30', 'medium', None),
+                    ('custom', 'Protect {plant_name} seeds from birds', 'Cover seed heads with netting or paper bag when seeds start forming if saving for harvest', 'growth_stage', 'fruiting', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} seeds', 'Cut head when back turns brown and seeds are plump. Dry upside down', 'days_after_planting', '80', 'medium', None),
+                ],
+                'Marigold': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent blooms to encourage continuous flowering all season', 'recurring', '7', 'medium', None),
+                    ('custom', 'Use {plant_name} as companion plant', 'Plant near tomatoes and peppers — repels nematodes and some pests', 'one_time', '0', 'low', None),
+                ],
+                'Zinnia': [
+                    ('prune', 'Deadhead {plant_name}', 'Cut spent blooms to encourage more flowers. Great cut flowers — cutting IS deadheading', 'recurring', '7', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for powdery mildew', 'Ensure good airflow between plants. Water at base, not on foliage', 'recurring', '14', 'medium', 'summer'),
+                ],
+                'Cosmos': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove faded flowers for continuous blooms. Let some go to seed at end of season', 'recurring', '10', 'medium', None),
+                    ('custom', 'Pinch young {plant_name}', 'Pinch stem tips when 12 inches tall for bushier plants with more flowers', 'days_after_planting', '30', 'medium', None),
+                ],
+                'Nasturtium': [
+                    ('harvest', 'Harvest {plant_name} flowers and leaves', 'Both edible with peppery flavor. Great in salads. Flowers are beautiful garnish', 'recurring', '10', 'medium', None),
+                    ('custom', '{plant_name} as trap crop', 'Attracts aphids away from other plants. Don\'t over-fertilize or you get leaves, not flowers', 'one_time', '0', 'low', None),
+                ],
+                'Borage': [
+                    ('harvest', 'Harvest {plant_name} flowers', 'Pick blue star-shaped flowers for salads. Also attracts pollinators', 'recurring', '7', 'medium', None),
+                    ('custom', 'Let {plant_name} self-seed', 'Reliable self-seeder. Once established, you\'ll have it forever', 'one_time', '0', 'low', None),
+                ],
+                'Calendula': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent flowers for continuous blooms into fall', 'recurring', '7', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} flowers', 'Pick when fully open for medicinal salves, teas, or edible garnish', 'recurring', '7', 'low', None),
+                ],
+                'Sweet Alyssum': [
+                    ('prune', 'Shear back {plant_name}', 'Cut back by half if it gets leggy in summer heat. Will rebloom quickly', 'recurring', '60', 'medium', 'summer'),
+                ],
+                'Snapdragon': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent flower stalks to encourage side shoots and more blooms', 'recurring', '14', 'medium', None),
+                    ('custom', 'Pinch young {plant_name}', 'Pinch growing tip when 4 inches tall for bushier plants with more stems', 'days_after_planting', '21', 'medium', None),
+                ],
+                'African Marigold': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent blooms regularly for continuous large flowers', 'recurring', '7', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Monthly balanced fertilizer for best bloom production', 'recurring', '30', 'low', None),
+                ],
+                'Salvia Hot Lips': [
+                    ('prune', 'Prune {plant_name}', 'Cut back by one-third after each flush of blooms for repeat flowering', 'recurring', '60', 'medium', None),
+                    ('custom', '{plant_name} hummingbird magnet', 'Leave flowers for hummingbirds — excellent pollinator plant', 'one_time', '0', 'low', None),
+                ],
+                'Globe Mallow': [
+                    ('custom', '{plant_name} is low-maintenance native', 'Extremely drought-tolerant desert native. Don\'t overwater', 'one_time', '0', 'low', None),
+                    ('prune', 'Prune {plant_name} if desired', 'Cut back in late winter for fresh growth. Or let it naturalize', 'recurring', '365', 'low', 'winter'),
+                ],
+                'Blackfoot Daisy': [
+                    ('custom', '{plant_name} thrives on neglect', 'Desert native — overwatering kills it. Minimal care needed', 'one_time', '0', 'low', None),
+                    ('prune', 'Lightly trim {plant_name}', 'Shear lightly after peak bloom to tidy up', 'recurring', '90', 'low', None),
+                ],
+                'Moss Verbena': [
+                    ('prune', 'Trim {plant_name}', 'Cut back by half if it gets straggly for fresh flush of blooms', 'recurring', '60', 'medium', None),
+                ],
+                'Purple Trailing Lantana': [
+                    ('prune', 'Trim {plant_name}', 'Cut back in late winter to control spread and refresh growth', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Baja Fairy Duster': [
+                    ('prune', 'Prune {plant_name} lightly', 'Light shaping after bloom. Avoid hard pruning', 'recurring', '365', 'low', None),
+                ],
+                'Parry\'s Penstemon': [
+                    ('prune', 'Remove spent {plant_name} flower stalks', 'Cut stalks after bloom. May rebloom from basal growth', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Sparky Tecoma': [
+                    ('prune', 'Prune {plant_name}', 'Cut back hard in late winter. Blooms on new wood. Hummingbird favorite', 'recurring', '365', 'medium', 'winter'),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light feeding in spring for best flower production', 'recurring', '365', 'low', 'spring'),
+                ],
+                'Butterfly Weed': [
+                    ('custom', 'Don\'t transplant {plant_name}', 'Deep taproot — doesn\'t transplant well. Start from seed in final location', 'one_time', '0', 'medium', None),
+                    ('custom', 'Leave {plant_name} seed pods for monarchs', 'Critical milkweed host plant for monarch butterflies. Let pods open naturally', 'one_time', '0', 'high', None),
+                ],
+                'Showy Milkweed': [
+                    ('custom', '{plant_name} for monarchs', 'Essential monarch butterfly host plant. Let caterpillars feed — plant recovers', 'one_time', '0', 'high', None),
+                    ('custom', 'Contain {plant_name} spread', 'Spreads by rhizomes. Use root barrier if space is limited', 'one_time', '0', 'medium', None),
+                ],
+                'Desert Milkweed': [
+                    ('custom', '{plant_name} for monarchs', 'Native milkweed — key host plant for monarch butterflies', 'one_time', '0', 'high', None),
+                ],
+                'Pine-leaf Milkweed': [
+                    ('custom', '{plant_name} for monarchs', 'Native milkweed species. Don\'t remove caterpillars — they\'re future monarchs', 'one_time', '0', 'high', None),
+                ],
+                'Arizona Milkweed': [
+                    ('custom', '{plant_name} for pollinators', 'Native milkweed. Monarch butterfly host plant. Minimal care needed', 'one_time', '0', 'high', None),
+                ],
+                'Banana Yucca': [
+                    ('custom', '{plant_name} care', 'Desert native — virtually no care needed. Fruit is edible when ripe', 'one_time', '0', 'low', None),
+                ],
+                'Mojave Yucca': [
+                    ('custom', '{plant_name} care', 'Extremely low-maintenance desert native. No supplemental water once established', 'one_time', '0', 'low', None),
+                ],
+                'Soaptree Yucca': [
+                    ('custom', '{plant_name} care', 'Desert native. Remove dead lower leaves for tidier appearance if desired', 'one_time', '0', 'low', None),
+                ],
+                'Red Yucca': [
+                    ('prune', 'Remove spent {plant_name} flower stalks', 'Cut flower stalks at base after bloom fades. Not actually a yucca — technically Hesperaloe', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Star Jasmine': [],  # Ornamental landscape — skip
+                'Indian Laurel': [],  # Ornamental landscape — skip
+                'Tangerine Crossvine': [
+                    ('prune', 'Prune {plant_name}', 'Trim after flowering to control size and shape', 'growth_stage', 'flowering', 'medium', None),
+                ],
+                'Mini Carnation': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent blooms to encourage continuous flowering', 'recurring', '7', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light balanced fertilizer monthly during bloom season', 'recurring', '30', 'low', None),
+                ],
+
+                # ── FRUIT ──
+                'Strawberry': [
+                    ('custom', 'Remove {plant_name} runners', 'Cut runners unless you want new plants. Runners reduce fruit production', 'recurring', '14', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully red and fragrant. Harvest every 2-3 days during season', 'recurring', '3', 'high', 'spring'),
+                    ('fertilize', 'Fertilize {plant_name}', 'Feed after first harvest with balanced fertilizer', 'recurring', '30', 'medium', None),
+                    ('custom', 'Renovate {plant_name} bed', 'After harvest, mow leaves 1 inch above crown. Thin plants. Renew every 3-4 years', 'recurring', '365', 'medium', None),
+                ],
+                'Fig': [
+                    ('prune', 'Prune {plant_name}', 'Remove crossing branches and shape in late winter while dormant', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when soft, drooping, and slightly wrinkled at neck. Won\'t ripen off tree', 'growth_stage', 'fruiting', 'high', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer in spring. Don\'t over-fertilize', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Grape': [
+                    ('prune', 'Prune {plant_name} in winter', 'Hard prune to 2-3 bud spurs in late winter. Grapes fruit on new wood from old canes', 'recurring', '365', 'high', 'winter'),
+                    ('stake', 'Train {plant_name} on trellis', 'Maintain trellis system. Tie new growth to wires', 'recurring', '30', 'medium', 'spring,summer'),
+                    ('pest_check', 'Check {plant_name} for disease', 'Watch for powdery mildew and black rot. Good airflow is critical', 'recurring', '14', 'medium', None),
+                ],
+                'Lemon': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply citrus fertilizer 3 times per year — February, May, September', 'recurring', '120', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for scale/citrus leafminer', 'Inspect for waxy bumps on stems and squiggly lines on leaves', 'recurring', '30', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Cover with frost cloth when temps drop below 32F. Lemons are cold-sensitive', 'recurring', '365', 'high', 'winter'),
+                ],
+                'Orange': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply citrus fertilizer 3 times per year', 'recurring', '120', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for pests', 'Watch for scale, aphids, and citrus leafminer', 'recurring', '30', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Cover when frost threatens. Water deeply before cold snaps', 'recurring', '365', 'high', 'winter'),
+                ],
+                'Lime': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply citrus fertilizer 3 times per year', 'recurring', '120', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Most cold-sensitive citrus — cover when below 35F', 'recurring', '365', 'high', 'winter'),
+                    ('pest_check', 'Check {plant_name} for pests', 'Watch for scale and citrus leafminer', 'recurring', '30', 'low', None),
+                ],
+                'Grapefruit': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply citrus fertilizer in Feb, May, and Sept', 'recurring', '120', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Cover when temps drop below 28F. More cold-hardy than lemon', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Ripe when heavy for size and yellow. Can stay on tree for months', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Meyer Lemon': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply citrus fertilizer 3 times per year. Great container plant', 'recurring', '120', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'More cold-hardy than true lemon but still protect below 32F', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when deep yellow-orange and slightly soft. Sweeter than regular lemon', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Blood Orange': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Citrus fertilizer 3 times per year', 'recurring', '120', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Color develops with cool nights. Pick when heavy and deeply colored', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Mandarin Orange': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply citrus fertilizer in Feb, May, and Sept', 'recurring', '120', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when easily pulls from tree and tastes sweet. Don\'t leave too long — gets puffy', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Tangelo': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Citrus fertilizer 3 times per year', 'recurring', '120', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when colored up and slightly soft. Taste test for sweetness', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Kumquat': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Citrus fertilizer 3 times per year. Most cold-hardy citrus', 'recurring', '120', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Eat whole — skin is sweet, flesh is tart. Pick when orange', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Blackberry': [
+                    ('prune', 'Prune {plant_name} canes', 'Remove fruited canes (floricanes) after harvest. Tip-prune primocanes in summer', 'recurring', '365', 'high', None),
+                    ('stake', 'Trellis {plant_name}', 'Train canes on wire trellis for easier picking and better sun exposure', 'days_after_planting', '30', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully black and easily pulls from stem. Check every 2-3 days', 'growth_stage', 'fruiting', 'high', None),
+                ],
+                'Raspberry': [
+                    ('prune', 'Prune spent {plant_name} canes', 'Cut fruited canes to ground after harvest. Thin remaining canes to 4-6 per foot', 'recurring', '365', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when colored and easily slides off core. Harvest every 2-3 days', 'growth_stage', 'fruiting', 'high', None),
+                ],
+                'Blueberry': [
+                    ('fertilize', 'Fertilize {plant_name} with acid fertilizer', 'Use azalea/blueberry fertilizer. Needs acidic soil pH 4.5-5.5', 'recurring', '90', 'medium', None),
+                    ('custom', 'Acidify {plant_name} soil', 'Add sulfur or peat moss to maintain acid pH. Desert soils are naturally alkaline', 'recurring', '180', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully blue and easily releases. Taste test — should be sweet', 'growth_stage', 'fruiting', 'medium', None),
+                    ('pest_check', 'Net {plant_name} against birds', 'Cover with bird netting when berries start coloring', 'growth_stage', 'fruiting', 'high', None),
+                ],
+                'Boysenberry': [
+                    ('prune', 'Prune {plant_name} canes', 'Remove fruited canes after harvest', 'recurring', '365', 'high', None),
+                    ('stake', 'Trellis {plant_name}', 'Train on wire system for easier management', 'days_after_planting', '30', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when dark maroon and soft. Very perishable — eat or freeze quickly', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Pomegranate': [
+                    ('prune', 'Prune {plant_name}', 'Remove suckers and shape in late winter. Maintain 3-5 main trunks', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when skin is dark red and makes metallic sound when tapped. Splits if left too long', 'growth_stage', 'fruiting', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light feeder — apply balanced fertilizer in spring', 'recurring', '365', 'low', 'spring'),
+                ],
+                'Date Palm': [
+                    ('custom', 'Thin {plant_name} fruit clusters', 'Remove some fruit strands for larger remaining dates', 'growth_stage', 'fruiting', 'medium', None),
+                    ('custom', 'Cover {plant_name} fruit clusters', 'Bag clusters with mesh to protect from birds and rain', 'growth_stage', 'fruiting', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick dates when soft and translucent (rutab stage) or let dry on tree (tamar stage)', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Jujube': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when mahogany brown for dried dates, or yellow-red for fresh eating', 'growth_stage', 'fruiting', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Minimal pruning needed. Remove dead wood and crossing branches in winter', 'recurring', '365', 'low', 'winter'),
+                ],
+                'Dragon Fruit': [
+                    ('stake', 'Support {plant_name} on sturdy post', 'Needs strong support — heavy plant. T-post or thick concrete post works best', 'days_after_planting', '14', 'high', None),
+                    ('custom', 'Hand pollinate {plant_name}', 'Flowers open one night only. Pollinate between 8pm-midnight for best set', 'growth_stage', 'flowering', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when skin color is even and fins start to wither. Twist off or cut', 'growth_stage', 'fruiting', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Cover when below 32F. Tropical cactus', 'recurring', '365', 'high', 'winter'),
+                ],
+                'Passion Fruit': [
+                    ('stake', 'Trellis {plant_name}', 'Vigorous vine — needs strong trellis or fence', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when skin wrinkles and fruit falls or easily detaches. Wrinkly = ripe', 'growth_stage', 'fruiting', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer quarterly. Don\'t over-fertilize with nitrogen', 'recurring', '90', 'medium', None),
+                ],
+                'Guava': [
+                    ('prune', 'Prune {plant_name}', 'Thin interior for airflow. Prune to maintain manageable height', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fragrant and gives slightly to pressure. Color depends on variety', 'growth_stage', 'fruiting', 'medium', None),
+                    ('custom', 'Protect {plant_name} from frost', 'Cover when below 30F. Young trees are especially vulnerable', 'recurring', '365', 'high', 'winter'),
+                ],
+                'Papaya': [
+                    ('custom', 'Protect {plant_name} from frost', 'Extremely frost-sensitive — dies below 32F. In AZ, grow in protected microclimate', 'recurring', '365', 'high', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when 1/3 to full yellow. Will ripen on counter', 'growth_stage', 'fruiting', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Heavy feeder — monthly balanced fertilizer during growing season', 'recurring', '30', 'medium', None),
+                ],
+                'Banana': [
+                    ('custom', 'Protect {plant_name} from frost', 'Mulch base heavily before winter. Can die to ground and resprout if roots survive', 'recurring', '365', 'high', 'fall,winter'),
+                    ('custom', 'Remove {plant_name} suckers', 'Keep only 1-2 suckers per plant to focus energy on fruit production', 'recurring', '60', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Extremely heavy feeder — apply monthly with balanced fertilizer', 'recurring', '30', 'high', None),
+                ],
+                'Mango': [
+                    ('custom', 'Protect {plant_name} from frost', 'Very frost-sensitive. Grow in warmest microclimate or container', 'recurring', '365', 'high', 'winter'),
+                    ('prune', 'Prune {plant_name}', 'Tip-prune after fruit harvest to encourage branching', 'recurring', '365', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply balanced fertilizer in spring. Avoid heavy nitrogen which inhibits flowering', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Avocado': [
+                    ('custom', 'Protect {plant_name} from frost', 'Cover or bring inside below 30F. Hass variety is most cold-sensitive', 'recurring', '365', 'high', 'winter'),
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply avocado/citrus fertilizer with zinc and iron', 'recurring', '90', 'medium', None),
+                    ('custom', 'Plant partner for {plant_name}', 'Avocados need cross-pollination. Plant A and B type together for best fruit set', 'one_time', '0', 'medium', None),
+                ],
+                'Mulberry': [
+                    ('prune', 'Prune {plant_name}', 'Prune in late winter while dormant. Can be pruned hard to control size', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully colored and soft. Spread sheet underneath and shake branches', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Olive': [
+                    ('prune', 'Prune {plant_name}', 'Thin interior for airflow and light. Remove crossing branches in late winter', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick green for curing or black when fully ripe. Cannot eat raw — must be cured', 'growth_stage', 'fruiting', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light feeder — apply balanced fertilizer once in spring', 'recurring', '365', 'low', 'spring'),
+                ],
+                'Goji Berry': [
+                    ('prune', 'Prune {plant_name}', 'Cut back laterals to 2-3 buds in winter. Remove weak growth for bigger berries', 'recurring', '365', 'medium', 'winter'),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when bright red-orange. Shake branches over sheet. Fresh or dried', 'growth_stage', 'fruiting', 'medium', None),
+                    ('stake', 'Trellis {plant_name}', 'Train on wire or stake — drooping branches make harvesting easier', 'days_after_planting', '30', 'medium', None),
+                ],
+                'Barbados Cherry': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when bright red and soft. Extremely high in vitamin C. Very perishable', 'growth_stage', 'fruiting', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Shape after harvest. Makes excellent hedge', 'recurring', '365', 'low', None),
+                ],
+                'Desert Gold Peach': [
+                    ('prune', 'Prune {plant_name} in winter', 'Open-center prune while dormant for good airflow. Low chill variety for desert', 'recurring', '365', 'high', 'winter'),
+                    ('custom', 'Thin {plant_name} fruit', 'Thin to 6 inches apart when marble-size for larger peaches', 'growth_stage', 'fruiting', 'high', None),
+                    ('pest_check', 'Check {plant_name} for borers', 'Look for sawdust at base of trunk and gummy sap', 'recurring', '30', 'medium', None),
+                ],
+                'Apricot': [
+                    ('prune', 'Prune {plant_name}', 'Open-center prune in late winter. Fruit on previous year\'s wood', 'recurring', '365', 'medium', 'winter'),
+                    ('custom', 'Thin {plant_name} fruit', 'Thin to 3-4 inches apart for bigger, better fruit', 'growth_stage', 'fruiting', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fragrant and gives slightly to pressure. Tree-ripened is best', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Plum': [
+                    ('prune', 'Prune {plant_name}', 'Thin center for light and airflow. Remove suckers at base', 'recurring', '365', 'medium', 'winter'),
+                    ('custom', 'Thin {plant_name} fruit', 'Thin to 4-6 inches apart when marble-size', 'growth_stage', 'fruiting', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when slightly soft and fully colored. Taste test!', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Nectarine': [
+                    ('prune', 'Prune {plant_name}', 'Open-center prune while dormant. Similar to peach care', 'recurring', '365', 'high', 'winter'),
+                    ('custom', 'Thin {plant_name} fruit', 'Thin to 6 inches apart for larger fruit', 'growth_stage', 'fruiting', 'high', None),
+                    ('pest_check', 'Check {plant_name} for peach leaf curl', 'Apply fungicide in late fall and early spring', 'recurring', '180', 'medium', None),
+                ],
+                'Pecan': [
+                    ('fertilize', 'Fertilize {plant_name}', 'Apply zinc-containing fertilizer in spring. Pecans need zinc in AZ alkaline soils', 'recurring', '365', 'medium', 'spring'),
+                    ('custom', 'Deep water {plant_name}', 'Deep irrigation during nut development (July-Sept). Very water-hungry tree', 'recurring', '14', 'high', 'summer'),
+                    ('harvest', 'Harvest {plant_name}', 'Shake tree or pick up fallen nuts when husks split open in fall', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Pineapple Guava': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fruit falls naturally or gives to gentle pull. Aromatic minty-pineapple flavor', 'growth_stage', 'fruiting', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Shape as desired. Makes excellent hedge. Minimal pruning needed', 'recurring', '365', 'low', None),
+                ],
+                'Loquat': [
+                    ('custom', 'Thin {plant_name} fruit clusters', 'Thin to 4-6 fruit per cluster for larger fruit', 'growth_stage', 'fruiting', 'medium', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick when fully colored and slightly soft. Very perishable', 'growth_stage', 'fruiting', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Thin interior branches for light. Remove low-hanging branches', 'recurring', '365', 'low', 'winter'),
+                ],
+                'White Sapote': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when skin color changes and fruit gives to gentle pressure. Custard-like flesh', 'growth_stage', 'fruiting', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Control size — can get very large. Prune in spring', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Barbados Cherry': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick when bright red. World\'s highest vitamin C fruit. Very perishable', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+
+                # ── ORNAMENTALS (only those needing specific care) ──
+                'Bougainvillea': [
+                    ('prune', 'Prune {plant_name}', 'Hard prune in late winter for vigorous spring bloom. Blooms on new wood', 'recurring', '365', 'medium', 'winter'),
+                    ('custom', 'Stress {plant_name} for blooms', 'Reduce watering to trigger flowering. Too much water = leaves, not bracts', 'one_time', '0', 'medium', None),
+                ],
+                'Lantana': [
+                    ('prune', 'Cut back {plant_name}', 'Hard prune in late winter to 6-12 inches. Regrows vigorously', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Desert Willow': [
+                    ('prune', 'Prune {plant_name}', 'Shape young trees. Remove seed pods if messy. Otherwise low-maintenance', 'recurring', '365', 'low', 'winter'),
+                ],
+                'Plumeria': [
+                    ('custom', 'Protect {plant_name} from frost', 'Bring inside or cover below 40F. Goes dormant and drops leaves in winter', 'recurring', '365', 'high', 'fall,winter'),
+                    ('fertilize', 'Fertilize {plant_name}', 'High-phosphorus fertilizer for best blooms. Stop feeding in fall', 'recurring', '30', 'medium', 'spring,summer'),
+                ],
+                'Jasmine': [
+                    ('prune', 'Prune {plant_name} after flowering', 'Shape and control size after bloom period', 'growth_stage', 'flowering', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Balanced fertilizer monthly during growing season', 'recurring', '30', 'low', None),
+                ],
+                'Saguaro': [
+                    ('pest_check', 'Check {plant_name} for holes/damage', 'Watch for woodpecker holes and bacterial necrosis (brown/black spots)', 'recurring', '90', 'medium', None),
+                ],
+                'Barrel Cactus': [
+                    ('pest_check', 'Check {plant_name} for scale', 'Look for brown crusty patches — scale insects. Treat with horticultural oil', 'recurring', '90', 'low', None),
+                ],
+                'Ocotillo': [
+                    ('custom', '{plant_name} tip', 'Leafs out and blooms after rain. Supplemental summer water encourages more leaf/bloom cycles', 'one_time', '0', 'low', None),
+                ],
+                'Agave americana': [
+                    ('custom', 'Remove {plant_name} pups', 'Dig out offsets to prevent overcrowding. Replant or share', 'recurring', '365', 'medium', None),
+                    ('pest_check', 'Check {plant_name} for agave snout weevil', 'Wilting/collapsing center = weevil. Preventive soil drench in spring', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Agave parryi': [
+                    ('pest_check', 'Check {plant_name} for agave snout weevil', 'Sudden collapse indicates weevil. Preventive treatment in spring', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Agave vilmoriniana': [
+                    ('custom', 'Watch for {plant_name} bloom stalk', 'Blooms once then dies (monocarpic). Produces plantlets on stalk — save them', 'recurring', '365', 'low', None),
+                ],
+                'Pink Muhly Grass': [
+                    ('prune', 'Cut back {plant_name}', 'Cut to 4-6 inches in late winter before new growth emerges', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Deer Grass': [
+                    ('prune', 'Cut back {plant_name}', 'Cut to 6 inches in late winter for fresh spring growth', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Purple Fountain Grass': [
+                    ('prune', 'Cut back {plant_name}', 'Cut to 6 inches in late winter. May not survive hard freezes — treat as annual if needed', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Bamboo Muhly': [
+                    ('prune', 'Cut back {plant_name}', 'Trim dead growth in late winter', 'recurring', '365', 'low', 'winter'),
+                ],
+                'Vinca (Catharanthus)': [
+                    ('custom', '{plant_name} care', 'Heat-loving annual. Don\'t overwater — thrives in hot dry conditions. Self-cleans', 'one_time', '0', 'low', None),
+                ],
+                'Petunia': [
+                    ('prune', 'Cut back leggy {plant_name}', 'Trim by half when leggy mid-season for fresh flush of blooms', 'recurring', '45', 'medium', None),
+                    ('fertilize', 'Fertilize {plant_name}', 'Heavy feeder — apply liquid fertilizer weekly for best blooms', 'recurring', '7', 'medium', None),
+                ],
+                'Pansy': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent flowers for continuous cool-season blooms', 'recurring', '7', 'medium', 'fall,winter,spring'),
+                    ('fertilize', 'Fertilize {plant_name}', 'Light balanced fertilizer monthly', 'recurring', '30', 'low', None),
+                ],
+                'Pentas': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent flower clusters to encourage reblooming. Butterfly magnet', 'recurring', '14', 'medium', None),
+                ],
+                'Gazania': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove faded flowers for continued blooming', 'recurring', '14', 'low', None),
+                ],
+                'Portulaca': [
+                    ('custom', '{plant_name} care', 'Virtually maintenance-free. Don\'t overwater. Thrives on neglect in full sun', 'one_time', '0', 'low', None),
+                ],
+                'Globe Amaranth': [
+                    ('harvest', 'Harvest {plant_name} for drying', 'Cut stems when flowers are fully colored. Excellent dried flower — lasts forever', 'growth_stage', 'flowering', 'low', None),
+                ],
+                'California Poppy': [
+                    ('custom', 'Let {plant_name} self-seed', 'California native. Let flowers go to seed for return next year. Don\'t transplant — taproot', 'one_time', '0', 'low', None),
+                ],
+                'Desert Lupine': [
+                    ('custom', 'Let {plant_name} naturalize', 'Desert wildflower. Scatter seeds in fall and let nature do the rest', 'one_time', '0', 'low', None),
+                ],
+                'Salvia Greggii': [
+                    ('prune', 'Prune {plant_name}', 'Cut back by one-third in late winter. Hummingbird favorite', 'recurring', '365', 'medium', 'winter'),
+                ],
+                'Salvia leucantha': [
+                    ('prune', 'Cut back {plant_name}', 'Hard prune to 6 inches in spring for bushy regrowth and fall blooms', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Salvia farinacea': [
+                    ('prune', 'Deadhead {plant_name}', 'Remove spent spikes for continued blooming. Treat as annual in cold areas', 'recurring', '21', 'low', None),
+                ],
+                'Yellow Bells': [
+                    ('prune', 'Prune {plant_name}', 'Cut back frost damage in spring. Blooms on new wood', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Texas Ranger': [
+                    ('prune', 'Prune {plant_name} lightly', 'Never shear into ball shape — prune selectively for natural form', 'recurring', '365', 'low', None),
+                    ('custom', '{plant_name} rain blooms', 'Blooms after rain — the "barometer bush." No supplemental water needed once established', 'one_time', '0', 'low', None),
+                ],
+                'Oleander': [
+                    ('prune', 'Prune {plant_name}', 'Remove oldest 1/3 of stems at ground yearly for continuous renewal. ALL PARTS ARE TOXIC', 'recurring', '365', 'medium', 'winter'),
+                    ('pest_check', 'Check {plant_name} for oleander caterpillar', 'Orange caterpillars with black tufts. Hand-pick with gloves — plant is toxic', 'recurring', '30', 'medium', None),
+                ],
+                'Bird of Paradise (Red)': [
+                    ('prune', 'Prune {plant_name}', 'Cut back frost damage in spring. Can hard prune to rejuvenate', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Bird of Paradise (Yellow)': [
+                    ('prune', 'Prune {plant_name}', 'Cut back frost damage in spring', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Mexican Bird of Paradise': [
+                    ('prune', 'Prune {plant_name}', 'Remove frost damage in spring. Cut seed pods for tidier look', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Pride of Barbados': [
+                    ('prune', 'Cut back {plant_name}', 'Dies back in frost — cut to 6 inches in spring. Regrows fast', 'recurring', '365', 'medium', 'spring'),
+                ],
+                'Fairy Duster (Red)': [
+                    ('prune', 'Prune {plant_name} lightly', 'Light shaping only — natural form is best. Hummingbird plant', 'recurring', '365', 'low', None),
+                ],
+                'Trailing Rosemary': [
+                    ('prune', 'Trim {plant_name}', 'Shape as needed. Great groundcover. Same uses as upright rosemary', 'recurring', '90', 'low', None),
+                ],
+
+                # Remaining specific plants
+                'Sunflower (Edible)': [
+                    ('stake', 'Stake tall {plant_name}', 'Support stems when over 3 feet to prevent wind damage', 'days_after_planting', '30', 'medium', None),
+                    ('harvest', 'Harvest {plant_name} seeds', 'Cut head when back is brown and seeds are plump. Dry hanging upside down', 'days_after_planting', '80', 'medium', None),
+                    ('custom', 'Protect {plant_name} from birds', 'Cover seed heads with netting when seeds start forming', 'growth_stage', 'fruiting', 'medium', None),
+                ],
+                'Pigeon Pea': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick green for fresh peas or let dry on plant for storage. Dual purpose', 'days_after_planting', '90', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Cut back by half after harvest for renewed production', 'recurring', '180', 'medium', None),
+                ],
+                'Winged Bean': [
+                    ('stake', 'Trellis {plant_name}', 'Vigorous climber — all parts edible (pods, leaves, flowers, tubers)', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick pods when 6-8 inches and wings are still tender', 'days_after_planting', '60', 'medium', None),
+                ],
+                'Lablab Bean': [
+                    ('stake', 'Trellis {plant_name}', 'Ornamental vine with purple flowers and pods. Strong support needed', 'days_after_planting', '14', 'high', None),
+                    ('harvest', 'Harvest {plant_name}', 'Pick young pods for cooking or mature beans for drying', 'days_after_planting', '70', 'medium', None),
+                ],
+                'Guar Bean': [
+                    ('harvest', 'Harvest {plant_name}', 'Pick young tender pods for cooking. Drought-tolerant legume', 'days_after_planting', '70', 'medium', None),
+                ],
+                'Pinto Bean': [
+                    ('harvest', 'Harvest {plant_name}', 'Let pods dry completely on vine, then shell. Store dry beans', 'days_after_planting', '80', 'medium', None),
+                ],
+                'Chipilin': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick tender leaves and shoots. Traditional in Central American tamales', 'recurring', '14', 'medium', None),
+                    ('prune', 'Prune {plant_name}', 'Cut back regularly to encourage bushy growth', 'recurring', '30', 'medium', None),
+                ],
+                'Jute Mallow': [
+                    ('harvest', 'Harvest {plant_name} leaves', 'Pick young leaves for mucilaginous cooking greens (molokhia)', 'recurring', '14', 'medium', None),
+                ],
+                'Sissoo Spinach': [
+                    ('harvest', 'Harvest {plant_name}', 'Cut leaves as needed — perennial heat-loving spinach substitute', 'recurring', '14', 'medium', None),
+                ],
+            }
+
+            # ── Category-based default templates ──
+            def get_default_templates(name, category):
+                """Generate default templates based on plant category."""
+                if category == 'vegetable':
+                    return [
+                        ('fertilize', f'Fertilize {{plant_name}}', 'Apply balanced fertilizer for healthy growth', 'recurring', '21', 'medium', None),
+                        ('pest_check', f'Check {{plant_name}} for pests', 'Inspect leaves and stems for common pests and diseases', 'recurring', '14', 'low', None),
+                        ('harvest', f'Check {{plant_name}} for harvest', 'Monitor for harvest readiness based on size, color, and firmness', 'days_after_planting', '60', 'medium', None),
+                    ]
+                elif category == 'herb':
+                    return [
+                        ('prune', f'Prune/pinch {{plant_name}}', 'Trim regularly to encourage bushy growth and prevent flowering', 'recurring', '14', 'medium', None),
+                        ('harvest', f'Harvest {{plant_name}}', 'Cut stems or leaves as needed for culinary use', 'recurring', '14', 'medium', None),
+                    ]
+                elif category == 'flower':
+                    return [
+                        ('prune', f'Deadhead {{plant_name}}', 'Remove spent blooms to encourage continued flowering', 'recurring', '14', 'medium', None),
+                        ('fertilize', f'Fertilize {{plant_name}}', 'Apply balanced fertilizer monthly during growing season', 'recurring', '30', 'low', None),
+                    ]
+                elif category == 'fruit':
+                    return [
+                        ('fertilize', f'Fertilize {{plant_name}}', 'Apply appropriate fertilizer for fruit production', 'recurring', '90', 'medium', None),
+                        ('prune', f'Prune {{plant_name}}', 'Shape and thin for airflow and fruit quality', 'recurring', '365', 'medium', 'winter'),
+                        ('pest_check', f'Check {{plant_name}} for pests', 'Inspect for common fruit tree pests and diseases', 'recurring', '30', 'medium', None),
+                        ('harvest', f'Harvest {{plant_name}}', 'Check for ripe fruit and harvest promptly', 'growth_stage', 'fruiting', 'medium', None),
+                    ]
+                elif category == 'ornamental':
+                    # Most ornamentals need minimal care — just a prune template
+                    return [
+                        ('prune', f'Prune {{plant_name}}', 'Shape and remove dead or damaged growth', 'recurring', '365', 'low', None),
+                    ]
+                return []
+
+            # Plants to skip (purely ornamental landscape plants with no specific care)
+            skip_plants = {
+                'Indian Laurel', 'Star Jasmine', 'Tipu Tree', 'African Sumac',
+                'Sweet Acacia', 'Texas Mountain Laurel', 'Ironwood', 'Mesquite',
+                'Palo Verde', 'Jacaranda',
+            }
+
+            count = 0
+            for plant_id, plant_name, category in plants:
+                if plant_name in existing:
+                    continue
+                if plant_name in skip_plants:
+                    continue
+
+                # Check for specific templates first
+                if plant_name in specific:
+                    templates = specific[plant_name]
+                    if not templates:  # Empty list means skip (already has templates or explicitly excluded)
+                        continue
+                else:
+                    # Use category defaults
+                    templates = get_default_templates(plant_name, category)
+
+                if not templates:
+                    continue
+
+                for t in templates:
+                    task_type, title, desc, trigger_type, trigger_val, priority, season = t
+                    db.execute(
+                        """INSERT INTO plant_task_templates
+                           (plant_id, plant_name, task_type, title_template, description_template,
+                            trigger_type, trigger_value, priority, season_filter)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (plant_id, plant_name, task_type, title, desc, trigger_type, trigger_val, priority, season)
+                    )
+                    count += 1
+
+            db.commit()
+            logger.info(f"Migration 053: Added {count} task templates for plants missing coverage")
+
+        run_migration(db, 53, "all_plant_task_templates", [], callback=_all_plant_templates)
+
         logger.info("Migration system: all migrations checked/applied")
