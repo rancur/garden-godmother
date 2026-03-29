@@ -1216,4 +1216,28 @@ def startup_run_migrations():
 
         run_migration(db, 49, "fix_expense_check_constraint", [], callback=_fix_expense_check_constraint)
 
+        # ── Migration 050: harvest instance_id ──
+        def _harvest_instance_id(db):
+            _migration_add_columns_if_missing(db, "harvests", {
+                "instance_id": "INTEGER REFERENCES plant_instances(id)",
+            })
+            # Backfill from existing planting_id → plantings.instance_id
+            db.execute("""
+                UPDATE harvests SET instance_id = (
+                    SELECT p.instance_id FROM plantings p WHERE p.id = harvests.planting_id
+                ) WHERE instance_id IS NULL AND planting_id IS NOT NULL
+            """)
+            db.commit()
+        run_migration(db, 50, "harvest_instance_id", [], callback=_harvest_instance_id)
+
+        # ── Migration 051: nursery transplant columns ──
+        def _nursery_transplant(db):
+            for col, default in [("source", "'seed'"), ("effective_planted_date", "NULL")]:
+                try:
+                    db.execute(f"ALTER TABLE plantings ADD COLUMN {col} TEXT DEFAULT {default}")
+                except Exception:
+                    pass
+            db.commit()
+        run_migration(db, 51, "nursery_transplant_columns", [], callback=_nursery_transplant)
+
         logger.info("Migration system: all migrations checked/applied")

@@ -126,12 +126,16 @@ export function updateBed(id: number, data: { name?: string; location?: string; 
   return apiFetch(`/api/beds/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
+export function resizeBed(bedId: number, data: { width_cells?: number; height_cells?: number; force?: boolean }) {
+  return apiFetch(`/api/beds/${bedId}/resize`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
 export function deleteBed(id: number) {
   return apiFetch(`/api/beds/${id}`, { method: 'DELETE' });
 }
 
 // Plantings
-export function createPlanting(data: { bed_id: number; plant_id: number; cell_x: number; cell_y: number; planted_date: string; variety_id?: number; cell_role?: string; companion_of?: number }) {
+export function createPlanting(data: { bed_id: number; plant_id: number; cell_x: number; cell_y: number; planted_date: string; variety_id?: number; cell_role?: string; companion_of?: number; source?: string; plant_age_weeks?: number }) {
   return apiFetch('/api/plantings', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -430,7 +434,7 @@ export function getHarvests(plantingId?: number) {
   return apiFetch(`/api/harvests${qs}`);
 }
 
-export function createHarvest(data: { planting_id: number; harvest_date: string; weight_oz?: number; quantity?: number; quality?: string; notes?: string; create_journal_entry?: boolean; final_harvest?: boolean }) {
+export function createHarvest(data: { planting_id?: number; instance_id?: number; harvest_date: string; weight_oz?: number; quantity?: number; quality?: string; notes?: string; create_journal_entry?: boolean; final_harvest?: boolean }) {
   return apiFetch('/api/harvests', {
     method: 'POST',
     body: JSON.stringify(data),

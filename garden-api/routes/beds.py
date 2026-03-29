@@ -427,6 +427,81 @@ def update_bed(bed_id: int, data: BedUpdate, request: Request):
 
 
 
+@router.patch("/api/beds/{bed_id}/resize")
+async def resize_bed(bed_id: int, request: Request):
+    """Dedicated endpoint for resizing a planter grid.
+
+    Accepts JSON body: { width_cells?: int, height_cells?: int, force?: bool }
+    If shrinking would displace active plantings, returns a warning unless force=true.
+    With force=true, displaced plantings are marked as 'removed'.
+    """
+    require_user(request)
+    body = await request.json()
+    new_width = body.get("width_cells")
+    new_height = body.get("height_cells")
+    force = body.get("force", False)
+
+    if new_width is not None and new_width < 1:
+        raise HTTPException(400, "width_cells must be >= 1")
+    if new_height is not None and new_height < 1:
+        raise HTTPException(400, "height_cells must be >= 1")
+    if new_width is None and new_height is None:
+        raise HTTPException(400, "Must provide width_cells or height_cells")
+
+    with get_db() as db:
+        bed = db.execute("SELECT * FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
+        if not bed:
+            raise HTTPException(404, "Bed not found")
+
+        final_width = new_width if new_width is not None else bed["width_cells"]
+        final_height = new_height if new_height is not None else bed["height_cells"]
+
+        # Check for active plantings that would be outside new dimensions
+        displaced_count = 0
+        if final_width < bed["width_cells"] or final_height < bed["height_cells"]:
+            displaced_count = db.execute(
+                "SELECT COUNT(*) as c FROM plantings WHERE bed_id = ? AND (cell_x >= ? OR cell_y >= ?) AND status NOT IN ('removed','died','harvested')",
+                (bed_id, final_width, final_height)
+            ).fetchone()["c"]
+            if displaced_count > 0 and not force:
+                return {
+                    "ok": False,
+                    "error": f"{displaced_count} active plant(s) would be displaced by this resize",
+                    "displaced": displaced_count,
+                }
+
+        # Apply resize
+        updates = []
+        params = []
+        if new_width is not None:
+            updates.append("width_cells = ?")
+            params.append(new_width)
+        if new_height is not None:
+            updates.append("height_cells = ?")
+            params.append(new_height)
+
+        params.append(bed_id)
+        db.execute(f"UPDATE garden_beds SET {', '.join(updates)} WHERE id = ?", params)
+
+        # If forcing, mark displaced plantings as removed
+        removed_count = 0
+        if force and displaced_count > 0:
+            cursor = db.execute(
+                "UPDATE plantings SET status = 'removed' WHERE bed_id = ? AND (cell_x >= ? OR cell_y >= ?) AND status NOT IN ('removed','died','harvested')",
+                (bed_id, final_width, final_height)
+            )
+            removed_count = cursor.rowcount
+
+        user = getattr(request.state, 'user', None)
+        if user:
+            audit_log(db, user['id'], 'resize', 'bed', bed_id,
+                      {'old': f"{bed['width_cells']}x{bed['height_cells']}", 'new': f"{final_width}x{final_height}", 'removed': removed_count},
+                      request.client.host if request.client else None)
+        db.commit()
+
+    return {"ok": True, "removed_plantings": removed_count}
+
+
 @router.post("/api/beds/reorder")
 def reorder_beds(data: ReorderRequest, request: Request):
     with get_db() as db:
@@ -648,32 +723,55 @@ def create_planting(planting: PlantingCreate, request: Request):
                 if variety.get("days_to_maturity_max"):
                     dtm_max = variety["days_to_maturity_max"]
 
-        # Calculate expected harvest date
+        # Validate source
+        source = planting.source or "seed"
+        if source not in ("seed", "nursery", "cutting", "division"):
+            raise HTTPException(400, "source must be one of: seed, nursery, cutting, division")
+
+        # Calculate effective_planted_date for nursery transplants
+        effective_planted_date = None
+        if source == "nursery" and planting.plant_age_weeks and planting.planted_date:
+            effective_planted_date = (date.fromisoformat(planting.planted_date) - timedelta(days=planting.plant_age_weeks * 7)).isoformat()
+
+        # Calculate expected harvest date using effective date if available
         expected_harvest = None
-        if planting.planted_date and dtm_min:
-            planted = date.fromisoformat(planting.planted_date)
+        harvest_base_date = effective_planted_date or planting.planted_date
+        if harvest_base_date and dtm_min:
+            base = date.fromisoformat(harvest_base_date)
             avg_days = (dtm_min + (dtm_max or dtm_min)) // 2
-            expected_harvest = (planted + timedelta(days=avg_days)).isoformat()
+            expected_harvest = (base + timedelta(days=avg_days)).isoformat()
+
+        # Nursery transplants start as 'growing', not 'planned'
+        initial_status = "growing" if source == "nursery" else "planned"
 
         cursor = db.execute("""
             INSERT INTO plantings (bed_id, plant_id, variety_id, cell_x, cell_y, planted_date,
                                    expected_harvest_date, status, season, year, notes,
-                                   cell_role, companion_of)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?)
+                                   cell_role, companion_of, source, effective_planted_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             planting.bed_id, planting.plant_id, planting.variety_id,
             planting.cell_x, planting.cell_y,
             planting.planted_date, expected_harvest,
-            planting.season, planting.year or CURRENT_YEAR, planting.notes,
-            cell_role, companion_of,
+            initial_status, planting.season, planting.year or CURRENT_YEAR, planting.notes,
+            cell_role, companion_of, source, effective_planted_date,
         ))
+        planting_id = cursor.lastrowid
+
+        # Auto-create journal entry for nursery transplants
+        if source == "nursery" and planting.plant_age_weeks:
+            db.execute(
+                "INSERT INTO planting_notes (planting_id, note_type, content) VALUES (?, 'observation', ?)",
+                (planting_id, f"Transplanted from nursery — estimated {planting.plant_age_weeks} weeks old"),
+            )
+
         user = getattr(request.state, 'user', None)
         if user:
-            audit_log(db, user['id'], 'create', 'planting', cursor.lastrowid,
-                      {'plant_name': plant['name'], 'bed_id': planting.bed_id, 'cell': f'{planting.cell_x},{planting.cell_y}', 'cell_role': cell_role},
+            audit_log(db, user['id'], 'create', 'planting', planting_id,
+                      {'plant_name': plant['name'], 'bed_id': planting.bed_id, 'cell': f'{planting.cell_x},{planting.cell_y}', 'cell_role': cell_role, 'source': source},
                       request.client.host if request.client else None)
         db.commit()
-        return {"id": cursor.lastrowid, "expected_harvest_date": expected_harvest, "cell_role": cell_role}
+        return {"id": planting_id, "expected_harvest_date": expected_harvest, "cell_role": cell_role}
 
 
 @router.patch("/api/plantings/{planting_id}")

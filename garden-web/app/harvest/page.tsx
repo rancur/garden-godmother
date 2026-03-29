@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantings, getUpcomingHarvests, getExportUrl, undoAction } from '../api';
+import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantInstances, getUpcomingHarvests, getExportUrl, undoAction } from '../api';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { useModal } from '../confirm-modal';
 import { useToast } from '../toast';
@@ -10,16 +10,23 @@ import { getPlantIcon } from '../plant-icons';
 import { getGardenToday } from '../timezone';
 import { PullToRefresh } from '../components/PullToRefresh';
 
-interface Planting {
+interface PlantInstance {
   id: number;
   plant_name: string;
+  display_name: string;
   bed_name?: string;
+  container_name?: string;
+  cell_x?: number;
+  cell_y?: number;
+  location_type?: string;
   status: string;
 }
 
 interface Harvest {
   id: number;
   planting_id: number;
+  instance_id: number | null;
+  plant_id: number | null;
   plant_name: string;
   harvest_date: string;
   weight_oz: number | null;
@@ -28,6 +35,8 @@ interface Harvest {
   notes: string | null;
   created_at: string;
   journal_entry_id: number | null;
+  location_display: string | null;
+  bed_name: string | null;
 }
 
 interface HarvestSummary {
@@ -68,7 +77,7 @@ export default function HarvestPage() {
   const { showConfirm } = useModal();
   const { toast } = useToast();
   const [harvests, setHarvests] = useState<Harvest[]>([]);
-  const [plantings, setPlantings] = useState<Planting[]>([]);
+  const [instances, setInstances] = useState<PlantInstance[]>([]);
   const [summary, setSummary] = useState<HarvestSummary | null>(null);
   const [upcomingHarvests, setUpcomingHarvests] = useState<UpcomingHarvest[]>([]);
   const [upcomingExpanded, setUpcomingExpanded] = useState(true);
@@ -78,7 +87,7 @@ export default function HarvestPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const emptyForm = {
-    planting_id: 0,
+    instance_id: 0,
     harvest_date: getGardenToday(),
     weight_oz: '',
     quantity: '',
@@ -90,11 +99,11 @@ export default function HarvestPage() {
   const [formData, setFormData] = useState(emptyForm);
 
   const loadData = () => {
-    Promise.all([getHarvests(), getHarvestSummary(), getPlantings(), getUpcomingHarvests()])
-      .then(([harvestData, summaryData, plantingData, upcomingData]) => {
+    Promise.all([getHarvests(), getHarvestSummary(), getPlantInstances(), getUpcomingHarvests()])
+      .then(([harvestData, summaryData, instanceData, upcomingData]) => {
         setHarvests(harvestData);
         setSummary(summaryData);
-        setPlantings(plantingData);
+        setInstances(instanceData);
         setUpcomingHarvests(upcomingData);
       })
       .catch(() => setError('Failed to load data'))
@@ -105,11 +114,11 @@ export default function HarvestPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.planting_id) return;
+    if (!formData.instance_id) return;
     setSubmitting(true);
     try {
       await createHarvest({
-        planting_id: formData.planting_id,
+        instance_id: formData.instance_id,
         harvest_date: formData.harvest_date,
         weight_oz: formData.weight_oz ? parseFloat(formData.weight_oz) : undefined,
         quantity: formData.quantity ? parseInt(formData.quantity) : undefined,
@@ -178,16 +187,23 @@ export default function HarvestPage() {
           <h2 className="text-lg font-semibold text-earth-800 dark:text-gray-200">Log a Harvest</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-earth-700 dark:text-gray-300 mb-1">Planting *</label>
+              <label className="block text-sm font-medium text-earth-700 dark:text-gray-300 mb-1">Plant *</label>
               <TypeaheadSelect
-                options={plantings.map((p): TypeaheadOption => ({
-                  value: p.id.toString(),
-                  label: `${p.plant_name}${p.bed_name ? ` in ${p.bed_name}` : ''} - ${p.status}`,
-                  icon: getPlantIcon(p.plant_name),
-                }))}
-                value={formData.planting_id ? formData.planting_id.toString() : ''}
-                onChange={(val) => setFormData({ ...formData, planting_id: val ? Number(val) : 0 })}
-                placeholder="Search plantings..."
+                options={instances.map((inst): TypeaheadOption => {
+                  const loc = inst.container_name
+                    ? (inst.cell_x != null && inst.cell_y != null
+                      ? `${inst.container_name}, cell ${inst.cell_x},${inst.cell_y}`
+                      : inst.container_name)
+                    : null;
+                  return {
+                    value: inst.id.toString(),
+                    label: `${inst.plant_name}${loc ? ` — ${loc}` : ''} - ${inst.status}`,
+                    icon: getPlantIcon(inst.plant_name),
+                  };
+                })}
+                value={formData.instance_id ? formData.instance_id.toString() : ''}
+                onChange={(val) => setFormData({ ...formData, instance_id: val ? Number(val) : 0 })}
+                placeholder="Search plants..."
               />
             </div>
             <div>
@@ -273,7 +289,7 @@ export default function HarvestPage() {
           </div>
           <button
             type="submit"
-            disabled={submitting || !formData.planting_id}
+            disabled={submitting || !formData.instance_id}
             className="px-6 py-2 bg-garden-600 text-white rounded-lg hover:bg-garden-700 disabled:opacity-50 transition-colors font-medium"
           >
             {submitting ? 'Saving...' : 'Save Harvest'}
@@ -420,7 +436,23 @@ export default function HarvestPage() {
                 {harvests.map(h => (
                   <tr key={h.id} className="border-b border-earth-100 dark:border-gray-700/50 hover:bg-earth-50 dark:hover:bg-gray-700/50">
                     <td className="p-3 sm:p-4 text-earth-700 dark:text-gray-300">{h.harvest_date}</td>
-                    <td className="p-3 sm:p-4 font-medium text-earth-800 dark:text-gray-200">{h.plant_name}</td>
+                    <td className="p-3 sm:p-4 font-medium text-earth-800 dark:text-gray-200">
+                      {h.instance_id ? (
+                        <Link href={`/plant/${h.instance_id}`} className="hover:text-garden-600 dark:hover:text-garden-400 hover:underline">
+                          {h.plant_name}
+                          {h.location_display && (
+                            <span className="text-earth-500 dark:text-gray-400 font-normal text-xs ml-1">({h.location_display})</span>
+                          )}
+                        </Link>
+                      ) : (
+                        <>
+                          {h.plant_name}
+                          {h.location_display && (
+                            <span className="text-earth-500 dark:text-gray-400 font-normal text-xs ml-1">({h.location_display})</span>
+                          )}
+                        </>
+                      )}
+                    </td>
                     <td className="p-3 sm:p-4 text-right text-earth-700 dark:text-gray-300">{h.weight_oz ?? '--'}</td>
                     <td className="p-3 sm:p-4 text-right text-earth-700 dark:text-gray-300">{h.quantity ?? '--'}</td>
                     <td className="p-3 sm:p-4">

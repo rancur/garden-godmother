@@ -130,6 +130,8 @@ class PlantingCreate(BaseModel):
     notes: Optional[str] = None
     cell_role: Optional[str] = "primary"
     companion_of: Optional[int] = None
+    source: Optional[str] = "seed"
+    plant_age_weeks: Optional[int] = None
 
 class PlantingUpdate(BaseModel):
     status: Optional[str] = None
@@ -221,7 +223,8 @@ class SeedUpdate(BaseModel):
 # ──── Harvest / Expense Models ────
 
 class HarvestCreate(BaseModel):
-    planting_id: int
+    planting_id: Optional[int] = None
+    instance_id: Optional[int] = None
     harvest_date: str
     weight_oz: Optional[float] = None
     quantity: Optional[int] = None

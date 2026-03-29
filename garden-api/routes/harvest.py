@@ -78,33 +78,68 @@ def _estimate_price_per_oz(plant_name: str) -> float:
 @router.post("/api/harvests")
 def create_harvest(harvest: HarvestCreate, request: Request):
     with get_db() as db:
-        # Verify planting exists
-        planting = db.execute("SELECT id, plant_id, bed_id FROM plantings WHERE id = ?", (harvest.planting_id,)).fetchone()
-        if not planting:
-            raise HTTPException(404, "Planting not found")
+        instance_id = harvest.instance_id
+        planting_id = harvest.planting_id
+        plant_id = None
+        bed_id = None
+
+        # If instance_id provided, resolve planting_id and plant_id from it
+        if instance_id:
+            inst = db.execute("SELECT id, plant_id FROM plant_instances WHERE id = ?", (instance_id,)).fetchone()
+            if not inst:
+                raise HTTPException(404, "Plant instance not found")
+            plant_id = inst["plant_id"]
+            # Find a matching planting for this instance
+            if not planting_id:
+                p_row = db.execute("SELECT id, bed_id FROM plantings WHERE instance_id = ? LIMIT 1", (instance_id,)).fetchone()
+                if p_row:
+                    planting_id = p_row["id"]
+                    bed_id = p_row["bed_id"]
+
+        # Verify planting if we have one
+        if planting_id:
+            planting = db.execute("SELECT id, plant_id, bed_id FROM plantings WHERE id = ?", (planting_id,)).fetchone()
+            if not planting:
+                raise HTTPException(404, "Planting not found")
+            plant_id = planting["plant_id"]
+            bed_id = planting["bed_id"]
+            # Auto-resolve instance_id from planting if not provided
+            if not instance_id:
+                inst_row = db.execute("SELECT instance_id FROM plantings WHERE id = ?", (planting_id,)).fetchone()
+                if inst_row and inst_row["instance_id"]:
+                    instance_id = inst_row["instance_id"]
+        elif not instance_id:
+            raise HTTPException(400, "Either planting_id or instance_id is required")
+
         cur = db.execute("""
-            INSERT INTO harvests (planting_id, harvest_date, weight_oz, quantity, quality, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (harvest.planting_id, harvest.harvest_date, harvest.weight_oz, harvest.quantity, harvest.quality, harvest.notes))
+            INSERT INTO harvests (planting_id, instance_id, harvest_date, weight_oz, quantity, quality, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (planting_id, instance_id, harvest.harvest_date, harvest.weight_oz, harvest.quantity, harvest.quality, harvest.notes))
         harvest_id = cur.lastrowid
         db.commit()
 
         # If final harvest, mark planting (and plant instance) as harvested
-        if harvest.final_harvest and harvest.planting_id:
-            db.execute("UPDATE plantings SET status = 'harvested' WHERE id = ?", (harvest.planting_id,))
-            instance = db.execute("SELECT instance_id FROM plantings WHERE id = ?", (harvest.planting_id,)).fetchone()
-            if instance and instance["instance_id"]:
-                db.execute("UPDATE plant_instances SET status = 'harvested' WHERE id = ?", (instance["instance_id"],))
+        if harvest.final_harvest:
+            if planting_id:
+                db.execute("UPDATE plantings SET status = 'harvested' WHERE id = ?", (planting_id,))
+            if instance_id:
+                db.execute("UPDATE plant_instances SET status = 'harvested' WHERE id = ?", (instance_id,))
+            elif planting_id:
+                inst_check = db.execute("SELECT instance_id FROM plantings WHERE id = ?", (planting_id,)).fetchone()
+                if inst_check and inst_check["instance_id"]:
+                    db.execute("UPDATE plant_instances SET status = 'harvested' WHERE id = ?", (inst_check["instance_id"],))
             db.commit()
 
         row = db.execute("""
-            SELECT h.*, p.plant_id, pl.name as plant_name
+            SELECT h.*, pl.name as plant_name
             FROM harvests h
-            JOIN plantings p ON h.planting_id = p.id
-            JOIN plants pl ON p.plant_id = pl.id
+            LEFT JOIN plant_instances pi ON h.instance_id = pi.id
+            LEFT JOIN plantings p ON h.planting_id = p.id
+            JOIN plants pl ON pl.id = COALESCE(pi.plant_id, p.plant_id)
             WHERE h.id = ?
         """, (harvest_id,)).fetchone()
         result = dict(row)
+        result["plant_id"] = plant_id
 
         user = getattr(request.state, 'user', None)
         if user:
@@ -115,7 +150,7 @@ def create_harvest(harvest: HarvestCreate, request: Request):
         # Auto-create journal entry if requested
         if harvest.create_journal_entry:
             plant_name = result.get("plant_name", "unknown")
-            bed_row = db.execute("SELECT name FROM garden_beds WHERE id = ?", (planting["bed_id"],)).fetchone() if planting["bed_id"] else None
+            bed_row = db.execute("SELECT name FROM garden_beds WHERE id = ?", (bed_id,)).fetchone() if bed_id else None
             bed_name = bed_row["name"] if bed_row else None
 
             parts = []
@@ -135,7 +170,7 @@ def create_harvest(harvest: HarvestCreate, request: Request):
             journal_cur = db.execute(
                 """INSERT INTO journal_entries (entry_type, title, content, plant_id, planting_id, bed_id, harvest_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                ("harvest", f"Harvest: {plant_name}", content, planting["plant_id"], harvest.planting_id, planting["bed_id"], harvest_id),
+                ("harvest", f"Harvest: {plant_name}", content, plant_id, planting_id, bed_id, harvest_id),
             )
             db.commit()
             result["journal_entry_id"] = journal_cur.lastrowid
@@ -147,12 +182,20 @@ def create_harvest(harvest: HarvestCreate, request: Request):
 def list_harvests(planting_id: Optional[int] = None):
     with get_db() as db:
         query = """
-            SELECT h.*, p.plant_id, pl.name as plant_name,
-                   je.id as journal_entry_id
+            SELECT h.*,
+                   COALESCE(pi.plant_id, p.plant_id) as plant_id,
+                   pl.name as plant_name,
+                   je.id as journal_entry_id,
+                   pil.bed_id as loc_bed_id, pil.cell_x, pil.cell_y,
+                   gb.name as bed_name,
+                   pil.location_type
             FROM harvests h
-            JOIN plantings p ON h.planting_id = p.id
-            JOIN plants pl ON p.plant_id = pl.id
+            LEFT JOIN plantings p ON h.planting_id = p.id
+            LEFT JOIN plant_instances pi ON h.instance_id = pi.id
+            JOIN plants pl ON pl.id = COALESCE(pi.plant_id, p.plant_id)
             LEFT JOIN journal_entries je ON je.harvest_id = h.id
+            LEFT JOIN plant_instance_locations pil ON pil.instance_id = h.instance_id AND pil.is_current = 1
+            LEFT JOIN garden_beds gb ON pil.bed_id = gb.id
         """
         params = []
         if planting_id is not None:
@@ -160,7 +203,18 @@ def list_harvests(planting_id: Optional[int] = None):
             params.append(planting_id)
         query += " ORDER BY h.harvest_date DESC, h.created_at DESC"
         rows = db.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
+        results = []
+        for r in rows:
+            d = dict(r)
+            # Build location display string
+            loc_parts = []
+            if d.get("bed_name"):
+                loc_parts.append(d["bed_name"])
+            if d.get("cell_x") is not None and d.get("cell_y") is not None:
+                loc_parts.append(f"cell {d['cell_x']},{d['cell_y']}")
+            d["location_display"] = ", ".join(loc_parts) if loc_parts else None
+            results.append(d)
+        return results
 
 
 @router.get("/api/harvests/upcoming")

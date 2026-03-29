@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate, getCompanionSuggestions, addCompanion } from '../../api';
+import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, resizeBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate, getCompanionSuggestions, addCompanion } from '../../api';
 import SoilAmendments from '../../components/SoilAmendments';
 import SensorReadings from '../../components/SensorReadings';
 import PlantTimeline from '../../components/PlantTimeline';
@@ -166,6 +166,15 @@ export default function BedDetailPage() {
   const [varietyPickerCell, setVarietyPickerCell] = useState<{ x: number; y: number } | null>(null);
   const [loadingVarieties, setLoadingVarieties] = useState(false);
   const [companionOverlay, setCompanionOverlay] = useState<CompanionState>({});
+
+  // Source picker state (nursery transplant flow)
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [sourcePickerPlant, setSourcePickerPlant] = useState<Plant | null>(null);
+  const [sourcePickerCell, setSourcePickerCell] = useState<{ x: number; y: number } | null>(null);
+  const [sourcePickerVarietyId, setSourcePickerVarietyId] = useState<number | undefined>(undefined);
+  const [selectedSource, setSelectedSource] = useState<string>('seed');
+  const [plantAgeWeeks, setPlantAgeWeeks] = useState<number | null>(null);
+  const [customAgeWeeks, setCustomAgeWeeks] = useState('');
 
   // Grid-wide companion visualization state
   const [showCompanions, setShowCompanions] = useState(false);
@@ -473,21 +482,45 @@ export default function BedDetailPage() {
   const handleSaveBedSettings = useCallback(async () => {
     if (!bed) return;
 
+    const dimensionsChanged = settingsBedType !== 'single' && (settingsWidth !== bed.width_cells || settingsHeight !== bed.height_cells);
+
     // Check if resizing would remove plantings
-    if (settingsWidth < bed.width_cells || settingsHeight < bed.height_cells) {
-      let outOfBounds = 0;
-      if (bed.grid) {
-        for (let y = 0; y < bed.grid.length; y++) {
-          for (let x = 0; x < bed.grid[y].length; x++) {
-            if (bed.grid[y][x] && (x >= settingsWidth || y >= settingsHeight)) {
-              outOfBounds++;
-            }
-          }
+    if (dimensionsChanged && (settingsWidth < bed.width_cells || settingsHeight < bed.height_cells)) {
+      // First ask the API to check for displaced plantings
+      try {
+        const checkResult = await resizeBed(bed.id, {
+          width_cells: settingsWidth,
+          height_cells: settingsHeight,
+          force: false,
+        });
+        if (!checkResult.ok && checkResult.displaced) {
+          const confirmed = await showConfirm({ title: 'Resize Grid', message: `${checkResult.displaced} active plant(s) would be displaced by this resize. These plantings will be marked as removed. Continue?`, confirmText: 'Resize Anyway', destructive: true });
+          if (!confirmed) return;
+          // Force the resize
+          setSavingBedSettings(true);
+          await resizeBed(bed.id, {
+            width_cells: settingsWidth,
+            height_cells: settingsHeight,
+            force: true,
+          });
         }
+        // If checkResult.ok, dimensions already applied by the API
+      } catch {
+        setError('Failed to resize planter');
+        return;
       }
-      if (outOfBounds > 0) {
-        const confirmed = await showConfirm({ title: 'Resize Grid', message: `Reducing grid size will remove ${outOfBounds} planting(s) outside the new dimensions. Continue?`, confirmText: 'Continue', destructive: true });
-        if (!confirmed) return;
+    } else if (dimensionsChanged) {
+      // Expanding or same size — just resize directly
+      setSavingBedSettings(true);
+      try {
+        await resizeBed(bed.id, {
+          width_cells: settingsWidth,
+          height_cells: settingsHeight,
+        });
+      } catch {
+        setError('Failed to resize planter');
+        setSavingBedSettings(false);
+        return;
       }
     }
 
@@ -507,24 +540,19 @@ export default function BedDetailPage() {
         if (settingsPhysicalLength) parts.push(`${settingsPhysicalLength}" L`);
         if (settingsDepthInches) parts.push(`${settingsDepthInches}" D`);
         payload.description = parts.join(' x ');
-      } else {
-        if (settingsWidth !== bed.width_cells) payload.width_cells = settingsWidth;
-        if (settingsHeight !== bed.height_cells) payload.height_cells = settingsHeight;
       }
+      // Don't include width/height in the general update — already handled by resizeBed above
       if (settingsCellSize !== bed.cell_size_inches) payload.cell_size_inches = settingsCellSize;
       if (settingsBedType !== 'single' && settingsDescription !== (bed.description || '')) payload.description = settingsDescription;
       if (settingsPlanterTypeId !== (bed.planter_type_id || null)) payload.planter_type_id = settingsPlanterTypeId || 0;
       if (settingsBedType !== (bed.bed_type || 'grid')) payload.bed_type = settingsBedType;
       if (settingsDepthInches !== (bed.depth_inches || null)) payload.depth_inches = settingsDepthInches;
 
-      if (Object.keys(payload).length === 0) {
-        setSavingBedSettings(false);
-        return;
+      if (Object.keys(payload).length > 0) {
+        await updateBed(bed.id, payload);
       }
-
-      await updateBed(bed.id, payload);
       loadBed();
-      toast('Planter settings saved');
+      toast(dimensionsChanged ? 'Planter resized successfully' : 'Planter settings saved');
     } catch {
       setError('Failed to save planter settings');
     } finally {
@@ -1255,7 +1283,11 @@ export default function BedDetailPage() {
               {bedAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           )}
-          <span className="text-sm text-earth-400 dark:text-gray-500">
+          <button
+            onClick={() => setShowBedSettings(true)}
+            className="text-sm text-earth-400 dark:text-gray-500 hover:text-garden-600 dark:hover:text-garden-400 transition-colors cursor-pointer inline-flex items-center gap-1"
+            title="Click to resize grid"
+          >
             {bed.bed_type === 'single' ? (
               <>{[
                 bed.physical_width_inches ? `${bed.physical_width_inches}" W` : null,
@@ -1266,7 +1298,8 @@ export default function BedDetailPage() {
               <>{bed.width_cells}x{bed.height_cells} &middot; {bed.cell_size_inches}&quot; cells
               {bed.depth_inches ? <> &middot; {bed.depth_inches}&quot; deep</> : null}</>
             )}
-          </span>
+            <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+          </button>
           {bed.irrigation_type === 'rachio_controller' || bed.irrigation_type === 'rachio_hose_timer' ? (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
               {'💧'} Automated{bed.irrigation_zone_name ? ` — ${bed.irrigation_zone_name}` : ''}
