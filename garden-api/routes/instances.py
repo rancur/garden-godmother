@@ -29,8 +29,10 @@ def list_plant_instances(
                    pil.location_type, pil.bed_id, pil.cell_x, pil.cell_y,
                    pil.ground_plant_id, pil.tray_id, pil.tray_row, pil.tray_col,
                    gb.name as bed_name,
+                   gb.width_cells, gb.height_cells,
                    gp_name.name as ground_plant_label,
-                   st.name as tray_name
+                   st.name as tray_name,
+                   st.rows as tray_rows, st.cols as tray_cols
             FROM plant_instances pi
             JOIN plants p ON pi.plant_id = p.id
             LEFT JOIN varieties v ON pi.variety_id = v.id

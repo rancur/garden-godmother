@@ -28,11 +28,14 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
                    p.instance_id,
                    pl.name as plant_name, pl.category,
                    gb.name as container_name, 'planter' as container_type, gb.id as container_id,
-                   v.name as variety_name
+                   gb.width_cells, gb.height_cells,
+                   v.name as variety_name,
+                   pi_label.label as instance_label
             FROM plantings p
             JOIN plants pl ON p.plant_id = pl.id
             LEFT JOIN garden_beds gb ON p.bed_id = gb.id
             LEFT JOIN varieties v ON p.variety_id = v.id
+            LEFT JOIN plant_instances pi_label ON p.instance_id = pi_label.id
             {bed_where}
         """).fetchall()
         for r in bed_plantings:
@@ -60,6 +63,9 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
             d["variety_name"] = None
             d["cell_x"] = None
             d["cell_y"] = None
+            d["width_cells"] = None
+            d["height_cells"] = None
+            d["instance_label"] = None
             if d.get("instance_id"):
                 d["link"] = f"/plant/{d['instance_id']}"
             else:
@@ -72,9 +78,11 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
         tray_status_filter = "" if include_historical else "AND stc.status IN ('seeded', 'germinated')"
         tray_cells = db.execute(f"""
             SELECT stc.id, stc.plant_id, stc.status, stc.seed_date as planted_date,
+                   stc.row as tray_row, stc.col as tray_col,
                    (stc.row || '-' || stc.col) as cell_label,
                    pl.name as plant_name, pl.category,
-                   st.name as container_name, 'tray' as container_type, st.id as container_id
+                   st.name as container_name, 'tray' as container_type, st.id as container_id,
+                   st.rows as tray_rows, st.cols as tray_cols
             FROM seed_tray_cells stc
             JOIN plants pl ON stc.plant_id = pl.id
             LEFT JOIN seed_trays st ON stc.tray_id = st.id
@@ -83,9 +91,12 @@ def get_all_plantings(request: Request, status: Optional[str] = Query(None), inc
         """).fetchall()
         for r in tray_cells:
             d = dict(r)
-            d["cell_x"] = None
-            d["cell_y"] = None
+            d["cell_x"] = d.get("tray_col")
+            d["cell_y"] = d.get("tray_row")
+            d["width_cells"] = d.get("tray_cols")
+            d["height_cells"] = d.get("tray_rows")
             d["variety_name"] = None
+            d["instance_label"] = None
             d["link"] = f"/trays/{d['container_id']}"
             results.append(d)
 

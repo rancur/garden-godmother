@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, ReactNode } from 'react';
 
 export interface TypeaheadOption {
   value: string;
@@ -14,6 +14,8 @@ interface TypeaheadSelectProps {
   placeholder?: string;
   className?: string;
   maxResults?: number;
+  renderOption?: (option: TypeaheadOption) => ReactNode;
+  renderSelected?: (option: TypeaheadOption) => ReactNode;
 }
 
 export function TypeaheadSelect({
@@ -23,6 +25,8 @@ export function TypeaheadSelect({
   placeholder = 'Type to search...',
   className = '',
   maxResults = 8,
+  renderOption,
+  renderSelected,
 }: TypeaheadSelectProps) {
   const [search, setSearch] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -51,8 +55,14 @@ export function TypeaheadSelect({
     return (
       <div className={`relative ${className}`} ref={containerRef}>
         <div className="flex items-center gap-2 px-3 py-2 bg-garden-100 dark:bg-garden-900/40 border border-garden-300 dark:border-garden-700 rounded-lg">
-          {selectedOption.icon && <span>{selectedOption.icon}</span>}
-          <span className="text-sm text-earth-800 dark:text-gray-100 flex-1">{selectedOption.label}</span>
+          {renderSelected ? (
+            <span className="flex-1">{renderSelected(selectedOption)}</span>
+          ) : (
+            <>
+              {selectedOption.icon && <span>{selectedOption.icon}</span>}
+              <span className="text-sm text-earth-800 dark:text-gray-100 flex-1">{selectedOption.label}</span>
+            </>
+          )}
           <button
             onClick={() => {
               onChange('');
@@ -93,8 +103,14 @@ export function TypeaheadSelect({
               }}
               className="w-full flex items-center gap-2 px-3 py-3 min-h-[48px] hover:bg-garden-50 dark:hover:bg-gray-700 text-sm text-earth-700 dark:text-gray-200 text-left"
             >
-              {option.icon && <span>{option.icon}</span>}
-              <span>{option.label}</span>
+              {renderOption ? (
+                renderOption(option)
+              ) : (
+                <>
+                  {option.icon && <span>{option.icon}</span>}
+                  <span>{option.label}</span>
+                </>
+              )}
             </button>
           ))}
         </div>

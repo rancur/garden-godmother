@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantInstances, getUpcomingHarvests, getExportUrl, undoAction } from '../api';
+import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantInstances, getUpcomingHarvests, getExportUrl, undoAction, getCellPositionLabel } from '../api';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
+import { MiniGrid } from '../components/MiniGrid';
 import { useModal } from '../confirm-modal';
 import { useToast } from '../toast';
 import { getPlantIcon } from '../plant-icons';
@@ -18,8 +19,15 @@ interface PlantInstance {
   container_name?: string;
   cell_x?: number;
   cell_y?: number;
+  width_cells?: number;
+  height_cells?: number;
+  tray_rows?: number;
+  tray_cols?: number;
+  tray_row?: number;
+  tray_col?: number;
   location_type?: string;
   status: string;
+  label?: string;
 }
 
 interface Harvest {
@@ -190,20 +198,62 @@ export default function HarvestPage() {
               <label className="block text-sm font-medium text-earth-700 dark:text-gray-300 mb-1">Plant *</label>
               <TypeaheadSelect
                 options={instances.map((inst): TypeaheadOption => {
-                  const loc = inst.container_name
-                    ? (inst.cell_x != null && inst.cell_y != null
-                      ? `${inst.container_name}, cell ${inst.cell_x},${inst.cell_y}`
-                      : inst.container_name)
-                    : null;
+                  const displayName = inst.label || inst.display_name || inst.plant_name;
+                  let loc: string | null = null;
+                  if (inst.container_name) {
+                    // Determine grid dimensions and cell position
+                    const gridW = inst.width_cells || inst.tray_cols;
+                    const gridH = inst.height_cells || inst.tray_rows;
+                    const cx = inst.cell_x ?? inst.tray_col;
+                    const cy = inst.cell_y ?? inst.tray_row;
+                    if (cx != null && cy != null && gridW && gridH) {
+                      const posLabel = getCellPositionLabel(cx, cy, gridW, gridH);
+                      loc = posLabel ? `${inst.container_name}, ${posLabel}` : inst.container_name;
+                    } else {
+                      loc = inst.container_name;
+                    }
+                  }
                   return {
                     value: inst.id.toString(),
-                    label: `${inst.plant_name}${loc ? ` — ${loc}` : ''} - ${inst.status}`,
+                    label: `${displayName}${loc ? ` \u2014 ${loc}` : ''} - ${inst.status}`,
                     icon: getPlantIcon(inst.plant_name),
                   };
                 })}
                 value={formData.instance_id ? formData.instance_id.toString() : ''}
                 onChange={(val) => setFormData({ ...formData, instance_id: val ? Number(val) : 0 })}
                 placeholder="Search plants..."
+                renderOption={(option) => {
+                  const inst = instances.find(i => i.id.toString() === option.value);
+                  const gridW = inst?.width_cells || inst?.tray_cols;
+                  const gridH = inst?.height_cells || inst?.tray_rows;
+                  const cx = inst?.cell_x ?? inst?.tray_col;
+                  const cy = inst?.cell_y ?? inst?.tray_row;
+                  return (
+                    <span className="flex items-center gap-2">
+                      {inst && gridW && gridH && cx != null && cy != null ? (
+                        <MiniGrid width={gridW} height={gridH} highlightX={cx} highlightY={cy} />
+                      ) : null}
+                      {option.icon && <span>{option.icon}</span>}
+                      <span>{option.label}</span>
+                    </span>
+                  );
+                }}
+                renderSelected={(option) => {
+                  const inst = instances.find(i => i.id.toString() === option.value);
+                  const gridW = inst?.width_cells || inst?.tray_cols;
+                  const gridH = inst?.height_cells || inst?.tray_rows;
+                  const cx = inst?.cell_x ?? inst?.tray_col;
+                  const cy = inst?.cell_y ?? inst?.tray_row;
+                  return (
+                    <span className="flex items-center gap-2 text-sm text-earth-800 dark:text-gray-100">
+                      {inst && gridW && gridH && cx != null && cy != null ? (
+                        <MiniGrid width={gridW} height={gridH} highlightX={cx} highlightY={cy} />
+                      ) : null}
+                      {option.icon && <span>{option.icon}</span>}
+                      <span>{option.label}</span>
+                    </span>
+                  );
+                }}
               />
             </div>
             <div>

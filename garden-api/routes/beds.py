@@ -1087,8 +1087,12 @@ def list_plantings(bed_id: Optional[int] = None, status: Optional[str] = None, y
     with get_db() as db:
         query = """
             SELECT p.*, pl.name as plant_name, pl.category as plant_category,
+                   gb.name as bed_name, gb.width_cells, gb.height_cells,
+                   pi_label.label as instance_label,
                    (SELECT COUNT(*) FROM planting_photos pp WHERE pp.planting_id = p.id) as photo_count
             FROM plantings p JOIN plants pl ON p.plant_id = pl.id
+            LEFT JOIN garden_beds gb ON p.bed_id = gb.id
+            LEFT JOIN plant_instances pi_label ON p.instance_id = pi_label.id
         """
         conditions = []
         params = []

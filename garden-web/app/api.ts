@@ -1,6 +1,37 @@
 // Configure for your domain — set NEXT_PUBLIC_API_URL in .env.local or docker-compose.yml
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3402';
 
+/**
+ * Convert cell coordinates to human-readable position labels (e.g. "front-left", "back-right").
+ * Works for any grid size.
+ */
+export function getCellPositionLabel(cellX: number, cellY: number, gridWidth: number, gridHeight: number): string {
+  // Row position (front/back or top/middle/bottom)
+  let rowLabel: string;
+  if (gridHeight <= 1) rowLabel = '';
+  else if (gridHeight === 2) rowLabel = cellY === 0 ? 'front' : 'back';
+  else {
+    const rowThird = gridHeight / 3;
+    if (cellY < rowThird) rowLabel = 'front';
+    else if (cellY < rowThird * 2) rowLabel = 'middle';
+    else rowLabel = 'back';
+  }
+
+  // Column position (left/center/right)
+  let colLabel: string;
+  if (gridWidth <= 1) colLabel = '';
+  else if (gridWidth === 2) colLabel = cellX === 0 ? 'left' : 'right';
+  else {
+    const colThird = gridWidth / 3;
+    if (cellX < colThird) colLabel = 'left';
+    else if (cellX < colThird * 2) colLabel = 'center';
+    else colLabel = 'right';
+  }
+
+  if (rowLabel && colLabel) return `${rowLabel}-${colLabel}`;
+  return rowLabel || colLabel || '';
+}
+
 async function apiFetch(path: string, options?: RequestInit) {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,

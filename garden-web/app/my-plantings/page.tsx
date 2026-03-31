@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { getMyPlantings } from '../api';
+import { getMyPlantings, getCellPositionLabel } from '../api';
 import { getPlantIcon } from '../plant-icons';
+import { MiniGrid } from '../components/MiniGrid';
 import { plantingStatusColors as statusColors } from '../constants';
 import { formatGardenDate } from '../timezone';
 import { Skeleton, CardSkeleton } from '../skeleton';
@@ -24,6 +25,9 @@ interface Planting {
   cell_x: number | null;
   cell_y: number | null;
   cell_label?: string;
+  width_cells?: number;
+  height_cells?: number;
+  instance_label?: string;
   link: string;
   instance_id?: number | null;
 }
@@ -233,7 +237,7 @@ export default function MyPlantingsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-earth-800 dark:text-gray-100 truncate">
-                      {p.plant_name}
+                      {p.instance_label || p.plant_name}
                     </span>
                     {p.variety_name && (
                       <span className="text-sm text-earth-400 dark:text-gray-500 truncate">
@@ -243,8 +247,16 @@ export default function MyPlantingsPage() {
                   </div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     {p.container_name && (
-                      <span className="text-xs text-earth-500 dark:text-gray-400">
+                      <span className="text-xs text-earth-500 dark:text-gray-400 flex items-center gap-1.5">
+                        {p.cell_x != null && p.cell_y != null && p.width_cells && p.height_cells && (
+                          <MiniGrid width={p.width_cells} height={p.height_cells} highlightX={p.cell_x} highlightY={p.cell_y} size={22} />
+                        )}
                         {p.container_name}
+                        {p.cell_x != null && p.cell_y != null && p.width_cells && p.height_cells && (
+                          <span className="text-earth-400 dark:text-gray-500">
+                            {getCellPositionLabel(p.cell_x, p.cell_y, p.width_cells, p.height_cells)}
+                          </span>
+                        )}
                       </span>
                     )}
                     {p.planted_date && (

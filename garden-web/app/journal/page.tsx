@@ -26,9 +26,11 @@ import {
   getPlantTimeline,
   createVoiceNote,
   createPhotoJournalEntry,
+  getCellPositionLabel,
 } from '../api';
 import { getPlantIcon } from '../plant-icons';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
+import { MiniGrid } from '../components/MiniGrid';
 import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
 import { formatGardenDate, getGardenYear } from '../timezone';
@@ -244,6 +246,20 @@ export default function JournalPage() {
   const [trayOptions, setTrayOptions] = useState<TypeaheadOption[]>([]);
   const [groundPlantOptions, setGroundPlantOptions] = useState<TypeaheadOption[]>([]);
   const [allPlantingOptions, setAllPlantingOptions] = useState<TypeaheadOption[]>([]);
+  const [plantingMeta, setPlantingMeta] = useState<Record<string, { cellX?: number; cellY?: number; gridW?: number; gridH?: number }>>({});
+
+  const renderPlantingOption = useCallback((option: TypeaheadOption) => {
+    const m = plantingMeta[option.value];
+    return (
+      <span className="flex items-center gap-2">
+        {m && m.gridW && m.gridH ? (
+          <MiniGrid width={m.gridW} height={m.gridH} highlightX={m.cellX!} highlightY={m.cellY!} />
+        ) : null}
+        {option.icon && <span>{option.icon}</span>}
+        <span>{option.label}</span>
+      </span>
+    );
+  }, [plantingMeta]);
 
   // Plant context (shown when a plant is selected in the form)
   const [plantContext, setPlantContext] = useState<{ entries: FeedEntry[]; loading: boolean }>({ entries: [], loading: false });
@@ -360,27 +376,40 @@ export default function JournalPage() {
 
     Promise.all([getPlantings(), getGroundPlants()])
       .then(([plantings, groundPlants]: [
-        { id: number; plant_name: string; bed_name?: string; status: string }[],
+        { id: number; plant_name: string; bed_name?: string; status: string; cell_x?: number; cell_y?: number; width_cells?: number; height_cells?: number; instance_label?: string }[],
         { id: number; name: string; plant_name: string; area_name?: string }[]
       ]) => {
         const options: TypeaheadOption[] = [
           { value: 'general', label: 'General (no specific plant)' },
         ];
+        const meta: Record<string, { cellX?: number; cellY?: number; gridW?: number; gridH?: number }> = {};
         for (const p of plantings) {
+          const displayName = p.instance_label || p.plant_name;
+          const posLabel = (p.cell_x != null && p.cell_y != null && p.width_cells && p.height_cells)
+            ? getCellPositionLabel(p.cell_x, p.cell_y, p.width_cells, p.height_cells)
+            : '';
+          const loc = p.bed_name
+            ? (posLabel ? `${p.bed_name}, ${posLabel}` : p.bed_name)
+            : '';
+          const key = `planting:${p.id}`;
           options.push({
-            value: `planting:${p.id}`,
-            label: `${p.plant_name}${p.bed_name ? ` (${p.bed_name})` : ''} - ${p.status}`,
+            value: key,
+            label: `${displayName}${loc ? ` \u2014 ${loc}` : ''}`,
             icon: getPlantIcon(p.plant_name),
           });
+          if (p.cell_x != null && p.cell_y != null && p.width_cells && p.height_cells) {
+            meta[key] = { cellX: p.cell_x, cellY: p.cell_y, gridW: p.width_cells, gridH: p.height_cells };
+          }
         }
         for (const g of groundPlants) {
           options.push({
             value: `ground:${g.id}`,
-            label: `${g.name || g.plant_name}${(g as Record<string, unknown>).area_name ? ` (${(g as Record<string, unknown>).area_name})` : ''} [ground]`,
+            label: `${g.name || g.plant_name}${(g as Record<string, unknown>).area_name ? ` \u2014 ${(g as Record<string, unknown>).area_name}` : ''}`,
             icon: '\u{1F333}',
           });
         }
         setAllPlantingOptions(options);
+        setPlantingMeta(meta);
       })
       .catch(() => {});
   }, []);
@@ -804,6 +833,8 @@ export default function JournalPage() {
               value={formPlantingId}
               onChange={(val) => setFormPlantingId(val)}
               placeholder="Search plantings, ground plants..."
+              renderOption={renderPlantingOption}
+              renderSelected={renderPlantingOption}
             />
           </div>
 
@@ -1444,6 +1475,8 @@ export default function JournalPage() {
                 value={photoPlantingId}
                 onChange={(val) => setPhotoPlantingId(val)}
                 placeholder="Search plantings, ground plants..."
+                renderOption={renderPlantingOption}
+                renderSelected={renderPlantingOption}
               />
             </div>
             <textarea

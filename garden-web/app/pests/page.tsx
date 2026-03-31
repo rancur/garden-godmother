@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { getPestIncidents, createPestIncident, updatePestIncident, deletePestIncident, getPestPatterns, getMyPlantings, getBeds, getPlants } from '../api';
+import { getPestIncidents, createPestIncident, updatePestIncident, deletePestIncident, getPestPatterns, getMyPlantings, getBeds, getPlants, getCellPositionLabel } from '../api';
 import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
 import { getGardenToday } from '../timezone';
@@ -40,6 +40,11 @@ interface MyPlanting {
   container_type: string;
   container_name: string;
   container_id: number;
+  cell_x?: number;
+  cell_y?: number;
+  width_cells?: number;
+  height_cells?: number;
+  instance_label?: string;
 }
 
 const PEST_TYPES = [
@@ -347,11 +352,19 @@ export default function PestsPage() {
                 className="w-full text-sm px-2 py-1.5 rounded-lg border border-earth-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-earth-800 dark:text-gray-200"
               >
                 <option value="">None / general</option>
-                {plantings.map(p => (
-                  <option key={`${p.container_type}-${p.id}`} value={String(p.id)}>
-                    {p.plant_name} ({p.container_name || p.container_type})
-                  </option>
-                ))}
+                {plantings.map(p => {
+                  const displayName = p.instance_label || p.plant_name;
+                  let loc = p.container_name || p.container_type;
+                  if (p.cell_x != null && p.cell_y != null && p.width_cells && p.height_cells) {
+                    const posLabel = getCellPositionLabel(p.cell_x, p.cell_y, p.width_cells, p.height_cells);
+                    if (posLabel) loc = `${loc}, ${posLabel}`;
+                  }
+                  return (
+                    <option key={`${p.container_type}-${p.id}`} value={String(p.id)}>
+                      {displayName} ({loc})
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
