@@ -27,6 +27,7 @@ from routes import (
 from routes.federation import router as federation_router
 from routes.federation_data import router as federation_data_router
 from routes.meshtastic import router as meshtastic_router
+from routes.seeds_coop import router as seeds_coop_router
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from federation_sync import run_sync_cycle
@@ -151,6 +152,7 @@ app.include_router(dashboard.router)
 app.include_router(federation_router)
 app.include_router(federation_data_router)
 app.include_router(meshtastic_router)
+app.include_router(seeds_coop_router)
 
 
 if __name__ == "__main__":

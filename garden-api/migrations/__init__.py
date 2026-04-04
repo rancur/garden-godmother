@@ -2621,4 +2621,20 @@ def startup_run_migrations():
             )""",
         ])
 
+        run_migration(db, 65, "seed_wishlist", [
+            """CREATE TABLE IF NOT EXISTS seed_wishlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                plant_name TEXT NOT NULL,
+                variety TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_seed_wishlist_user ON seed_wishlist(user_id)",
+        ])
+
+        run_migration(db, 66, "seeds_coop_swap_flag", [
+            "ALTER TABLE seeds ADD COLUMN coop_swap_available INTEGER DEFAULT 0",
+        ])
+
         logger.info("Migration system: all migrations checked/applied")
