@@ -75,6 +75,52 @@ Default admin credentials are logged in the API output on first startup.
 
 ---
 
+## Frontend Conventions
+
+### Toast Notifications
+
+Garden Godmother uses a custom `toast` function with **positional arguments**. Do **not** use the shadcn/ui object pattern.
+
+```ts
+// CORRECT — positional arguments
+toast('Saved!', 'success');
+toast('Something went wrong', 'error');
+toast('Loading…', 'info');
+
+// With an undo action
+toast('Item deleted', 'success', {
+  action: { label: 'Undo', onClick: () => undoAction() },
+});
+
+// WRONG — do not use the shadcn/ui object pattern
+toast({ title: 'Saved!', variant: 'default' });       // ❌
+toast({ title: 'Error', variant: 'destructive' });     // ❌
+```
+
+**Full signature:** `toast(msg: string, type?: 'success' | 'error' | 'info', options?: { action?: { label: string; onClick: () => void }; duration?: number })`
+
+**Variant mapping** (if porting from shadcn patterns):
+
+| shadcn pattern | GG equivalent |
+|---|---|
+| `variant: 'destructive'` | `'error'` |
+| `variant: 'default'` | `'success'` |
+| (no variant) | `'success'` |
+
+**Usage:** Import `useToast` from `../toast` (or the appropriate relative path) and destructure `toast` from it:
+
+```ts
+import { useToast } from '../toast';
+
+function MyComponent() {
+  const { toast } = useToast();
+  // ...
+  toast('Done!', 'success');
+}
+```
+
+---
+
 ## Code Style
 
 ### Python (Backend)
