@@ -41,10 +41,11 @@ _MAGIC = b"GG"
 _PROTOCOL_VERSION = 1
 
 # Shared test fixtures — one keypair + instance_id for all frame-level tests
+# generate_keypair() returns (public_key_b64, private_key_b64)
 _TEST_KEYS = generate_keypair()
 _TEST_INSTANCE_ID = "12345678-1234-1234-1234-123456789abc"
-_TEST_PRIVATE_KEY = _TEST_KEYS["private_key"]
-_TEST_PUBLIC_KEY = _TEST_KEYS["public_key"]
+_TEST_PUBLIC_KEY = _TEST_KEYS[0]
+_TEST_PRIVATE_KEY = _TEST_KEYS[1]
 
 
 def _encode(msg_type: MsgType, payload: bytes) -> bytes:
