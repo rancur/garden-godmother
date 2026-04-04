@@ -44,6 +44,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             path.startswith('/api/calendar/ical') or  # iCal feeds are public (subscription URLs)
             path == '/api/notifications/vapid-key' or  # VAPID public key for web push
             path == '/api/settings/setup-status' or  # Setup check (needs to work pre-auth)
+            path == '/api/federation/pair-request' or  # Federation peer-to-peer (sig auth)
+            path == '/api/federation/pair-accept' or   # Federation peer-to-peer (sig auth)
+            path == '/api/federation/profile' or       # Federation peer-to-peer (sig auth)
+            path == '/api/federation/plant-list' or    # Federation peer-to-peer (sig auth)
+            path == '/api/federation/sync' or          # Federation peer-to-peer (sig auth)
             request.method == 'OPTIONS'):  # CORS preflight
             return await call_next(request)
 

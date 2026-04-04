@@ -23,6 +23,7 @@ from routes import (
     ground_plants, misc, my_plantings, patterns, pests, instances,
     dashboard,
 )
+from routes.federation import router as federation_router
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ app.include_router(patterns.router)
 app.include_router(pests.router)
 app.include_router(instances.router)
 app.include_router(dashboard.router)
+app.include_router(federation_router)
 
 
 if __name__ == "__main__":
