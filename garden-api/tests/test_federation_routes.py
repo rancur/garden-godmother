@@ -219,7 +219,7 @@ class TestGetPrefs:
             "share_alerts",
         ):
             assert field in data
-            assert data[field] is False, f"{field} should default to False"
+            assert data[field] == False, f"{field} should default to False"  # noqa: E712 — SQLite returns int 0
 
 
 # ── PATCH /api/federation/prefs ───────────────────────────────────────────
@@ -233,9 +233,9 @@ class TestUpdatePrefs:
         resp = auth_client.patch("/api/federation/prefs", json={"share_plant_list": True})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["share_plant_list"] is True
+        assert data["share_plant_list"] == True  # noqa: E712 — SQLite may return 1 (int)
         # Other fields should default to False
-        assert data["share_harvest_offers"] is False
+        assert data["share_harvest_offers"] == False  # noqa: E712
 
     def test_update_multiple_fields(self, auth_client):
         resp = auth_client.patch("/api/federation/prefs", json={
@@ -244,20 +244,20 @@ class TestUpdatePrefs:
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["share_plant_list"] is True
-        assert data["share_harvest_offers"] is True
-        assert data["share_seed_swaps"] is False
+        assert data["share_plant_list"] == True  # noqa: E712
+        assert data["share_harvest_offers"] == True  # noqa: E712
+        assert data["share_seed_swaps"] == False  # noqa: E712
 
     def test_update_is_persisted(self, auth_client):
         auth_client.patch("/api/federation/prefs", json={"share_alerts": True})
         resp = auth_client.get("/api/federation/prefs")
-        assert resp.json()["share_alerts"] is True
+        assert resp.json()["share_alerts"] == True  # noqa: E712
 
     def test_update_then_revert(self, auth_client):
         auth_client.patch("/api/federation/prefs", json={"share_plant_list": True})
         auth_client.patch("/api/federation/prefs", json={"share_plant_list": False})
         resp = auth_client.get("/api/federation/prefs")
-        assert resp.json()["share_plant_list"] is False
+        assert resp.json()["share_plant_list"] == False  # noqa: E712
 
     def test_empty_patch_is_accepted(self, auth_client):
         resp = auth_client.patch("/api/federation/prefs", json={})
@@ -275,7 +275,7 @@ class TestUpdatePrefs:
         assert resp.status_code == 200
         data = resp.json()
         for field, value in payload.items():
-            assert data[field] is value
+            assert data[field] == value  # noqa: E712 — SQLite may return int 1 for True
 
 
 # ── POST /api/federation/pair-request ────────────────────────────────────
