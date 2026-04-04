@@ -670,6 +670,7 @@ const COOP_NAV = [
   { label: 'Harvest', href: '/coop/harvest', icon: '🧺' },
   { label: 'Seeds', href: '/coop/seeds', icon: '🌰' },
   { label: 'Alerts', href: '/coop/alerts', icon: '⚠️' },
+  { label: 'Pair', href: '/coop/pair', icon: '📷' },
 ];
 
 function CoopSubNav() {

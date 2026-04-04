@@ -578,6 +578,63 @@ def trigger_sync(peer_id: int, request: Request):
     return {"synced": True, "data_types": data_types_synced}
 
 
+@router.get("/api/federation/qr-code")
+def get_pairing_qr(request: Request):
+    """Generate a QR code PNG for the current invite code (creates one if needed)."""
+    require_user(request)
+
+    import io
+    import qrcode
+    from fastapi.responses import Response
+
+    with get_db() as db:
+        identity = db.execute("SELECT * FROM federation_identity WHERE id=1").fetchone()
+        if not identity:
+            raise HTTPException(400, "Federation identity not configured")
+        identity = dict(identity)
+
+        # Get or create a valid invite code
+        code_row = db.execute("""
+            SELECT code FROM federation_pairing_codes
+            WHERE used_at IS NULL AND expires_at > datetime('now')
+            ORDER BY created_at DESC LIMIT 1
+        """).fetchone()
+
+        if not code_row:
+            # Create a fresh one
+            from federation_crypto import generate_invite_code
+            from datetime import datetime, timezone, timedelta
+            code = generate_invite_code()
+            expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            user = request.state.user
+            db.execute(
+                "INSERT INTO federation_pairing_codes (code, created_by_user_id, expires_at) VALUES (?, ?, ?)",
+                (code, user["id"], expires)
+            )
+            db.commit()
+        else:
+            code = code_row["code"]
+
+        instance_url = identity.get("instance_url", "")
+        pair_url = f"{instance_url}/coop/pair?code={code}&from={identity['instance_id'][:8]}"
+
+        # Generate QR code
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
+        qr.add_data(pair_url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+
+        return Response(
+            content=buf.read(),
+            media_type="image/png",
+            headers={"X-Pair-URL": pair_url, "X-Invite-Code": code}
+        )
+
+
 # ──────────────── PUBLIC PEER-TO-PEER ENDPOINTS ────────────────
 # These are called by remote GG instances, NOT by user sessions.
 # Auth is via Ed25519 request signatures, except pair-request which uses invite codes.

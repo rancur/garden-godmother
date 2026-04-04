@@ -11,3 +11,4 @@ cryptography
 apscheduler
 # Optional: meshtastic transport (install only if using LoRa hardware)
 meshtastic
+qrcode[pil]
