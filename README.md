@@ -1,8 +1,8 @@
 # 🌱 Garden Godmother
 
-**Self-hosted garden management for any climate.**
+**v2.8 — Self-hosted garden management for any climate.**
 
-Plan, plant, and maintain your garden with smart automation, AI-powered health monitoring, and beautiful visualizations. Runs on a Raspberry Pi.
+Plan, plant, and maintain your garden with smart automation, AI-powered health monitoring, beautiful visualizations, and community co-op features. Runs on a Raspberry Pi.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -59,6 +59,21 @@ Plan, plant, and maintain your garden with smart automation, AI-powered health m
 - **Role-based access** — admin, user, viewer
 - **Shared garden** — everyone collaborates on the same garden with user attribution
 - **Audit logging** — who changed what and when
+
+### 🤝 Garden Co-op (Federation) — new in v2.8
+- **Connect multiple GG instances** — link your garden with neighbors, community plots, or co-op members
+- **Harvest surplus sharing** — see what's available nearby, offer your own surplus from the Harvest page
+- **Community Seed Swaps** — browse swap offers on the Seeds page; banners appear automatically when you have more than 5 of a seed
+- **Pest alerts** — broadcast pest sightings to your co-op; receive community alerts on the Pests page
+- **Co-op feed** (`/coop`) — unified activity timeline showing all peer activity
+- **Dashboard widget** — CoopSummaryWidget shows peer count, active alerts, surplus, and seed swaps at a glance
+- **Peer management** — add/remove peers inline in **Settings → Community**
+
+### 📡 Meshtastic (LoRa Off-Grid Comms) — new in v2.8
+- **Off-grid co-op messaging** via LoRa radio mesh — no internet required between nodes
+- **TCP connection** to your Meshtastic node's hostname or IP (port 4403)
+- Configure in **Settings → Meshtastic**
+- Recommended: create a channel called `gardening` on your node, then set the channel index in Settings
 
 ### 🔔 Notifications
 - **4 channels**: Email (SMTP), Discord (webhook), Web Push (PWA), Pushbullet
@@ -139,6 +154,58 @@ HA_URL=                   # Home Assistant URL (default: http://homeassistant.lo
 ```
 
 For local development, the defaults work out of the box — no `.env` changes needed.
+
+---
+
+## Garden Co-op Setup
+
+Garden Co-op (federation) lets you connect multiple Garden Godmother instances so neighbors, community gardens, or co-op members can share harvest surplus, seed swaps, and pest alerts in real time.
+
+### Setting up your co-op identity
+
+1. Go to **Settings → Community** on your instance.
+2. Set a display name for your garden (this is how peers will see you).
+3. Share your instance's URL with anyone you want to connect with.
+
+### Adding peers
+
+In **Settings → Community**, enter a peer's Garden Godmother URL and click **Add Peer**. Both instances will begin exchanging data automatically once the peer is added on both sides.
+
+### What gets shared
+
+| Feature | Where to find it |
+|---|---|
+| Harvest surplus | Harvest page → "Available Near You" |
+| Seed swap offers | Seeds page → "Community Seed Swaps" |
+| Pest alerts | Pests page → "Community Alerts" |
+| All activity | `/coop` feed |
+| Summary | Dashboard → CoopSummaryWidget |
+
+Surplus and swap offers are opt-in — you choose when to publish them. Pest alerts can be broadcast to all peers from the Pests page.
+
+---
+
+## Meshtastic Setup (Off-Grid LoRa Radio)
+
+Meshtastic integration lets your co-op communicate over LoRa radio mesh with no internet connection — useful for remote plots, community gardens with poor connectivity, or resilience.
+
+### Prerequisites
+
+- A [Meshtastic](https://meshtastic.org)-compatible LoRa radio node (e.g., LilyGo T-Beam, RAK WisBlock, Heltec)
+- The node running on your local network or reachable by hostname/IP
+- Meshtastic firmware configured and the node accessible via TCP
+
+### Configuration
+
+1. On your Meshtastic node, create a channel named `gardening` (recommended). Note its channel index (0 is the default/primary channel).
+2. In Garden Godmother, go to **Settings → Meshtastic**.
+3. Enter your node's hostname or IP address — the app connects on **TCP port 4403**.
+4. Enter the channel index for your `gardening` channel.
+5. Save. Garden Godmother will connect and begin relaying co-op messages over the mesh.
+
+### How it works
+
+When Meshtastic is configured, co-op alerts (pest warnings, surplus availability, seed swap offers) are also sent over the LoRa mesh to peers within radio range. This works even when garden instances can't reach each other over the internet.
 
 ---
 
