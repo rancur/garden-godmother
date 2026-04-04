@@ -511,3 +511,39 @@ class AutoUpdateSettings(BaseModel):
     enabled: bool
     schedule: str = "daily"
     time: str = "03:00"
+
+
+# ── FEDERATION / CO-OP MODELS ──────────────────────────────────────
+
+class FederationSetup(BaseModel):
+    display_name: str
+    instance_url: Optional[str] = None
+    coarse_location: Optional[str] = None
+
+class FederationPrefsUpdate(BaseModel):
+    share_plant_list: Optional[bool] = None
+    share_harvest_offers: Optional[bool] = None
+    share_seed_swaps: Optional[bool] = None
+    share_journal_public: Optional[bool] = None
+    share_alerts: Optional[bool] = None
+
+class FederationConnectRequest(BaseModel):
+    peer_url: str
+    invite_code: str
+
+class FederationPeerUpdate(BaseModel):
+    status: Optional[str] = None
+    display_name: Optional[str] = None
+
+class FederationPairRequest(BaseModel):
+    instance_id: str
+    display_name: str
+    public_key: str
+    instance_url: str
+    invite_code: str
+
+class FederationPairAccept(BaseModel):
+    instance_id: str
+    display_name: str
+    public_key: str
+    instance_url: str

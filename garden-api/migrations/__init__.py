@@ -2492,4 +2492,69 @@ def startup_run_migrations():
 
         run_migration(db, 55, "task_snooze", [], callback=_task_snooze)
 
+        run_migration(db, 56, "federation_identity", [
+            """CREATE TABLE IF NOT EXISTS federation_identity (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                instance_id TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL DEFAULT 'My Garden',
+                coarse_location TEXT,
+                public_key TEXT NOT NULL,
+                private_key TEXT NOT NULL,
+                instance_url TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
+        run_migration(db, 57, "federation_peers", [
+            """CREATE TABLE IF NOT EXISTS federation_peers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                peer_id TEXT NOT NULL UNIQUE,
+                peer_url TEXT NOT NULL,
+                display_name TEXT,
+                public_key TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                transport TEXT DEFAULT 'internet',
+                last_seen TEXT,
+                last_sync_seq INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
+        run_migration(db, 58, "federation_pairing_codes", [
+            """CREATE TABLE IF NOT EXISTS federation_pairing_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                created_by_user_id INTEGER,
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                used_by_peer_id TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
+        run_migration(db, 59, "federation_sharing_prefs", [
+            """CREATE TABLE IF NOT EXISTS federation_sharing_prefs (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                share_plant_list INTEGER DEFAULT 0,
+                share_harvest_offers INTEGER DEFAULT 0,
+                share_seed_swaps INTEGER DEFAULT 0,
+                share_journal_public INTEGER DEFAULT 0,
+                share_alerts INTEGER DEFAULT 0,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
+        run_migration(db, 60, "federation_peer_data", [
+            """CREATE TABLE IF NOT EXISTS federation_peer_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                peer_id TEXT NOT NULL,
+                data_type TEXT NOT NULL,
+                seq INTEGER DEFAULT 0,
+                payload TEXT NOT NULL,
+                expires_at TEXT,
+                fetched_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(peer_id, data_type)
+            )""",
+        ])
+
         logger.info("Migration system: all migrations checked/applied")
