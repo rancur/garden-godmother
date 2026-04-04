@@ -24,6 +24,10 @@ from routes import (
     dashboard,
 )
 from routes.federation import router as federation_router
+from routes.federation_data import router as federation_data_router
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from federation_sync import run_sync_cycle
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +77,19 @@ def startup_audit_cleanup():
             db.commit()
         except Exception:
             pass
+
+
+@app.on_event("startup")
+def start_scheduler():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_sync_cycle, trigger='interval', minutes=30, id='federation_sync', replace_existing=True)
+    scheduler.start()
+    app.state.scheduler = scheduler
+
+
+@app.on_event("shutdown")
+def stop_scheduler():
+    app.state.scheduler.shutdown()
 
 
 # ──── Middleware ────
@@ -136,6 +153,7 @@ app.include_router(pests.router)
 app.include_router(instances.router)
 app.include_router(dashboard.router)
 app.include_router(federation_router)
+app.include_router(federation_data_router)
 
 
 if __name__ == "__main__":

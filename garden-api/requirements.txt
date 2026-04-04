@@ -8,3 +8,4 @@ pywebpush==2.0.0
 py-vapid==1.9.0
 pytest==8.3.0
 cryptography
+apscheduler
