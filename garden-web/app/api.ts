@@ -1525,3 +1525,51 @@ export function transplantInstance(id: number, data: {
 export function getPlantInstanceTimeline(id: number) {
   return apiFetch(`/api/plant-instances/${id}/timeline`);
 }
+
+// ── FEDERATION / CO-OP ─────────────────────────────────────────────
+
+export function getFederationIdentity() {
+  return apiFetch('/api/federation/identity');
+}
+
+export function setupFederationIdentity(data: { display_name: string; instance_url?: string; coarse_location?: string }) {
+  return apiFetch('/api/federation/setup', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function createFederationInvite() {
+  return apiFetch('/api/federation/invite', { method: 'POST', body: '{}' });
+}
+
+export function connectToPeer(data: { peer_url: string; invite_code: string }) {
+  return apiFetch('/api/federation/connect', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function getFederationPeers() {
+  return apiFetch('/api/federation/peers');
+}
+
+export function updateFederationPeer(peerId: number, data: { status?: string; display_name?: string }) {
+  return apiFetch(`/api/federation/peers/${peerId}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function deleteFederationPeer(peerId: number) {
+  return apiFetch(`/api/federation/peers/${peerId}`, { method: 'DELETE' });
+}
+
+export function getFederationPrefs() {
+  return apiFetch('/api/federation/prefs');
+}
+
+export function updateFederationPrefs(data: Partial<{
+  share_plant_list: boolean;
+  share_harvest_offers: boolean;
+  share_seed_swaps: boolean;
+  share_journal_public: boolean;
+  share_alerts: boolean;
+}>) {
+  return apiFetch('/api/federation/prefs', { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function syncFederationPeer(peerId: number) {
+  return apiFetch(`/api/federation/peers/${peerId}/sync`, { method: 'POST', body: '{}' });
+}
