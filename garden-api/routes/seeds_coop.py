@@ -55,10 +55,10 @@ def toggle_swap_availability(seed_id: int, request: Request):
     """Toggle coop_swap_available on a seed record."""
     user = require_user(request)
     with get_db() as db:
-        row = db.execute("SELECT id, coop_swap_available FROM seeds WHERE id=?", (seed_id,)).fetchone()
+        row = db.execute("SELECT id, coop_swap_available FROM seed_inventory WHERE id=?", (seed_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Seed not found")
         new_val = 0 if row["coop_swap_available"] else 1
-        db.execute("UPDATE seeds SET coop_swap_available=? WHERE id=?", (new_val, seed_id))
+        db.execute("UPDATE seed_inventory SET coop_swap_available=? WHERE id=?", (new_val, seed_id))
         db.commit()
         return {"id": seed_id, "coop_swap_available": bool(new_val)}

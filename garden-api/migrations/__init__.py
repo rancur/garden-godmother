@@ -2634,7 +2634,7 @@ def startup_run_migrations():
         ])
 
         run_migration(db, 66, "seeds_coop_swap_flag", [
-            "ALTER TABLE seeds ADD COLUMN coop_swap_available INTEGER DEFAULT 0",
+            "ALTER TABLE seed_inventory ADD COLUMN coop_swap_available INTEGER DEFAULT 0",
         ])
 
         logger.info("Migration system: all migrations checked/applied")
