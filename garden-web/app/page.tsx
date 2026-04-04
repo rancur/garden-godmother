@@ -469,6 +469,67 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── What Needs Attention ── */}
+      {(() => {
+        const visibleSuggestions = gardenSuggestions.filter(s => !dismissedGardenSuggestions.has(s.id));
+        if (visibleSuggestions.length === 0) return null;
+        const suggestionIcons: Record<string, string> = {
+          watering: '\uD83D\uDCA7',
+          harvest: '\uD83E\uDDFA',
+          succession: '\uD83C\uDF31',
+          seed_start: '\uD83C\uDF3E',
+          seed_swap: '\uD83E\uDD1D',
+        };
+        const priorityStyles: Record<string, string> = {
+          high: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20',
+          medium: 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20',
+          low: 'border-earth-100 dark:border-gray-700 bg-earth-50 dark:bg-gray-750',
+        };
+        const priorityBtnStyles: Record<string, string> = {
+          high: 'bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white',
+          medium: 'bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500 text-white',
+          low: 'bg-garden-600 hover:bg-garden-700 dark:bg-garden-700 dark:hover:bg-garden-600 text-white',
+        };
+        return (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+                <h2 className="text-sm font-bold text-earth-800 dark:text-gray-100">What Needs Attention</h2>
+                <span className="text-xs text-earth-400 dark:text-gray-500 bg-earth-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full">{visibleSuggestions.length}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {visibleSuggestions.map((s) => (
+                <div key={s.id} className={`flex items-start gap-3 rounded-xl border p-3 ${priorityStyles[s.priority] || priorityStyles.low}`}>
+                  <span className="text-xl shrink-0 mt-0.5">{suggestionIcons[s.type] || '\uD83D\uDCA1'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-earth-800 dark:text-gray-100 text-sm leading-snug">{s.title}</p>
+                    <p className="text-xs text-earth-500 dark:text-gray-400 mt-0.5 leading-snug">{s.body}</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    <Link
+                      href={s.action_url}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${priorityBtnStyles[s.priority] || priorityBtnStyles.low}`}
+                    >
+                      {s.action_label}
+                    </Link>
+                    <button
+                      onClick={() => setDismissedGardenSuggestions(prev => new Set(prev).add(s.id))}
+                      className="text-[10px] text-earth-400 dark:text-gray-500 hover:text-earth-600 dark:hover:text-gray-300 text-center"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Quick Actions Bar ── */}
       <div className="overflow-x-auto -mx-1">
         <div className="flex gap-2 min-w-max px-1">

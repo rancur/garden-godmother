@@ -22,7 +22,7 @@ from routes import (
     calendar, sensors, journal, harvest, expenses, photos,
     map as map_routes, admin, notifications, settings,
     ground_plants, misc, my_plantings, patterns, pests, instances,
-    dashboard,
+    dashboard, suggestions,
 )
 from routes.federation import router as federation_router
 from routes.federation_data import router as federation_data_router
@@ -149,6 +149,7 @@ app.include_router(patterns.router)
 app.include_router(pests.router)
 app.include_router(instances.router)
 app.include_router(dashboard.router)
+app.include_router(suggestions.router)
 app.include_router(federation_router)
 app.include_router(federation_data_router)
 app.include_router(meshtastic_router)
