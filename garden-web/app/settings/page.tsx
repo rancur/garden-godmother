@@ -470,7 +470,7 @@ function MeshNetworkCard() {
     <div className="flex flex-col sm:flex-row sm:items-center gap-4">
       <div className="flex-1 min-w-0">
         <p className="text-sm text-earth-600 dark:text-gray-400">
-          Send and receive garden alerts over a local Meshtastic mesh radio network.
+          Connect your Meshtastic LoRa node to broadcast garden data over radio mesh.
         </p>
         <div className="mt-2 flex items-center gap-2">
           {loading ? (
@@ -493,7 +493,7 @@ function MeshNetworkCard() {
         href="/settings/meshtastic"
         className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-garden-600 text-white hover:bg-garden-700 transition shadow-sm shrink-0"
       >
-        Configure
+        Configure &rarr;
       </Link>
     </div>
   );

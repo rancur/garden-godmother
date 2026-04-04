@@ -464,16 +464,19 @@ export default function MeshtasticSettingsPage() {
           {/* TCP fields */}
           {config.connection_type === 'tcp' && (
             <>
-              <FieldRow label="Hostname / IP">
+              <FieldRow label="Node IP Address or Hostname">
                 <Input
                   value={config.hostname}
-                  placeholder="192.168.3.55"
+                  placeholder="e.g. 192.168.1.100"
                   onChange={(val) => {
                     setConfig((prev) => ({ ...prev, hostname: val }));
                     saveDebounced({ hostname: val });
                   }}
                   onBlur={() => saveOnBlur({ hostname: config.hostname })}
                 />
+                <p className="text-xs text-earth-400 dark:text-gray-500 mt-1">
+                  Enter the IP address of your Meshtastic node on your local network (TCP connection). Port is usually 4403.
+                </p>
               </FieldRow>
               <FieldRow label="Port">
                 <Input
@@ -527,52 +530,54 @@ export default function MeshtasticSettingsPage() {
       </Card>
 
       {/* ─── Channel Selection ─── */}
-      {(status?.connected || config.channel_name) && (
-        <Card title="Channel Selection" icon="&#x1F4E1;">
-          <div className="space-y-4">
-            {config.channel_name && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-earth-600 dark:text-gray-400">Active channel:</span>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
-                  {config.channel_name}
-                </span>
-              </div>
-            )}
-
-            <div className="flex items-center gap-3 flex-wrap">
-              <Button variant="secondary" onClick={handleLoadChannels} loading={channelsLoading}>
-                Load Channels
-              </Button>
-              <span className="text-xs text-earth-400 dark:text-gray-500">
-                Fetches channel list from the connected device
+      <Card title="Channel Selection" icon="&#x1F4E1;">
+        <div className="space-y-4">
+          {config.channel_name && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-earth-600 dark:text-gray-400">Active channel:</span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                {config.channel_name}
               </span>
             </div>
+          )}
 
-            {channels.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-earth-700 dark:text-gray-300 mb-1">
-                  Select Channel
-                </label>
-                <select
-                  value={config.channel_index}
-                  onChange={handleChannelSelect}
-                  disabled={savingKey === 'channel'}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-earth-200 dark:border-gray-600 bg-earth-50 dark:bg-gray-700 text-earth-900 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 focus:border-transparent outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {channels.map((ch) => (
-                    <option key={ch.index} value={ch.index}>
-                      {ch.index}: {ch.name}
-                    </option>
-                  ))}
-                </select>
-                {savingKey === 'channel' && (
-                  <p className="text-xs text-earth-400 dark:text-gray-500 mt-1">Saving...</p>
-                )}
-              </div>
-            )}
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button variant="secondary" onClick={handleLoadChannels} loading={channelsLoading}>
+              Load Channels
+            </Button>
+            <span className="text-xs text-earth-400 dark:text-gray-500">
+              Fetches channel list from the device at the hostname/port above
+            </span>
           </div>
-        </Card>
-      )}
+
+          {channels.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-earth-700 dark:text-gray-300 mb-1">
+                Select Channel
+              </label>
+              <select
+                value={config.channel_index}
+                onChange={handleChannelSelect}
+                disabled={savingKey === 'channel'}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-earth-200 dark:border-gray-600 bg-earth-50 dark:bg-gray-700 text-earth-900 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 focus:border-transparent outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {channels.map((ch) => (
+                  <option key={ch.index} value={ch.index}>
+                    {ch.index}: {ch.name}
+                  </option>
+                ))}
+              </select>
+              {savingKey === 'channel' && (
+                <p className="text-xs text-earth-400 dark:text-gray-500 mt-1">Saving...</p>
+              )}
+            </div>
+          )}
+
+          <p className="text-xs text-earth-500 dark:text-gray-400 pt-1">
+            💡 Tip: Create a channel called &ldquo;gardening&rdquo; on your node to connect with other Garden Godmother users in your area.
+          </p>
+        </div>
+      </Card>
     </div>
   );
 }
