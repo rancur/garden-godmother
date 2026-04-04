@@ -9,3 +9,5 @@ py-vapid==1.9.0
 pytest==8.3.0
 cryptography
 apscheduler
+# Optional: meshtastic transport (install only if using LoRa hardware)
+meshtastic
