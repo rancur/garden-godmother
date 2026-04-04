@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   getFederationIdentity,
   setupFederationIdentity,
@@ -661,6 +663,40 @@ function SharingSection() {
   );
 }
 
+// ─── Sub-Nav ───
+
+const COOP_NAV = [
+  { label: 'Board', href: '/coop/board', icon: '🌐' },
+  { label: 'Harvest', href: '/coop/harvest', icon: '🧺' },
+  { label: 'Seeds', href: '/coop/seeds', icon: '🌰' },
+  { label: 'Alerts', href: '/coop/alerts', icon: '⚠️' },
+];
+
+function CoopSubNav() {
+  const pathname = usePathname();
+  return (
+    <nav className="flex gap-1 p-1 bg-earth-100 dark:bg-gray-800 rounded-xl overflow-x-auto">
+      {COOP_NAV.map(({ label, href, icon }) => {
+        const active = pathname === href || pathname.startsWith(href + '/');
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+              active
+                ? 'bg-white dark:bg-gray-700 text-garden-700 dark:text-garden-400 shadow-sm'
+                : 'text-earth-600 dark:text-gray-400 hover:text-earth-900 dark:hover:text-gray-200 hover:bg-white/50 dark:hover:bg-gray-700/50'
+            }`}
+          >
+            <span>{icon}</span>
+            <span>{label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 // ─── Page ───
 
 export default function CoopPage() {
@@ -672,6 +708,8 @@ export default function CoopPage() {
           Connect and share with other gardens in your federation.
         </p>
       </div>
+
+      <CoopSubNav />
 
       <Card title="Your Garden Identity" icon="🌱">
         <IdentitySection />

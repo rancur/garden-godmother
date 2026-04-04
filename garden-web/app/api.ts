@@ -1573,3 +1573,76 @@ export function updateFederationPrefs(data: Partial<{
 export function syncFederationPeer(peerId: number) {
   return apiFetch(`/api/federation/peers/${peerId}/sync`, { method: 'POST', body: '{}' });
 }
+
+// ── CO-OP BOARD & DATA ──────────────────────────────────────────────
+
+export function getCoopBoard() {
+  return apiFetch('/api/coop/board');
+}
+
+export function getHarvestOffers(params?: { status?: string; published?: boolean }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.published !== undefined) qs.set('published', String(params.published ? 1 : 0));
+  const q = qs.toString();
+  return apiFetch(`/api/harvest-offers${q ? `?${q}` : ''}`);
+}
+
+export function createHarvestOffer(data: {
+  plant_name: string; quantity_description: string;
+  notes?: string; available_from?: string; available_until?: string; published?: boolean;
+}) {
+  return apiFetch('/api/harvest-offers', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateHarvestOffer(id: number, data: Partial<{
+  quantity_description: string; notes: string; available_until: string;
+  status: string; published: boolean;
+}>) {
+  return apiFetch(`/api/harvest-offers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function deleteHarvestOffer(id: number) {
+  return apiFetch(`/api/harvest-offers/${id}`, { method: 'DELETE' });
+}
+
+export function getSeedSwaps(params?: { status?: string; published?: boolean }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.published !== undefined) qs.set('published', String(params.published ? 1 : 0));
+  const q = qs.toString();
+  return apiFetch(`/api/seed-swaps${q ? `?${q}` : ''}`);
+}
+
+export function createSeedSwap(data: {
+  plant_name: string; quantity_description: string;
+  variety?: string; looking_for?: string; notes?: string; published?: boolean;
+}) {
+  return apiFetch('/api/seed-swaps', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateSeedSwap(id: number, data: Partial<{
+  quantity_description: string; looking_for: string; notes: string;
+  status: string; published: boolean;
+}>) {
+  return apiFetch(`/api/seed-swaps/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function deleteSeedSwap(id: number) {
+  return apiFetch(`/api/seed-swaps/${id}`, { method: 'DELETE' });
+}
+
+export function getFederationAlerts() {
+  return apiFetch('/api/federation-alerts');
+}
+
+export function createFederationAlert(data: {
+  alert_type: string; title: string; body: string;
+  severity?: string; affects_plants?: string[]; published?: boolean; expires_at?: string;
+}) {
+  return apiFetch('/api/federation-alerts', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function deleteFederationAlert(id: number) {
+  return apiFetch(`/api/federation-alerts/${id}`, { method: 'DELETE' });
+}
