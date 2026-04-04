@@ -18,9 +18,10 @@ def _get_timestamp() -> str:
 
 
 def _signed_headers(identity: dict, method: str, path: str, body: bytes = b"") -> dict:
-    from federation_crypto import sign_request
+    from federation_crypto import sign_request, decrypt_private_key
     ts = _get_timestamp()
-    sig = sign_request(identity["private_key"], method, path, ts, body)
+    private_key = decrypt_private_key(identity["private_key"])
+    sig = sign_request(private_key, method, path, ts, body)
     return {
         "Content-Type": "application/json",
         "X-GG-Instance-Id": identity["instance_id"],
@@ -58,38 +59,42 @@ def _push_to_peer(peer_url: str, path: str, payload: dict, identity: dict) -> bo
 
 def _get_our_shared_data(db, prefs: dict) -> dict:
     """Build the payload of data we're sharing, based on prefs."""
+    import sqlite3
     payload = {}
 
     if prefs.get("share_plant_list"):
-        # Get current plant instances
-        rows = db.execute("""
-            SELECT DISTINCT p.name as plant_name
-            FROM plantings pl
-            JOIN plants p ON pl.plant_id = p.id
-            WHERE pl.status NOT IN ('removed', 'failed')
-        """).fetchall()
-        payload["plant_list"] = [r["plant_name"] for r in rows]
+        try:
+            rows = db.execute("SELECT DISTINCT p.name as plant_name FROM plantings pl JOIN plants p ON pl.plant_id = p.id WHERE pl.status NOT IN ('removed', 'failed')").fetchall()
+            payload["plant_list"] = [r["plant_name"] for r in rows]
+        except sqlite3.OperationalError:
+            pass
 
     if prefs.get("share_harvest_offers"):
-        rows = db.execute(
-            "SELECT plant_name, quantity_description, notes, available_until FROM harvest_offers WHERE published=1 AND status='available'"
-        ).fetchall()
-        payload["harvest_offers"] = [dict(r) for r in rows]
+        try:
+            rows = db.execute(
+                "SELECT plant_name, quantity_description, notes, available_until FROM harvest_offers WHERE published=1 AND status='available'"
+            ).fetchall()
+            payload["harvest_offers"] = [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            pass
 
     if prefs.get("share_alerts"):
-        rows = db.execute(
-            "SELECT alert_type, title, body, severity, affects_plants, expires_at FROM federation_alerts WHERE published=1 AND source_peer_id IS NULL"
-        ).fetchall()
-        alerts = []
-        for r in rows:
-            d = dict(r)
-            if d.get("affects_plants"):
-                try:
-                    d["affects_plants"] = json.loads(d["affects_plants"])
-                except Exception:
-                    pass
-            alerts.append(d)
-        payload["alerts"] = alerts
+        try:
+            rows = db.execute(
+                "SELECT alert_type, title, body, severity, affects_plants, expires_at FROM federation_alerts WHERE published=1 AND source_peer_id IS NULL"
+            ).fetchall()
+            alerts = []
+            for r in rows:
+                d = dict(r)
+                if d.get("affects_plants"):
+                    try:
+                        d["affects_plants"] = json.loads(d["affects_plants"])
+                    except Exception:
+                        pass
+                alerts.append(d)
+            payload["alerts"] = alerts
+        except sqlite3.OperationalError:
+            pass
 
     return payload
 

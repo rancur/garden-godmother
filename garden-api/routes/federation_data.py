@@ -3,7 +3,7 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 from db import get_db
-from auth import require_user
+from auth import require_admin, require_user
 from models import (
     HarvestOfferCreate,
     HarvestOfferUpdate,
@@ -58,7 +58,8 @@ def create_harvest_offer(request: Request, body: HarvestOfferCreate):
 
 @router.patch("/api/harvest-offers/{offer_id}")
 def update_harvest_offer(request: Request, offer_id: int, body: HarvestOfferUpdate):
-    require_user(request)
+    # TODO: replace with per-user ownership check once user_id column is added to harvest_offers
+    require_admin(request)
     with get_db() as db:
         row = db.execute("SELECT id FROM harvest_offers WHERE id = ?", (offer_id,)).fetchone()
         if not row:
@@ -92,7 +93,8 @@ def update_harvest_offer(request: Request, offer_id: int, body: HarvestOfferUpda
 
 @router.delete("/api/harvest-offers/{offer_id}", status_code=204)
 def delete_harvest_offer(request: Request, offer_id: int):
-    require_user(request)
+    # TODO: replace with per-user ownership check once user_id column is added to harvest_offers
+    require_admin(request)
     with get_db() as db:
         row = db.execute("SELECT id FROM harvest_offers WHERE id = ?", (offer_id,)).fetchone()
         if not row:
@@ -144,7 +146,8 @@ def create_seed_swap(request: Request, body: SeedSwapCreate):
 
 @router.patch("/api/seed-swaps/{swap_id}")
 def update_seed_swap(request: Request, swap_id: int, body: SeedSwapUpdate):
-    require_user(request)
+    # TODO: replace with per-user ownership check once user_id column is added to seed_swaps
+    require_admin(request)
     with get_db() as db:
         row = db.execute("SELECT id FROM seed_swaps WHERE id = ?", (swap_id,)).fetchone()
         if not row:
@@ -178,7 +181,8 @@ def update_seed_swap(request: Request, swap_id: int, body: SeedSwapUpdate):
 
 @router.delete("/api/seed-swaps/{swap_id}", status_code=204)
 def delete_seed_swap(request: Request, swap_id: int):
-    require_user(request)
+    # TODO: replace with per-user ownership check once user_id column is added to seed_swaps
+    require_admin(request)
     with get_db() as db:
         row = db.execute("SELECT id FROM seed_swaps WHERE id = ?", (swap_id,)).fetchone()
         if not row:

@@ -106,9 +106,15 @@ def encrypt_private_key(private_key_b64: str) -> str:
 
 
 def decrypt_private_key(encrypted: str) -> str:
-    """Decrypt stored private key. Returns plain base64 private key."""
-    # Handle legacy plaintext (for migration)
-    if not encrypted.startswith("gAAA"):  # Fernet tokens start with gAAA
-        return encrypted  # Legacy plaintext, return as-is
-    f = _get_fernet()
-    return f.decrypt(encrypted.encode()).decode()
+    """Decrypt stored private key. Falls back to plaintext for legacy unencrypted keys."""
+    from cryptography.fernet import InvalidToken
+    import logging
+    try:
+        return _get_fernet().decrypt(encrypted.encode()).decode()
+    except (InvalidToken, Exception):
+        # Legacy: key was stored as plain base64 before encryption was added
+        logging.getLogger(__name__).warning(
+            "federation_crypto: private key is stored in plaintext — "
+            "re-run POST /api/federation/setup to encrypt it"
+        )
+        return encrypted

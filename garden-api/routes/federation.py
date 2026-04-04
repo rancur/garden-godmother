@@ -260,6 +260,7 @@ def connect_to_peer(body: FederationConnectRequest, request: Request):
     # Full TOFU protection requires out-of-band key verification (e.g., QR code scanning).
     # This double-fetch reduces but does not eliminate MITM risk.
     pair_public_key = response_data.get("public_key", "")
+    key_verified = False
     if pair_public_key:
         try:
             profile_req = urllib.request.Request(
@@ -279,15 +280,17 @@ def connect_to_peer(body: FederationConnectRequest, request: Request):
                     status_code=502,
                     detail="Peer public key mismatch between pair-request and profile — possible MITM attack",
                 )
+            elif profile_public_key:
+                key_verified = True
         except HTTPException:
             raise
         except Exception as exc:
             logger.warning(
-                "Could not fetch peer profile for key cross-check (%s): %s — proceeding with pair-request key",
-                peer_url,
+                "Could not verify peer public key via profile fetch — storing as unverified: %s",
                 exc,
             )
 
+    status = "pending" if key_verified else "unverified"
     peer_instance_id = response_data.get("instance_id") or body.peer_url
     now = _now_iso()
 
@@ -298,20 +301,21 @@ def connect_to_peer(body: FederationConnectRequest, request: Request):
         if existing:
             db.execute(
                 """UPDATE federation_peers
-                   SET status = 'pending', peer_url = ?, last_seen = ?
+                   SET status = ?, peer_url = ?, last_seen = ?
                    WHERE peer_id = ?""",
-                (peer_url, now, peer_instance_id),
+                (status, peer_url, now, peer_instance_id),
             )
         else:
             db.execute(
                 """INSERT INTO federation_peers
                    (peer_id, peer_url, display_name, public_key, status, created_at, last_seen)
-                   VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     peer_instance_id,
                     peer_url,
                     response_data.get("display_name", ""),
                     response_data.get("public_key", ""),
+                    status,
                     now,
                     now,
                 ),
@@ -322,7 +326,7 @@ def connect_to_peer(body: FederationConnectRequest, request: Request):
             "SELECT id FROM federation_peers WHERE peer_id = ?", (peer_instance_id,)
         ).fetchone()
 
-    return {"status": "pending", "peer_id": peer_row["id"] if peer_row else None}
+    return {"status": status, "key_verified": key_verified, "peer_id": peer_row["id"] if peer_row else None}
 
 
 @router.get("/api/federation/peers")
@@ -348,8 +352,8 @@ def update_peer(peer_id: int, body: FederationPeerUpdate, request: Request):
             raise HTTPException(status_code=404, detail="Peer not found")
         peer = dict(peer)
 
-        if body.status and body.status not in ("active", "blocked"):
-            raise HTTPException(400, "status must be 'active' or 'blocked'")
+        if body.status and body.status not in ("active", "blocked", "unverified"):
+            raise HTTPException(400, "status must be 'active', 'blocked', or 'unverified'")
 
         updates = []
         params = []
@@ -671,15 +675,15 @@ async def receive_pair_accept(body: FederationPairAccept, request: Request):
             "SELECT * FROM federation_peers WHERE peer_id = ?", (body.instance_id,)
         ).fetchone()
 
-        if peer:
-            # Known peer: verify using their stored public key
-            verify_key = dict(peer)["public_key"]
-        else:
-            # Unknown peer (first contact — TOFU): verify using the public key in the body.
-            # This is the accepting side's confirmation of a pair-request we initiated.
-            # TOFU is documented in the design; callers should confirm keys out-of-band for
-            # stronger security guarantees.
-            verify_key = body.public_key
+        if not peer:
+            # No pending row — we never initiated pairing with this instance
+            raise HTTPException(403, "No pending pairing request found for this instance")
+
+        if peer["status"] != "pending":
+            raise HTTPException(409, "Peer is already active or blocked")
+
+        # Known peer: verify using their stored public key
+        verify_key = dict(peer)["public_key"]
 
         valid = verify_request(
             verify_key,
@@ -693,34 +697,19 @@ async def receive_pair_accept(body: FederationPairAccept, request: Request):
             raise HTTPException(status_code=401, detail="Invalid or missing signature")
 
         now = _now_iso()
-        if peer:
-            db.execute(
-                """UPDATE federation_peers
-                   SET status = 'active', last_seen = ?,
-                       display_name = ?, public_key = ?, peer_url = ?
-                   WHERE peer_id = ?""",
-                (
-                    now,
-                    body.display_name,
-                    body.public_key,
-                    body.instance_url,
-                    body.instance_id,
-                ),
-            )
-        else:
-            db.execute(
-                """INSERT INTO federation_peers
-                   (peer_id, peer_url, display_name, public_key, status, created_at, last_seen)
-                   VALUES (?, ?, ?, ?, 'active', ?, ?)""",
-                (
-                    body.instance_id,
-                    body.instance_url,
-                    body.display_name,
-                    body.public_key,
-                    now,
-                    now,
-                ),
-            )
+        db.execute(
+            """UPDATE federation_peers
+               SET status = 'active', last_seen = ?,
+                   display_name = ?, public_key = ?, peer_url = ?
+               WHERE peer_id = ?""",
+            (
+                now,
+                body.display_name,
+                body.public_key,
+                body.instance_url,
+                body.instance_id,
+            ),
+        )
         db.commit()
 
     return {"status": "active"}
