@@ -9,8 +9,6 @@
 set -euo pipefail
 
 REPO_DIR="/home/pi/garden-god-mother"
-DATA_DIR="/var/lib/docker/volumes/garden-god-mother_garden-data/_data"
-SIGNAL_FILE="${DATA_DIR}/.update-requested"
 LOCK_FILE="/tmp/garden-godmother-update.lock"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $*"; }
@@ -42,20 +40,27 @@ do_update() {
 }
 
 # ── Mode 1: Manual update request from the web UI ──
-if [ -f "$SIGNAL_FILE" ]; then
-    log "Update requested via web UI (signal: $(cat "$SIGNAL_FILE"))"
-    rm -f "$SIGNAL_FILE"
+# Check signal file via Docker exec (host user may not have Docker volume permissions)
+SIGNAL_EXISTS=$(docker exec garden-api test -f /data/.update-requested && echo "1" || echo "0")
+if [ "$SIGNAL_EXISTS" = "1" ]; then
+    SIGNAL_CONTENT=$(docker exec garden-api cat /data/.update-requested 2>/dev/null || true)
+    log "Update requested via web UI (signal: ${SIGNAL_CONTENT})"
+    docker exec garden-api rm -f /data/.update-requested
     do_update
     exit 0
 fi
 
 # ── Mode 2: Auto-update check ──
-# Read auto_update_enabled from the SQLite database in the Docker volume
-AUTO_ENABLED=0
-DB_FILE="${DATA_DIR}/plants.db"
-if [ -f "$DB_FILE" ]; then
-    AUTO_ENABLED=$(sqlite3 "$DB_FILE" "SELECT COALESCE((SELECT value FROM app_config WHERE key='auto_update_enabled'), '0');" 2>/dev/null || echo "0")
-fi
+# Read auto_update_enabled via Docker exec (host user can't access Docker volume paths directly)
+AUTO_ENABLED=$(docker exec garden-api python3 -c "
+import sqlite3
+try:
+    db = sqlite3.connect('/data/plants.db')
+    val = db.execute(\"SELECT value FROM app_config WHERE key='auto_update_enabled'\").fetchone()
+    print(val[0] if val else '0')
+except Exception:
+    print('0')
+" 2>/dev/null || echo "0")
 
 if [ "$AUTO_ENABLED" != "1" ]; then
     exit 0
