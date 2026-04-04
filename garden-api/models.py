@@ -589,3 +589,15 @@ class FederationAlertCreate(BaseModel):
     affects_plants: Optional[list[str]] = None
     published: bool = False
     expires_at: Optional[str] = None
+
+
+# ── MESHTASTIC CONFIG MODELS ─────────────────────────────────────────
+
+class MeshtasticConfigUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    connection_type: Optional[str] = None   # tcp | serial
+    hostname: Optional[str] = None
+    port: Optional[int] = None
+    serial_port: Optional[str] = None
+    channel_index: Optional[int] = None
+    channel_name: Optional[str] = None

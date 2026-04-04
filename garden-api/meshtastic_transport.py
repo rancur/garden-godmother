@@ -45,7 +45,7 @@ def _store_peer_beacon(instance_id_hex: str, data: dict):
         db.commit()
 
 
-def send_profile_beacon(interface):
+def send_profile_beacon(interface, channel_index: int = 0):
     """Broadcast our PROFILE beacon to the mesh."""
     from meshtastic_codec import encode_message, encode_profile, MsgType
 
@@ -58,13 +58,13 @@ def send_profile_beacon(interface):
     msg = encode_message(MsgType.PROFILE, identity["instance_id"], payload, private_key)
 
     try:
-        interface.sendData(msg, portNum=GGMP_PORT, wantAck=False)
+        interface.sendData(msg, portNum=GGMP_PORT, channelIndex=channel_index, wantAck=False)
         logger.info(f"Sent PROFILE beacon ({len(msg)} bytes)")
     except Exception as e:
         logger.error(f"Failed to send beacon: {e}")
 
 
-def send_harvest_beacon(interface, plant_name: str, quantity: str, offer_id: int):
+def send_harvest_beacon(interface, plant_name: str, quantity: str, offer_id: int, channel_index: int = 0):
     """Broadcast a HARVEST offer to the mesh."""
     from meshtastic_codec import encode_message, encode_harvest, MsgType
 
@@ -76,13 +76,13 @@ def send_harvest_beacon(interface, plant_name: str, quantity: str, offer_id: int
     msg = encode_message(MsgType.HARVEST, identity["instance_id"], payload, private_key)
 
     try:
-        interface.sendData(msg, portNum=GGMP_PORT, wantAck=False)
+        interface.sendData(msg, portNum=GGMP_PORT, channelIndex=channel_index, wantAck=False)
         logger.info(f"Sent HARVEST beacon for {plant_name}")
     except Exception as e:
         logger.error(f"Failed to send harvest beacon: {e}")
 
 
-def send_alert_beacon(interface, alert_type: str, title: str, severity: str = "info"):
+def send_alert_beacon(interface, alert_type: str, title: str, severity: str = "info", channel_index: int = 0):
     """Broadcast an ALERT to the mesh."""
     from meshtastic_codec import encode_message, encode_alert, MsgType
 
@@ -94,7 +94,7 @@ def send_alert_beacon(interface, alert_type: str, title: str, severity: str = "i
     msg = encode_message(MsgType.ALERT, identity["instance_id"], payload, private_key)
 
     try:
-        interface.sendData(msg, portNum=GGMP_PORT, wantAck=False)
+        interface.sendData(msg, portNum=GGMP_PORT, channelIndex=channel_index, wantAck=False)
         logger.info(f"Sent ALERT beacon: {title}")
     except Exception as e:
         logger.error(f"Failed to send alert beacon: {e}")
@@ -197,9 +197,10 @@ class MeshtasticTransport:
 
     BEACON_INTERVAL = 30 * 60  # 30 minutes (mesh etiquette)
 
-    def __init__(self, dev_path: str | None = None, hostname: str | None = None):
+    def __init__(self, dev_path: str | None = None, hostname: str | None = None, channel_index: int = 0):
         self.dev_path = dev_path
         self.hostname = hostname
+        self.channel_index = channel_index
         self.interface = None
         self._stop_event = threading.Event()
         self._beacon_thread = None
@@ -241,18 +242,18 @@ class MeshtasticTransport:
     def _beacon_loop(self):
         """Send periodic PROFILE beacon every BEACON_INTERVAL seconds."""
         # Send one immediately on startup
-        send_profile_beacon(self.interface)
+        send_profile_beacon(self.interface, channel_index=self.channel_index)
 
         while not self._stop_event.wait(self.BEACON_INTERVAL):
-            send_profile_beacon(self.interface)
+            send_profile_beacon(self.interface, channel_index=self.channel_index)
 
     def broadcast_harvest(self, plant_name: str, quantity: str, offer_id: int):
         if self.interface:
-            send_harvest_beacon(self.interface, plant_name, quantity, offer_id)
+            send_harvest_beacon(self.interface, plant_name, quantity, offer_id, channel_index=self.channel_index)
 
     def broadcast_alert(self, alert_type: str, title: str, severity: str = "info"):
         if self.interface:
-            send_alert_beacon(self.interface, alert_type, title, severity)
+            send_alert_beacon(self.interface, alert_type, title, severity, channel_index=self.channel_index)
 
     @property
     def is_connected(self) -> bool:
@@ -265,9 +266,9 @@ _transport: MeshtasticTransport | None = None
 def get_transport() -> MeshtasticTransport | None:
     return _transport
 
-def init_transport(dev_path: str | None = None, hostname: str | None = None):
+def init_transport(dev_path: str | None = None, hostname: str | None = None, channel_index: int = 0):
     """Initialize the global transport. Called from main.py startup if MESHTASTIC_DEV or MESHTASTIC_HOST env vars are set."""
     global _transport
-    _transport = MeshtasticTransport(dev_path=dev_path, hostname=hostname)
+    _transport = MeshtasticTransport(dev_path=dev_path, hostname=hostname, channel_index=channel_index)
     _transport.start()
     return _transport

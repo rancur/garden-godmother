@@ -2606,4 +2606,19 @@ def startup_run_migrations():
             )""",
         ])
 
+        run_migration(db, 64, "meshtastic_config", [
+            """CREATE TABLE IF NOT EXISTS meshtastic_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled INTEGER DEFAULT 0,
+                connection_type TEXT DEFAULT 'tcp',
+                hostname TEXT,
+                port INTEGER DEFAULT 4403,
+                serial_port TEXT,
+                channel_index INTEGER DEFAULT 0,
+                channel_name TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
         logger.info("Migration system: all migrations checked/applied")

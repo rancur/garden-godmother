@@ -25,6 +25,7 @@ from routes import (
 )
 from routes.federation import router as federation_router
 from routes.federation_data import router as federation_data_router
+from routes.meshtastic import router as meshtastic_router
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from federation_sync import run_sync_cycle
@@ -86,10 +87,34 @@ def start_scheduler():
     scheduler.start()
     app.state.scheduler = scheduler
 
+    # Auto-init Meshtastic transport if configured in DB
+    try:
+        from meshtastic_transport import init_transport
+        with get_db() as _db:
+            _cfg = _db.execute("SELECT * FROM meshtastic_config WHERE id=1").fetchone()
+        if _cfg and _cfg["enabled"] and (_cfg["hostname"] or _cfg["serial_port"]):
+            init_transport(
+                hostname=_cfg["hostname"] if _cfg["connection_type"] == "tcp" else None,
+                dev_path=_cfg["serial_port"] if _cfg["connection_type"] == "serial" else None,
+                channel_index=_cfg["channel_index"] or 0,
+            )
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(f"Failed to auto-init Meshtastic: {e}")
+
 
 @app.on_event("shutdown")
 def stop_scheduler():
     app.state.scheduler.shutdown()
+
+    # Stop Meshtastic transport if running
+    try:
+        from meshtastic_transport import get_transport
+        transport = get_transport()
+        if transport:
+            transport.stop()
+    except Exception:
+        pass
 
 
 # ──── Middleware ────
@@ -154,6 +179,7 @@ app.include_router(instances.router)
 app.include_router(dashboard.router)
 app.include_router(federation_router)
 app.include_router(federation_data_router)
+app.include_router(meshtastic_router)
 
 
 if __name__ == "__main__":
