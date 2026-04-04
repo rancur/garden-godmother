@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { getPestIncidents, createPestIncident, updatePestIncident, deletePestIncident, getPestPatterns, getMyPlantings, getBeds, getPlants, getCellPositionLabel } from '../api';
+import { getPestIncidents, createPestIncident, updatePestIncident, deletePestIncident, getPestPatterns, getMyPlantings, getBeds, getPlants, getCellPositionLabel, getFederationAlerts, createFederationAlert } from '../api';
 import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
 import { getGardenToday } from '../timezone';
@@ -23,6 +23,17 @@ interface PestIncident {
   plant_name: string | null;
   bed_name: string | null;
   ground_plant_name: string | null;
+}
+
+interface FederationAlert {
+  id: number;
+  alert_type: string;
+  title: string;
+  body: string | null;
+  severity: string;
+  source_peer_id: number | null;
+  peer_display_name: string | null;
+  created_at: string;
 }
 
 interface PestPatterns {
@@ -97,6 +108,9 @@ export default function PestsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showPatterns, setShowPatterns] = useState(false);
+  const [communityAlerts, setCommunityAlerts] = useState<FederationAlert[]>([]);
+  const [showCommunityAlerts, setShowCommunityAlerts] = useState(false);
+  const [broadcastAlert, setBroadcastAlert] = useState(false);
 
   // Form state
   const [form, setForm] = useState({
@@ -113,12 +127,17 @@ export default function PestsPage() {
   const loadData = useCallback(async () => {
     try {
       const params = statusFilter ? { status: statusFilter } : undefined;
-      const [incidentData, plantingData] = await Promise.all([
+      const [incidentData, plantingData, alertsData] = await Promise.all([
         getPestIncidents(params),
         getMyPlantings(),
+        getFederationAlerts().catch(() => []),
       ]);
       setIncidents(incidentData);
       setPlantings(plantingData);
+      const peerAlerts = (Array.isArray(alertsData) ? alertsData : []).filter(
+        (a: FederationAlert) => a.source_peer_id !== null
+      );
+      setCommunityAlerts(peerAlerts);
     } catch {
       toast('Failed to load pest data', 'error');
     } finally {
@@ -167,6 +186,8 @@ export default function PestsPage() {
         }
       }
 
+      const planting = form.planting_id ? plantings.find(p => String(p.id) === form.planting_id) : null;
+
       await createPestIncident({
         pest_type: form.pest_type,
         pest_name: pestName,
@@ -179,8 +200,32 @@ export default function PestsPage() {
         notes: form.notes || undefined,
       });
 
+      if (broadcastAlert) {
+        const alertTypeMap: Record<string, string> = {
+          insect: 'pest',
+          disease: 'disease',
+          fungus: 'disease',
+          environmental: 'weather',
+          nutrient: 'info',
+        };
+        const severityMap: Record<string, string> = {
+          high: 'urgent',
+          critical: 'urgent',
+          medium: 'warning',
+          low: 'info',
+        };
+        await createFederationAlert({
+          alert_type: alertTypeMap[form.pest_type] || 'pest',
+          title: `${pestName} spotted on ${planting?.plant_name || 'garden'}`,
+          body: form.notes || '',
+          severity: severityMap[form.severity] || 'info',
+          published: true,
+        }).catch(() => {/* non-fatal */});
+      }
+
       toast('Incident logged');
       setShowForm(false);
+      setBroadcastAlert(false);
       setForm({
         pest_type: 'insect',
         pest_name: '',
@@ -245,8 +290,26 @@ export default function PestsPage() {
     );
   }
 
+  const urgentCommunityAlerts = communityAlerts.filter(a => a.severity === 'urgent');
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+      {/* Urgent community alert banner */}
+      {urgentCommunityAlerts.length > 0 && (
+        <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg px-4 py-2.5 text-sm text-red-800 dark:text-red-200">
+          <span className="shrink-0">⚠️</span>
+          <span>
+            <strong>Community alert:</strong> {urgentCommunityAlerts[0].title}
+          </span>
+          <button
+            onClick={() => setShowCommunityAlerts(true)}
+            className="ml-auto text-xs underline hover:text-red-600 dark:hover:text-red-300 shrink-0"
+          >
+            View alerts
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -392,6 +455,16 @@ export default function PestsPage() {
               />
             </div>
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-earth-600 dark:text-gray-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={broadcastAlert}
+              onChange={(e) => setBroadcastAlert(e.target.checked)}
+              className="rounded border-earth-300 dark:border-gray-600 text-garden-600 focus:ring-garden-500"
+            />
+            📡 Broadcast this alert to co-op peers
+          </label>
 
           <button
             onClick={handleSubmit}
@@ -546,6 +619,66 @@ export default function PestsPage() {
           </p>
         </div>
       )}
+
+      {/* Community Alerts section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 overflow-hidden">
+        <button
+          onClick={() => setShowCommunityAlerts(!showCommunityAlerts)}
+          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-earth-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-200 flex items-center gap-2">
+            📡 Community Alerts
+            {communityAlerts.length > 0 && (
+              <span className="text-xs font-normal bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">
+                {communityAlerts.length}
+              </span>
+            )}
+          </h2>
+          <svg
+            className={`w-4 h-4 text-earth-400 transition-transform ${showCommunityAlerts ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {showCommunityAlerts && (
+          <div className="px-4 pb-4 space-y-2">
+            {communityAlerts.length === 0 ? (
+              <p className="text-xs text-earth-400 dark:text-gray-500 text-center py-4">
+                No community alerts from peers right now.
+              </p>
+            ) : (
+              communityAlerts.map(alert => {
+                const severityStyle =
+                  alert.severity === 'urgent'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    : alert.severity === 'warning'
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
+                return (
+                  <div
+                    key={alert.id}
+                    className="flex items-start gap-3 bg-earth-50 dark:bg-gray-700/30 rounded-lg px-3 py-2.5 text-sm"
+                  >
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${severityStyle}`}>
+                      {alert.severity.toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-earth-800 dark:text-gray-100 capitalize">
+                        {alert.alert_type} &middot; {alert.title}
+                      </p>
+                      <p className="text-xs text-earth-400 dark:text-gray-500 mt-0.5">
+                        from {alert.peer_display_name || 'a neighbor'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Patterns section */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 overflow-hidden">

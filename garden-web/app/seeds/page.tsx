@@ -1,11 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getSeeds, getPlants, createSeed, updateSeed, deleteSeed } from '../api';
+import { getSeeds, getPlants, createSeed, updateSeed, deleteSeed, getCoopBoard } from '../api';
 import { useModal } from '../confirm-modal';
 import { useToast } from '../toast';
 import { getGardenToday } from '../timezone';
 import { TypeaheadSelect } from '../typeahead-select';
+
+interface SeedSwap {
+  peer_id: number;
+  peer_display_name: string | null;
+  plant_name: string;
+  variety: string | null;
+  looking_for: string | null;
+}
 
 interface Seed {
   id: number;
@@ -37,6 +45,8 @@ export default function SeedsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [seedSwaps, setSeedSwaps] = useState<SeedSwap[]>([]);
+  const [showSeedSwaps, setShowSeedSwaps] = useState(false);
 
   const emptyForm = {
     plant_id: 0,
@@ -50,10 +60,13 @@ export default function SeedsPage() {
   const [formData, setFormData] = useState(emptyForm);
 
   const loadData = () => {
-    Promise.all([getSeeds(), getPlants()])
-      .then(([seedsData, plantsData]) => {
+    Promise.all([getSeeds(), getPlants(), getCoopBoard().catch(() => null)])
+      .then(([seedsData, plantsData, coopData]) => {
         setSeeds(seedsData);
         setPlants(plantsData);
+        if (coopData && Array.isArray(coopData.seed_swaps)) {
+          setSeedSwaps(coopData.seed_swaps);
+        }
       })
       .catch(() => setError('Failed to load data'))
       .finally(() => setLoading(false));
@@ -127,6 +140,12 @@ export default function SeedsPage() {
   const isLowQuantity = (qty: number | null) => {
     return qty !== null && qty <= 10;
   };
+
+  // Seeds with quantity > 5 that have no corresponding swap posted
+  const swappedPlantNames = new Set(seedSwaps.map(s => s.plant_name.toLowerCase()));
+  const extraSeeds = seeds.filter(
+    s => s.quantity_seeds !== null && s.quantity_seeds > 5 && !swappedPlantNames.has(s.plant_name.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -353,6 +372,90 @@ export default function SeedsPage() {
           </div>
         </div>
       )}
+
+      {/* Extra seeds swap suggestions */}
+      {!loading && extraSeeds.length > 0 && (
+        <div className="space-y-2">
+          {extraSeeds.map(seed => (
+            <div
+              key={seed.id}
+              className="flex items-center gap-2 bg-garden-50 dark:bg-garden-900/20 border border-garden-200 dark:border-garden-700 rounded-lg px-4 py-2.5 text-sm text-garden-800 dark:text-garden-200"
+            >
+              <span>💡 You have extra <strong>{seed.plant_name}</strong> seeds —</span>
+              <a
+                href="/coop/seeds"
+                className="font-semibold underline hover:text-garden-600 dark:hover:text-garden-300"
+              >
+                offer a swap?
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Community Seed Swaps collapsible section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 overflow-hidden">
+        <button
+          onClick={() => setShowSeedSwaps(!showSeedSwaps)}
+          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-earth-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-200 flex items-center gap-2">
+            🌱 Community Seed Swaps
+            <span className="text-xs font-normal bg-garden-100 dark:bg-garden-900/40 text-garden-700 dark:text-garden-300 px-2 py-0.5 rounded-full">
+              {seedSwaps.length}
+            </span>
+          </h2>
+          <svg
+            className={`w-4 h-4 text-earth-400 transition-transform ${showSeedSwaps ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {showSeedSwaps && (
+          <div className="px-4 pb-4 space-y-3">
+            {seedSwaps.length === 0 ? (
+              <p className="text-xs text-earth-400 dark:text-gray-500 text-center py-4">
+                No community seed swaps available right now.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {seedSwaps.map((swap, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start justify-between gap-3 bg-earth-50 dark:bg-gray-700/30 rounded-lg px-3 py-2.5 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-medium text-earth-800 dark:text-gray-100">
+                          {swap.plant_name}
+                        </span>
+                        {swap.variety && (
+                          <span className="text-earth-500 dark:text-gray-400 ml-1 text-xs">
+                            ({swap.variety})
+                          </span>
+                        )}
+                        {swap.looking_for && (
+                          <p className="text-xs text-earth-500 dark:text-gray-400 mt-0.5">
+                            Looking for: {swap.looking_for}
+                          </p>
+                        )}
+                        <p className="text-xs text-earth-400 dark:text-gray-500 mt-0.5">
+                          from {swap.peer_display_name || 'a neighbor'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-earth-400 dark:text-gray-500 flex items-center gap-1 pt-1">
+                  📬 Contact via your Co-op peers
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
