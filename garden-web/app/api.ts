@@ -1618,6 +1618,14 @@ export function deleteHarvestOffer(id: number) {
   return apiFetch(`/api/harvest-offers/${id}`, { method: 'DELETE' });
 }
 
+export async function getSurplusSuggestions(): Promise<Array<{
+  plant_name: string; reason: string; total_oz: number; total_qty: number;
+}>> {
+  const r = await fetch(`${API_URL}/api/harvest-offers/suggestions`, { credentials: 'include' });
+  if (!r.ok) return [];
+  return r.json();
+}
+
 export function getSeedSwaps(params?: { status?: string; published?: boolean }) {
   const qs = new URLSearchParams();
   if (params?.status) qs.set('status', params.status);

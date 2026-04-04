@@ -17,6 +17,66 @@ router = APIRouter()
 
 # ── Harvest Offers ────────────────────────────────────────────────────
 
+@router.get("/api/harvest-offers/suggestions")
+def get_surplus_suggestions(request: Request):
+    """Suggest plants the user likely has excess of, based on harvest history and active plantings."""
+    require_user(request)
+    with get_db() as db:
+        # Plants harvested more than 3 times in last 60 days
+        frequent = db.execute("""
+            SELECT plant_name, COUNT(*) as harvest_count,
+                   SUM(COALESCE(weight_oz, 0)) as total_oz,
+                   SUM(COALESCE(quantity, 0)) as total_qty
+            FROM harvests
+            WHERE harvest_date >= date('now', '-60 days')
+            GROUP BY plant_name
+            HAVING COUNT(*) >= 3
+            ORDER BY harvest_count DESC
+            LIMIT 8
+        """).fetchall()
+
+        # Active plantings of known high-yield plants
+        high_yield = ['Tomato', 'Zucchini', 'Cucumber', 'Basil', 'Kale', 'Chard',
+                      'Lettuce', 'Pepper', 'Green Bean', 'Herbs']
+        active = db.execute("""
+            SELECT DISTINCT p.name as plant_name, COUNT(*) as planting_count
+            FROM plantings pl
+            JOIN plants p ON pl.plant_id = p.id
+            WHERE pl.status = 'active'
+            AND (""" + " OR ".join(["p.name LIKE ?"] * len(high_yield)) + """)
+            GROUP BY p.name
+            HAVING COUNT(*) >= 2
+        """, [f"%{h}%" for h in high_yield]).fetchall()
+
+        # Already posted offers (don't re-suggest)
+        posted = {row["plant_name"] for row in db.execute(
+            "SELECT plant_name FROM harvest_offers WHERE status='available'"
+        ).fetchall()}
+
+        suggestions = []
+        seen = set()
+        for row in frequent:
+            if row["plant_name"] not in posted and row["plant_name"] not in seen:
+                suggestions.append({
+                    "plant_name": row["plant_name"],
+                    "reason": f"You harvested this {row['harvest_count']} times recently",
+                    "total_oz": row["total_oz"],
+                    "total_qty": row["total_qty"],
+                })
+                seen.add(row["plant_name"])
+        for row in active:
+            if row["plant_name"] not in posted and row["plant_name"] not in seen:
+                suggestions.append({
+                    "plant_name": row["plant_name"],
+                    "reason": f"You have {row['planting_count']} active plantings",
+                    "total_oz": 0,
+                    "total_qty": 0,
+                })
+                seen.add(row["plant_name"])
+
+        return suggestions[:6]
+
+
 @router.get("/api/harvest-offers")
 def list_harvest_offers(request: Request, status: str = None, published: bool = None):
     require_user(request)

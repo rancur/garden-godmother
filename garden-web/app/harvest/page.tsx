@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantInstances, getUpcomingHarvests, getExportUrl, undoAction, getCellPositionLabel } from '../api';
+import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantInstances, getUpcomingHarvests, getExportUrl, undoAction, getCellPositionLabel, getSurplusSuggestions, createHarvestOffer, getCoopBoard } from '../api';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { MiniGrid } from '../components/MiniGrid';
 import { useModal } from '../confirm-modal';
@@ -67,6 +67,20 @@ interface UpcomingHarvest {
   days_until_harvest: number;
 }
 
+interface SurplusSuggestion {
+  plant_name: string;
+  reason: string;
+  total_oz: number;
+  total_qty: number;
+}
+
+interface PeerHarvestOffer {
+  plant_name: string;
+  quantity_description?: string;
+  peer_name?: string;
+  [key: string]: unknown;
+}
+
 function getDaysBadgeColor(days: number): string {
   if (days < 0) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
   if (days < 7) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
@@ -89,6 +103,12 @@ export default function HarvestPage() {
   const [summary, setSummary] = useState<HarvestSummary | null>(null);
   const [upcomingHarvests, setUpcomingHarvests] = useState<UpcomingHarvest[]>([]);
   const [upcomingExpanded, setUpcomingExpanded] = useState(true);
+  const [communityExpanded, setCommunityExpanded] = useState(true);
+  const [surplusSuggestions, setSurplusSuggestions] = useState<SurplusSuggestion[]>([]);
+  const [peerOffers, setPeerOffers] = useState<PeerHarvestOffer[]>([]);
+  const [offerFormPlant, setOfferFormPlant] = useState<string | null>(null);
+  const [offerQtyDesc, setOfferQtyDesc] = useState('');
+  const [offerSubmitting, setOfferSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +136,17 @@ export default function HarvestPage() {
       })
       .catch(() => setError('Failed to load data'))
       .finally(() => setLoading(false));
+
+    // Load community data independently (non-blocking)
+    getSurplusSuggestions().then(data => {
+      setSurplusSuggestions(data);
+      if (data.length > 0) setCommunityExpanded(true);
+    });
+    getCoopBoard().then((board: { harvest_offers?: PeerHarvestOffer[] }) => {
+      const offers = board?.harvest_offers ?? [];
+      setPeerOffers(offers);
+      if (offers.length > 0) setCommunityExpanded(true);
+    }).catch(() => {/* ignore */});
   };
 
   useEffect(() => { loadData(); }, []);
@@ -157,6 +188,22 @@ export default function HarvestPage() {
       });
     } catch {
       setError('Failed to delete harvest');
+    }
+  };
+
+  const handlePostOffer = async (plantName: string) => {
+    if (!offerQtyDesc.trim()) return;
+    setOfferSubmitting(true);
+    try {
+      await createHarvestOffer({ plant_name: plantName, quantity_description: offerQtyDesc, published: true });
+      setOfferFormPlant(null);
+      setOfferQtyDesc('');
+      toast('Offer posted!', 'success');
+      getSurplusSuggestions().then(setSurplusSuggestions);
+    } catch {
+      toast('Failed to post offer', 'error');
+    } finally {
+      setOfferSubmitting(false);
     }
   };
 
@@ -406,6 +453,116 @@ export default function HarvestPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Community Surplus */}
+      {(surplusSuggestions.length > 0 || peerOffers.length > 0) && (
+        <div className="bg-green-50 dark:bg-green-950/30 rounded-xl shadow border border-green-200 dark:border-green-800/50 overflow-hidden">
+          <button
+            onClick={() => setCommunityExpanded(!communityExpanded)}
+            className="w-full flex items-center justify-between p-4 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-green-800 dark:text-green-300">
+                {communityExpanded ? '\u25be' : '\u25b8'} Community
+              </span>
+            </div>
+            <svg
+              className={`w-5 h-5 text-green-500 dark:text-green-400 transition-transform ${communityExpanded ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {communityExpanded && (
+            <div className="border-t border-green-200 dark:border-green-800/50 divide-y divide-green-100 dark:divide-green-900/40">
+
+              {/* Surplus Suggestions */}
+              {surplusSuggestions.length > 0 && (
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-green-800 dark:text-green-300 mb-3">
+                    {'\u{1F4A1}'} Surplus Suggestions
+                  </h3>
+                  <div className="space-y-2">
+                    {surplusSuggestions.map(s => (
+                      <div key={s.plant_name} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-100 dark:border-green-800/40">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div>
+                            <span className="font-medium text-earth-800 dark:text-gray-200 text-sm">{s.plant_name}</span>
+                            <span className="ml-2 text-xs text-earth-500 dark:text-gray-400">{s.reason}</span>
+                            {(s.total_oz > 0 || s.total_qty > 0) && (
+                              <span className="ml-2 text-xs text-earth-400 dark:text-gray-500">
+                                {s.total_qty > 0 ? `${s.total_qty} items` : ''}{s.total_qty > 0 && s.total_oz > 0 ? ', ' : ''}{s.total_oz > 0 ? `${s.total_oz.toFixed(1)} oz` : ''}
+                              </span>
+                            )}
+                          </div>
+                          {offerFormPlant === s.plant_name ? (
+                            <div className="flex items-center gap-2 flex-wrap mt-1 w-full sm:w-auto">
+                              <input
+                                type="text"
+                                value={offerQtyDesc}
+                                onChange={e => setOfferQtyDesc(e.target.value)}
+                                placeholder="e.g. A big bag of tomatoes"
+                                className="flex-1 min-w-0 border border-earth-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-700 text-earth-900 dark:text-gray-100"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handlePostOffer(s.plant_name)}
+                                disabled={offerSubmitting || !offerQtyDesc.trim()}
+                                className="px-3 py-1 bg-garden-600 text-white text-xs rounded hover:bg-garden-700 disabled:opacity-50 transition-colors font-medium whitespace-nowrap"
+                              >
+                                {offerSubmitting ? 'Posting...' : 'Post'}
+                              </button>
+                              <button
+                                onClick={() => { setOfferFormPlant(null); setOfferQtyDesc(''); }}
+                                className="px-2 py-1 text-xs text-earth-500 dark:text-gray-400 hover:text-earth-700 dark:hover:text-gray-200"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setOfferFormPlant(s.plant_name); setOfferQtyDesc(''); }}
+                              className="px-3 py-1 bg-garden-100 dark:bg-garden-900/40 text-garden-700 dark:text-garden-300 text-xs rounded-full hover:bg-garden-200 dark:hover:bg-garden-800/40 transition-colors font-medium whitespace-nowrap"
+                            >
+                              Post Offer
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Peer Offers */}
+              {peerOffers.length > 0 && (
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-green-800 dark:text-green-300 mb-3">
+                    {'\u{1F331}'} Available Near You
+                  </h3>
+                  <div className="space-y-2">
+                    {peerOffers.map((offer, i) => (
+                      <div key={i} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-100 dark:border-green-800/40 flex items-center justify-between gap-2">
+                        <div>
+                          <span className="font-medium text-earth-800 dark:text-gray-200 text-sm">{offer.plant_name}</span>
+                          {offer.quantity_description && (
+                            <span className="ml-2 text-xs text-earth-500 dark:text-gray-400">{offer.quantity_description}</span>
+                          )}
+                        </div>
+                        {offer.peer_name && (
+                          <span className="text-xs text-earth-400 dark:text-gray-500 whitespace-nowrap">{offer.peer_name}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
         </div>
