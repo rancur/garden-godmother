@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getPestIncidents, createPestIncident, updatePestIncident, deletePestIncident, getPestPatterns, getMyPlantings, getBeds, getPlants, getCellPositionLabel, getFederationAlerts, createFederationAlert } from '../api';
 import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
@@ -277,6 +277,59 @@ export default function PestsPage() {
     }
   };
 
+  const formRef = useRef<HTMLDivElement>(null);
+
+  const prefillForm = useCallback((alert: FederationAlert) => {
+    // Map alert_type -> pest_type
+    const alertTypeToPestType: Record<string, string> = {
+      pest: 'insect',
+      disease: 'disease',
+      weather: 'environmental',
+      info: 'insect',
+    };
+    const pestType = alertTypeToPestType[alert.alert_type] || 'insect';
+
+    // Map severity: urgent->high, warning->medium, info->low
+    const severityMap: Record<string, string> = {
+      urgent: 'high',
+      warning: 'medium',
+      info: 'low',
+    };
+    const severity = severityMap[alert.severity] || 'low';
+
+    // Extract pest name from title — titles are typically "<PestName> spotted on <PlantName>"
+    const titleMatch = alert.title.match(/^(.+?)\s+spotted\s+on\s+/i);
+    const rawPestName = titleMatch ? titleMatch[1].trim() : alert.title.trim();
+
+    // Check if the extracted name is in the known list for this pest_type
+    const knownPests = COMMON_PESTS[pestType] || [];
+    const knownMatch = knownPests.find(p => p.toLowerCase() === rawPestName.toLowerCase());
+    const pestName = knownMatch ? knownMatch : '__custom__';
+    const customPestName = knownMatch ? '' : rawPestName;
+
+    const neighbor = alert.peer_display_name || 'a neighbor';
+    const notes = `Reported by ${neighbor} via co-op`;
+
+    setForm({
+      pest_type: pestType,
+      pest_name: pestName,
+      custom_pest_name: customPestName,
+      severity,
+      detected_date: getGardenToday(),
+      planting_id: '',
+      treatment: '',
+      notes,
+    });
+    setShowForm(true);
+
+    // Scroll to form after state update renders it
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+
+    toast('Form pre-filled from community alert — review and submit when ready', 'info');
+  }, [toast]);
+
   const activeCount = incidents.filter(i => i.status === 'active').length;
   const monitoringCount = incidents.filter(i => i.status === 'monitoring').length;
 
@@ -333,7 +386,7 @@ export default function PestsPage() {
 
       {/* Log Form */}
       {showForm && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 space-y-3">
+        <div ref={formRef} className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 p-4 space-y-3">
           <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-200">New Pest/Disease Incident</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -664,7 +717,7 @@ export default function PestsPage() {
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${severityStyle}`}>
                       {alert.severity.toUpperCase()}
                     </span>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="font-medium text-earth-800 dark:text-gray-100 capitalize">
                         {alert.alert_type} &middot; {alert.title}
                       </p>
@@ -672,6 +725,13 @@ export default function PestsPage() {
                         from {alert.peer_display_name || 'a neighbor'}
                       </p>
                     </div>
+                    <button
+                      onClick={() => prefillForm(alert)}
+                      className="shrink-0 text-[11px] font-medium px-2 py-1 rounded bg-earth-100 dark:bg-gray-600 text-earth-600 dark:text-gray-300 hover:bg-earth-200 dark:hover:bg-gray-500 transition-colors"
+                      title="Pre-fill the log form with this alert's data"
+                    >
+                      📋 Log for my garden
+                    </button>
                   </div>
                 );
               })
