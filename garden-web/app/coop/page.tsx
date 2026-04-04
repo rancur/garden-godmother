@@ -127,6 +127,31 @@ function Button({
   );
 }
 
+function syncHealth(lastSeen: string | null): 'ok' | 'stale' | 'error' | 'unknown' {
+  if (!lastSeen) return 'unknown';
+  const age = Date.now() - new Date(lastSeen).getTime();
+  if (age < 60 * 60 * 1000) return 'ok';
+  if (age < 24 * 60 * 60 * 1000) return 'stale';
+  return 'error';
+}
+
+function SyncHealthDot({ lastSeen }: { lastSeen: string | null }) {
+  const health = syncHealth(lastSeen);
+  const colors = {
+    ok: 'bg-green-500',
+    stale: 'bg-yellow-400',
+    error: 'bg-red-500',
+    unknown: 'bg-gray-400',
+  };
+  const labels = { ok: 'Synced', stale: 'Stale', error: 'Sync error', unknown: 'Unknown' };
+  return (
+    <span
+      className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${colors[health]}`}
+      title={labels[health]}
+    />
+  );
+}
+
 function StatusBadge({ status }: { status: FederationPeer['status'] }) {
   const styles = {
     pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
@@ -528,6 +553,7 @@ function ConnectionsSection() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <SyncHealthDot lastSeen={peer.last_seen} />
                       <span className="text-sm font-medium text-earth-900 dark:text-gray-100">
                         {peer.display_name}
                       </span>
@@ -535,7 +561,7 @@ function ConnectionsSection() {
                     </div>
                     <p className="text-xs text-earth-500 dark:text-gray-400 truncate mt-0.5">{peer.peer_url}</p>
                     <p className="text-xs text-earth-400 dark:text-gray-500 mt-0.5">
-                      Last seen: {formatLastSeen(peer.last_seen)}
+                      Last sync: {formatLastSeen(peer.last_seen)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0">
