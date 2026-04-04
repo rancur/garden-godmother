@@ -22,6 +22,11 @@ import {
   deleteBackup,
   getUpdateStatus,
   getMeshtasticStatus,
+  getFederationIdentity,
+  setupFederationIdentity,
+  getFederationPrefs,
+  updateFederationPrefs,
+  getFederationPeers,
   API_URL,
 } from '../api';
 import { useToast } from '../toast';
@@ -494,6 +499,275 @@ function MeshNetworkCard() {
   );
 }
 
+// ─── Co-op Settings Card ───
+
+interface CoopFederationIdentity {
+  configured: boolean;
+  display_name?: string;
+  instance_url?: string;
+  key_fingerprint?: string;
+}
+
+interface CoopFederationPrefs {
+  share_plant_list: boolean;
+  share_harvest_offers: boolean;
+  share_seed_swaps: boolean;
+  share_journal_public: boolean;
+  share_alerts: boolean;
+}
+
+const COOP_PREF_LABELS: { key: keyof CoopFederationPrefs; label: string; description: string }[] = [
+  { key: 'share_plant_list', label: 'Share my plant list', description: "Let connected gardens see what you're growing" },
+  { key: 'share_harvest_offers', label: 'Share harvest offers', description: 'Advertise surplus harvests to connected gardens' },
+  { key: 'share_seed_swaps', label: 'Share seed swaps', description: 'Post seeds available for exchange' },
+  { key: 'share_journal_public', label: 'Share public journal entries', description: 'Share journal entries marked as public' },
+  { key: 'share_alerts', label: 'Share pest/weather alerts', description: 'Broadcast local pest and weather warnings' },
+];
+
+function CoopSettingsCard() {
+  const { toast } = useToast();
+
+  // Identity state
+  const [identity, setIdentity] = useState<CoopFederationIdentity | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
+  const [showSetupForm, setShowSetupForm] = useState(false);
+  const [setupSaving, setSetupSaving] = useState(false);
+  const [setupForm, setSetupForm] = useState({ display_name: '', instance_url: '' });
+
+  // Peers state
+  const [peerCount, setPeerCount] = useState<number | null>(null);
+
+  // Sharing prefs state
+  const [prefs, setPrefs] = useState<CoopFederationPrefs | null>(null);
+  const [prefsLoading, setPrefsLoading] = useState(true);
+  const [savingPref, setSavingPref] = useState<keyof CoopFederationPrefs | null>(null);
+
+  useEffect(() => {
+    getFederationIdentity()
+      .then((data: CoopFederationIdentity) => {
+        setIdentity(data);
+        if (!data.configured) {
+          setSetupForm((f) => ({
+            ...f,
+            instance_url: typeof window !== 'undefined' ? window.location.origin : '',
+          }));
+        }
+      })
+      .catch(() => {/* silently skip — coop may not be configured */})
+      .finally(() => setIdentityLoading(false));
+
+    getFederationPeers()
+      .then((peers: { id: number }[]) => setPeerCount(Array.isArray(peers) ? peers.length : 0))
+      .catch(() => setPeerCount(0));
+
+    getFederationPrefs()
+      .then((data: CoopFederationPrefs) => setPrefs(data))
+      .catch(() => {/* silently skip */})
+      .finally(() => setPrefsLoading(false));
+  }, []);
+
+  const handleSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!setupForm.display_name.trim()) {
+      toast('Display name is required', 'error');
+      return;
+    }
+    setSetupSaving(true);
+    try {
+      const data = await setupFederationIdentity({
+        display_name: setupForm.display_name.trim(),
+        instance_url: setupForm.instance_url.trim() || undefined,
+      });
+      setIdentity(data as CoopFederationIdentity);
+      setShowSetupForm(false);
+      toast('Co-op identity configured!', 'success');
+    } catch {
+      toast('Setup failed', 'error');
+    } finally {
+      setSetupSaving(false);
+    }
+  };
+
+  const handlePrefToggle = async (key: keyof CoopFederationPrefs) => {
+    if (!prefs || savingPref) return;
+    const newVal = !prefs[key];
+    setPrefs((p) => p ? { ...p, [key]: newVal } : p);
+    setSavingPref(key);
+    try {
+      await updateFederationPrefs({ [key]: newVal });
+    } catch {
+      setPrefs((p) => p ? { ...p, [key]: !newVal } : p);
+      toast('Could not update setting', 'error');
+    } finally {
+      setSavingPref(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Identity */}
+      <div>
+        <h3 className="text-sm font-semibold text-earth-800 dark:text-gray-200 mb-2">Identity</h3>
+        {identityLoading ? (
+          <div className="h-8 bg-earth-100 dark:bg-gray-700 rounded-lg animate-pulse" />
+        ) : identity?.configured ? (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                Configured
+              </span>
+              <span className="text-sm text-earth-800 dark:text-gray-200 font-medium">{identity.display_name}</span>
+            </div>
+            {identity.key_fingerprint && (
+              <p className="text-xs font-mono text-earth-500 dark:text-gray-400 break-all mt-1">
+                {identity.key_fingerprint}
+              </p>
+            )}
+            <Link
+              href="/coop"
+              className="inline-block text-xs text-garden-600 dark:text-garden-400 hover:underline mt-1"
+            >
+              View Co-op community &rarr;
+            </Link>
+          </div>
+        ) : showSetupForm ? (
+          <form onSubmit={handleSetup} className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-earth-700 dark:text-gray-300 mb-1">
+                Display Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Sunny Acre Garden"
+                value={setupForm.display_name}
+                onChange={(e) => setSetupForm((f) => ({ ...f, display_name: e.target.value }))}
+                className="w-full px-3 py-1.5 text-sm rounded-lg border border-earth-200 dark:border-gray-600 bg-earth-50 dark:bg-gray-700 text-earth-900 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 focus:border-transparent outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-earth-700 dark:text-gray-300 mb-1">
+                Instance URL
+              </label>
+              <input
+                type="url"
+                placeholder="https://yourgarden.example.com"
+                value={setupForm.instance_url}
+                onChange={(e) => setSetupForm((f) => ({ ...f, instance_url: e.target.value }))}
+                className="w-full px-3 py-1.5 text-sm rounded-lg border border-earth-200 dark:border-gray-600 bg-earth-50 dark:bg-gray-700 text-earth-900 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 focus:border-transparent outline-none transition"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={setupSaving}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg bg-garden-600 text-white hover:bg-garden-700 transition disabled:opacity-50"
+              >
+                {setupSaving ? 'Saving...' : 'Set Up Identity'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSetupForm(false)}
+                className="px-3 py-1.5 text-sm text-earth-500 dark:text-gray-400 hover:text-earth-700 dark:hover:text-gray-200 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <p className="text-sm text-earth-500 dark:text-gray-400 mb-2">
+              Set up your Co-op identity to connect with other growers.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowSetupForm(true)}
+              className="px-4 py-1.5 text-sm font-medium rounded-lg bg-garden-600 text-white hover:bg-garden-700 transition"
+            >
+              Set Up Identity
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Peers */}
+      <div>
+        <h3 className="text-sm font-semibold text-earth-800 dark:text-gray-200 mb-2">Peers</h3>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-earth-700 dark:text-gray-300">
+            {peerCount === null ? (
+              <span className="inline-block w-16 h-4 bg-earth-100 dark:bg-gray-700 rounded animate-pulse" />
+            ) : (
+              <><span className="font-semibold text-earth-900 dark:text-gray-100">{peerCount}</span> active peer{peerCount !== 1 ? 's' : ''}</>
+            )}
+          </span>
+          <Link
+            href="/coop"
+            className="text-xs text-garden-600 dark:text-garden-400 hover:underline"
+          >
+            Manage peers &rarr;
+          </Link>
+        </div>
+      </div>
+
+      {/* Sharing Preferences */}
+      <div>
+        <h3 className="text-sm font-semibold text-earth-800 dark:text-gray-200 mb-2">Sharing Preferences</h3>
+        {prefsLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-8 bg-earth-100 dark:bg-gray-700 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : prefs ? (
+          <div className="divide-y divide-earth-50 dark:divide-gray-700/50">
+            {COOP_PREF_LABELS.map(({ key, label, description }) => (
+              <div key={key} className="flex items-center justify-between gap-4 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-earth-800 dark:text-gray-200">{label}</p>
+                  <p className="text-xs text-earth-500 dark:text-gray-400 mt-0.5">{description}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={prefs[key]}
+                  disabled={savingPref === key}
+                  onClick={() => handlePrefToggle(key)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-garden-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    prefs[key] ? 'bg-garden-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                      prefs[key] ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-earth-500 dark:text-gray-400">Co-op not configured.</p>
+        )}
+      </div>
+
+      {/* Mesh Network */}
+      <div>
+        <h3 className="text-sm font-semibold text-earth-800 dark:text-gray-200 mb-1">Mesh Network</h3>
+        <p className="text-xs text-earth-500 dark:text-gray-400 mb-2">
+          Send and receive garden alerts over a local Meshtastic mesh radio network.
+        </p>
+        <Link
+          href="/settings/meshtastic"
+          className="text-sm text-garden-600 dark:text-garden-400 hover:underline font-medium"
+        >
+          Configure Meshtastic &rarr;
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 // ─── Section Nav ───
 
 const SECTIONS = [
@@ -507,6 +781,7 @@ const SECTIONS = [
   { id: 'about', label: 'About' },
   { id: 'backups', label: 'Backups' },
   { id: 'updates', label: 'Updates' },
+  { id: 'coop', label: 'Co-op' },
   { id: 'danger', label: 'Danger Zone' },
 ];
 
@@ -2261,6 +2536,11 @@ export default function SettingsPage() {
         {/* ─── Mesh Network ─── */}
         <SettingsCard id="mesh-network" title="Mesh Network" icon="&#x1F4F6;">
           <MeshNetworkCard />
+        </SettingsCard>
+
+        {/* ─── Co-op ─── */}
+        <SettingsCard id="coop" title="Garden Co-op" icon="🤝">
+          <CoopSettingsCard />
         </SettingsCard>
 
         {/* ─── 10. Danger Zone ─── */}
