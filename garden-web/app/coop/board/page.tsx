@@ -314,7 +314,7 @@ export default function CoopBoardPage() {
   useEffect(() => {
     getCoopBoard()
       .then((data: CoopBoard) => setBoard(data))
-      .catch(() => toast({ title: 'Could not load co-op board', variant: 'destructive' }))
+      .catch(() => toast('Could not load co-op board', 'error'))
       .finally(() => setLoading(false));
   }, []);
 

@@ -171,7 +171,7 @@ function NewOfferFormSection({ onCreated }: { onCreated: () => void }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.plant_name.trim() || !form.quantity_description.trim()) {
-      toast({ title: 'Plant name and quantity are required', variant: 'destructive' });
+      toast('Plant name and quantity are required', 'error');
       return;
     }
     setSaving(true);
@@ -183,12 +183,12 @@ function NewOfferFormSection({ onCreated }: { onCreated: () => void }) {
         available_until: form.available_until || undefined,
         published: form.published,
       });
-      toast({ title: 'Harvest offer created!' });
+      toast('Harvest offer created!', 'success');
       setForm({ plant_name: '', quantity_description: '', notes: '', available_until: '', published: false });
       setOpen(false);
       onCreated();
     } catch {
-      toast({ title: 'Could not create offer', variant: 'destructive' });
+      toast('Could not create offer', 'error');
     } finally {
       setSaving(false);
     }
@@ -321,11 +321,11 @@ function OfferRow({
         available_until: editForm.available_until || undefined,
         status: editForm.status,
       });
-      toast({ title: 'Offer updated' });
+      toast('Offer updated', 'success');
       setEditing(false);
       onUpdated();
     } catch {
-      toast({ title: 'Could not update offer', variant: 'destructive' });
+      toast('Could not update offer', 'error');
     } finally {
       setSaving(false);
     }
@@ -335,10 +335,10 @@ function OfferRow({
     setDeleting(true);
     try {
       await deleteHarvestOffer(offer.id);
-      toast({ title: 'Offer deleted' });
+      toast('Offer deleted', 'success');
       onDeleted();
     } catch {
-      toast({ title: 'Could not delete offer', variant: 'destructive' });
+      toast('Could not delete offer', 'error');
     } finally {
       setDeleting(false);
     }
@@ -349,7 +349,7 @@ function OfferRow({
       await updateHarvestOffer(offer.id, { published: !offer.published });
       onUpdated();
     } catch {
-      toast({ title: 'Could not update sharing', variant: 'destructive' });
+      toast('Could not update sharing', 'error');
     }
   };
 
@@ -480,7 +480,7 @@ export default function HarvestPage() {
     setLoading(true);
     getHarvestOffers()
       .then((data: HarvestOffer[]) => setOffers(data))
-      .catch(() => toast({ title: 'Could not load harvest offers', variant: 'destructive' }))
+      .catch(() => toast('Could not load harvest offers', 'error'))
       .finally(() => setLoading(false));
   }, []);
 

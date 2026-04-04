@@ -275,14 +275,14 @@ function IdentitySection() {
           }));
         }
       })
-      .catch(() => toast({ title: 'Could not load identity', variant: 'destructive' }))
+      .catch(() => toast('Could not load identity', 'error'))
       .finally(() => setLoading(false));
   }, []);
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.display_name.trim()) {
-      toast({ title: 'Display name is required', variant: 'destructive' });
+      toast('Display name is required', 'error');
       return;
     }
     setSaving(true);
@@ -293,9 +293,9 @@ function IdentitySection() {
         coarse_location: form.coarse_location.trim() || undefined,
       });
       setIdentity(data);
-      toast({ title: 'Garden identity configured!' });
+      toast('Garden identity configured!', 'success');
     } catch {
-      toast({ title: 'Setup failed', variant: 'destructive' });
+      toast('Setup failed', 'error');
     } finally {
       setSaving(false);
     }
@@ -404,7 +404,7 @@ function ConnectionsSection() {
     setLoadingPeers(true);
     getFederationPeers()
       .then((data: FederationPeer[]) => setPeers(data))
-      .catch(() => toast({ title: 'Could not load connections', variant: 'destructive' }))
+      .catch(() => toast('Could not load connections', 'error'))
       .finally(() => setLoadingPeers(false));
   }, []);
 
@@ -418,7 +418,7 @@ function ConnectionsSection() {
       const data = await createFederationInvite();
       setInvite(data);
     } catch {
-      toast({ title: 'Could not create invite', variant: 'destructive' });
+      toast('Could not create invite', 'error');
     } finally {
       setInviteLoading(false);
     }
@@ -427,17 +427,17 @@ function ConnectionsSection() {
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!connectForm.peer_url.trim() || !connectForm.invite_code.trim()) {
-      toast({ title: 'Peer URL and invite code are required', variant: 'destructive' });
+      toast('Peer URL and invite code are required', 'error');
       return;
     }
     setConnecting(true);
     try {
       await connectToPeer({ peer_url: connectForm.peer_url.trim(), invite_code: connectForm.invite_code.trim() });
       setConnectForm({ peer_url: '', invite_code: '' });
-      toast({ title: 'Connection request sent!' });
+      toast('Connection request sent!', 'success');
       loadPeers();
     } catch {
-      toast({ title: 'Could not connect', variant: 'destructive' });
+      toast('Could not connect', 'error');
     } finally {
       setConnecting(false);
     }
@@ -458,7 +458,7 @@ function ConnectionsSection() {
       await updateFederationPeer(id, data);
       loadPeers();
     } catch {
-      toast({ title: 'Update failed', variant: 'destructive' });
+      toast('Update failed', 'error');
     } finally {
       clearPeerAction(id);
     }
@@ -469,9 +469,9 @@ function ConnectionsSection() {
     try {
       await deleteFederationPeer(id);
       setPeers((prev) => prev.filter((p) => p.id !== id));
-      toast({ title: 'Connection removed' });
+      toast('Connection removed', 'success');
     } catch {
-      toast({ title: 'Could not remove connection', variant: 'destructive' });
+      toast('Could not remove connection', 'error');
     } finally {
       clearPeerAction(id);
     }
@@ -481,10 +481,10 @@ function ConnectionsSection() {
     setPeerAction(id, 'sync');
     try {
       await syncFederationPeer(id);
-      toast({ title: 'Sync initiated' });
+      toast('Sync initiated', 'success');
       loadPeers();
     } catch {
-      toast({ title: 'Sync failed', variant: 'destructive' });
+      toast('Sync failed', 'error');
     } finally {
       clearPeerAction(id);
     }
@@ -645,7 +645,7 @@ function SharingSection() {
   useEffect(() => {
     getFederationPrefs()
       .then((data: FederationPrefs) => setPrefs(data))
-      .catch(() => toast({ title: 'Could not load sharing settings', variant: 'destructive' }))
+      .catch(() => toast('Could not load sharing settings', 'error'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -658,7 +658,7 @@ function SharingSection() {
       await updateFederationPrefs({ [key]: newVal });
     } catch {
       setPrefs((p) => p ? { ...p, [key]: !newVal } : p);
-      toast({ title: 'Could not update setting', variant: 'destructive' });
+      toast('Could not update setting', 'error');
     } finally {
       setSaving(null);
     }

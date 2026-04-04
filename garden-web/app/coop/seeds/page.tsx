@@ -173,7 +173,7 @@ function NewSwapFormSection({ onCreated }: { onCreated: () => void }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.plant_name.trim() || !form.quantity_description.trim()) {
-      toast({ title: 'Plant name and quantity are required', variant: 'destructive' });
+      toast('Plant name and quantity are required', 'error');
       return;
     }
     setSaving(true);
@@ -186,12 +186,12 @@ function NewSwapFormSection({ onCreated }: { onCreated: () => void }) {
         notes: form.notes.trim() || undefined,
         published: form.published,
       });
-      toast({ title: 'Seed swap listed!' });
+      toast('Seed swap listed!', 'success');
       setForm({ plant_name: '', variety: '', quantity_description: '', looking_for: '', notes: '', published: false });
       setOpen(false);
       onCreated();
     } catch {
-      toast({ title: 'Could not create seed swap', variant: 'destructive' });
+      toast('Could not create seed swap', 'error');
     } finally {
       setSaving(false);
     }
@@ -337,11 +337,11 @@ function SwapRow({
         notes: editForm.notes.trim() || undefined,
         status: editForm.status,
       });
-      toast({ title: 'Seed swap updated' });
+      toast('Seed swap updated', 'success');
       setEditing(false);
       onUpdated();
     } catch {
-      toast({ title: 'Could not update seed swap', variant: 'destructive' });
+      toast('Could not update seed swap', 'error');
     } finally {
       setSaving(false);
     }
@@ -351,10 +351,10 @@ function SwapRow({
     setDeleting(true);
     try {
       await deleteSeedSwap(swap.id);
-      toast({ title: 'Seed swap removed' });
+      toast('Seed swap removed', 'success');
       onDeleted();
     } catch {
-      toast({ title: 'Could not delete seed swap', variant: 'destructive' });
+      toast('Could not delete seed swap', 'error');
     } finally {
       setDeleting(false);
     }
@@ -365,7 +365,7 @@ function SwapRow({
       await updateSeedSwap(swap.id, { published: !swap.published });
       onUpdated();
     } catch {
-      toast({ title: 'Could not update sharing', variant: 'destructive' });
+      toast('Could not update sharing', 'error');
     }
   };
 
@@ -506,7 +506,7 @@ export default function SeedsPage() {
     setLoading(true);
     getSeedSwaps()
       .then((data: SeedSwap[]) => setSwaps(data))
-      .catch(() => toast({ title: 'Could not load seed swaps', variant: 'destructive' }))
+      .catch(() => toast('Could not load seed swaps', 'error'))
       .finally(() => setLoading(false));
   }, []);
 

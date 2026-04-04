@@ -170,7 +170,7 @@ function NewAlertFormSection({ onCreated }: { onCreated: () => void }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim() || !form.body.trim()) {
-      toast({ title: 'Title and body are required', variant: 'destructive' });
+      toast('Title and body are required', 'error');
       return;
     }
     setSaving(true);
@@ -188,7 +188,7 @@ function NewAlertFormSection({ onCreated }: { onCreated: () => void }) {
         published: form.published,
         expires_at: form.expires_at || undefined,
       });
-      toast({ title: 'Alert created!' });
+      toast('Alert created!', 'success');
       setForm({
         alert_type: 'general',
         title: '',
@@ -201,7 +201,7 @@ function NewAlertFormSection({ onCreated }: { onCreated: () => void }) {
       setOpen(false);
       onCreated();
     } catch {
-      toast({ title: 'Could not create alert', variant: 'destructive' });
+      toast('Could not create alert', 'error');
     } finally {
       setSaving(false);
     }
@@ -347,10 +347,10 @@ function AlertRow({
     setDeleting(true);
     try {
       await deleteFederationAlert(alert.id);
-      toast({ title: 'Alert deleted' });
+      toast('Alert deleted', 'success');
       onDeleted();
     } catch {
-      toast({ title: 'Could not delete alert', variant: 'destructive' });
+      toast('Could not delete alert', 'error');
     } finally {
       setDeleting(false);
     }
@@ -428,7 +428,7 @@ export default function AlertsPage() {
     setLoading(true);
     getFederationAlerts()
       .then((data: FederationAlert[]) => setAlerts(data))
-      .catch(() => toast({ title: 'Could not load alerts', variant: 'destructive' }))
+      .catch(() => toast('Could not load alerts', 'error'))
       .finally(() => setLoading(false));
   }, []);
 

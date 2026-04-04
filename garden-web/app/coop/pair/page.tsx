@@ -75,7 +75,7 @@ function DisplayMode() {
       setPairUrl(url);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not load QR code';
-      toast({ title: message, variant: 'destructive' });
+      toast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -187,7 +187,7 @@ function AcceptMode({ code, fromId, prefillUrl }: { code: string; fromId: string
   const handleConnect = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!peerUrl.trim()) {
-      toast({ title: 'Peer URL is required', variant: 'destructive' });
+      toast('Peer URL is required', 'error');
       return;
     }
     setConnecting(true);
@@ -196,7 +196,7 @@ function AcceptMode({ code, fromId, prefillUrl }: { code: string; fromId: string
       setSuccess(true);
       setStatus(result?.status || 'pending');
     } catch {
-      toast({ title: 'Could not connect to garden', variant: 'destructive' });
+      toast('Could not connect to garden', 'error');
     } finally {
       setConnecting(false);
     }
