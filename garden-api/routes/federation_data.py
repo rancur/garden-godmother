@@ -77,6 +77,84 @@ def get_surplus_suggestions(request: Request):
         return suggestions[:6]
 
 
+@router.get("/api/harvest/surplus-suggestions")
+def get_surplus_suggestions_v2(request: Request):
+    """Suggest plants the user likely has surplus of, based on harvest history and active plantings."""
+    require_user(request)
+    with get_db() as db:
+        # Plants harvested frequently in last 60 days
+        try:
+            frequent = db.execute("""
+                SELECT plant_name,
+                       COUNT(*) as harvest_count,
+                       SUM(COALESCE(weight_oz, 0)) as total_oz,
+                       SUM(COALESCE(quantity, 0)) as total_qty
+                FROM harvests
+                WHERE harvest_date >= date('now', '-60 days')
+                GROUP BY plant_name
+                HAVING COUNT(*) >= 3
+                ORDER BY harvest_count DESC
+                LIMIT 10
+            """).fetchall()
+        except Exception:
+            frequent = []
+
+        # Active plantings (high-yield plants with 2+ instances)
+        high_yield_patterns = ['Tomato', 'Zucchini', 'Cucumber', 'Basil', 'Kale',
+                                'Chard', 'Lettuce', 'Pepper', 'Bean', 'Squash', 'Herb']
+        try:
+            conditions = " OR ".join(["p.name LIKE ?" for _ in high_yield_patterns])
+            active = db.execute(f"""
+                SELECT p.name as plant_name, COUNT(*) as planting_count
+                FROM plantings pl
+                JOIN plants p ON pl.plant_id = p.id
+                WHERE pl.status = 'active'
+                AND ({conditions})
+                GROUP BY p.name
+                HAVING COUNT(*) >= 2
+                ORDER BY planting_count DESC
+                LIMIT 10
+            """, [f"%{h}%" for h in high_yield_patterns]).fetchall()
+        except Exception:
+            active = []
+
+        # Already-posted offers (don't re-suggest)
+        try:
+            posted = {row["plant_name"] for row in db.execute(
+                "SELECT plant_name FROM harvest_offers WHERE status='available'"
+            ).fetchall()}
+        except Exception:
+            posted = set()
+
+        suggestions = []
+        seen = set()
+        for row in frequent:
+            name = row["plant_name"]
+            if name not in posted and name not in seen:
+                suggestions.append({
+                    "plant_name": name,
+                    "reason": f"Harvested {row['harvest_count']} times in the last 60 days",
+                    "total_oz": round(row["total_oz"], 1),
+                    "total_qty": int(row["total_qty"]),
+                    "source": "harvest_history",
+                })
+                seen.add(name)
+
+        for row in active:
+            name = row["plant_name"]
+            if name not in posted and name not in seen:
+                suggestions.append({
+                    "plant_name": name,
+                    "reason": f"{row['planting_count']} active plantings — likely producing more than you need",
+                    "total_oz": 0,
+                    "total_qty": 0,
+                    "source": "active_plantings",
+                })
+                seen.add(name)
+
+        return suggestions[:6]
+
+
 @router.get("/api/harvest-offers")
 def list_harvest_offers(request: Request, status: str = None, published: bool = None):
     require_user(request)
@@ -343,3 +421,157 @@ def get_coop_board(request: Request):
             "seed_swaps": seed_swaps,
             "alerts": alerts,
         }
+
+
+# ── Co-op Summary ─────────────────────────────────────────────────────
+
+@router.get("/api/coop/summary")
+def get_coop_summary(request: Request):
+    """Lightweight counts for the dashboard community widget."""
+    require_user(request)
+    with get_db() as db:
+        # Unread alerts (last 48h from peers)
+        alert_count = db.execute("""
+            SELECT COUNT(*) FROM federation_alerts
+            WHERE source_peer_id IS NOT NULL
+            AND created_at >= datetime('now', '-48 hours')
+        """).fetchone()[0]
+
+        # Peer harvest offers available
+        harvest_offer_count = 0
+        seed_swap_count = 0
+        try:
+            board_peers = db.execute(
+                "SELECT payload FROM federation_peer_data WHERE data_type='harvest_offers'"
+            ).fetchall()
+            for row in board_peers:
+                import json
+                offers = json.loads(row["payload"])
+                harvest_offer_count += len([o for o in offers if o.get("status") == "available"])
+
+            swap_peers = db.execute(
+                "SELECT payload FROM federation_peer_data WHERE data_type='seed_swaps'"
+            ).fetchall()
+            for row in swap_peers:
+                swaps = json.loads(row["payload"])
+                seed_swap_count += len([s for s in swaps if s.get("status") == "available"])
+        except Exception:
+            pass
+
+        # My active offers
+        my_offers = db.execute(
+            "SELECT COUNT(*) FROM harvest_offers WHERE status='available'"
+        ).fetchone()[0]
+
+        active_peers = db.execute(
+            "SELECT COUNT(*) FROM federation_peers WHERE status='active'"
+        ).fetchone()[0]
+
+        return {
+            "active_peers": active_peers,
+            "recent_alerts": alert_count,
+            "harvest_offers": harvest_offer_count,
+            "seed_swaps": seed_swap_count,
+            "my_active_offers": my_offers,
+        }
+
+
+# ── Co-op Feed ────────────────────────────────────────────────────────
+
+@router.get("/api/coop/feed")
+def get_coop_feed(request: Request, limit: int = 20, type: str = None):
+    """Unified activity feed from all co-op peers."""
+    require_user(request)
+    import json
+
+    items = []
+
+    with get_db() as db:
+        # Local alerts (our own and from peers)
+        alerts = db.execute("""
+            SELECT 'alert' as item_type, id, alert_type, title, severity,
+                   source_peer_id, created_at,
+                   CASE WHEN source_peer_id IS NULL THEN 'You' ELSE source_peer_id END as actor
+            FROM federation_alerts
+            ORDER BY created_at DESC LIMIT ?
+        """, (limit,)).fetchall()
+
+        for a in alerts:
+            items.append({
+                "type": "alert",
+                "id": f"alert-{a['id']}",
+                "actor": a["actor"],
+                "title": a["title"],
+                "alert_type": a["alert_type"],
+                "severity": a["severity"],
+                "is_mine": a["source_peer_id"] is None,
+                "created_at": a["created_at"],
+            })
+
+        # Peer harvest offers (from federation_peer_data)
+        peer_rows = db.execute(
+            "SELECT peer_id, payload, fetched_at FROM federation_peer_data WHERE data_type='harvest_offers'"
+        ).fetchall()
+        for row in peer_rows:
+            try:
+                offers = json.loads(row["payload"])
+                for o in offers:
+                    if o.get("status") == "available":
+                        items.append({
+                            "type": "harvest_offer",
+                            "id": f"harvest-{row['peer_id']}-{o.get('offer_id', 0)}",
+                            "actor": row["peer_id"],
+                            "plant_name": o.get("plant_name", ""),
+                            "quantity": o.get("quantity_description", ""),
+                            "is_mine": False,
+                            "created_at": row["fetched_at"],
+                        })
+            except Exception:
+                pass
+
+        # Our own harvest offers
+        my_offers = db.execute(
+            "SELECT id, plant_name, quantity_description, status, created_at FROM harvest_offers WHERE published=1"
+        ).fetchall()
+        for o in my_offers:
+            items.append({
+                "type": "harvest_offer",
+                "id": f"my-harvest-{o['id']}",
+                "actor": "You",
+                "plant_name": o["plant_name"],
+                "quantity": o["quantity_description"],
+                "status": o["status"],
+                "is_mine": True,
+                "created_at": o["created_at"],
+            })
+
+        # Peer seed swaps
+        swap_rows = db.execute(
+            "SELECT peer_id, payload, fetched_at FROM federation_peer_data WHERE data_type='seed_swaps'"
+        ).fetchall()
+        for row in swap_rows:
+            try:
+                swaps = json.loads(row["payload"])
+                for s in swaps:
+                    if s.get("status") == "available":
+                        items.append({
+                            "type": "seed_swap",
+                            "id": f"swap-{row['peer_id']}-{s.get('swap_id', 0)}",
+                            "actor": row["peer_id"],
+                            "plant_name": s.get("plant_name", ""),
+                            "variety": s.get("variety", ""),
+                            "looking_for": s.get("looking_for", ""),
+                            "is_mine": False,
+                            "created_at": row["fetched_at"],
+                        })
+            except Exception:
+                pass
+
+    # Filter by type if requested
+    if type:
+        items = [i for i in items if i["type"] == type]
+
+    # Sort by created_at descending
+    items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+
+    return items[:limit]

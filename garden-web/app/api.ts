@@ -1667,6 +1667,26 @@ export function deleteFederationAlert(id: number) {
   return apiFetch(`/api/federation-alerts/${id}`, { method: 'DELETE' });
 }
 
+export async function getCoopSummary() {
+  const r = await fetch('/api/coop/summary');
+  if (!r.ok) return null;
+  return r.json() as Promise<{
+    active_peers: number;
+    recent_alerts: number;
+    harvest_offers: number;
+    seed_swaps: number;
+    my_active_offers: number;
+  }>;
+}
+
+export async function getCoopFeed(limit = 20, type?: string) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (type) params.set('type', type);
+  const r = await fetch(`/api/coop/feed?${params}`);
+  if (!r.ok) return [];
+  return r.json() as Promise<Array<Record<string, unknown>>>;
+}
+
 // ── MESHTASTIC ──────────────────────────────────────────────────────
 
 export function getMeshtasticConfig() {
