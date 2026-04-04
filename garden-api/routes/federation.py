@@ -329,6 +329,42 @@ def connect_to_peer(body: FederationConnectRequest, request: Request):
     return {"status": status, "key_verified": key_verified, "peer_id": peer_row["id"] if peer_row else None}
 
 
+@router.get("/api/federation/stats")
+def get_federation_stats(request: Request):
+    """Return a summary of co-op activity."""
+    require_user(request)
+    with get_db() as db:
+        peer_count = db.execute(
+            "SELECT COUNT(*) FROM federation_peers WHERE status='active'"
+        ).fetchone()[0]
+
+        harvest_count = db.execute(
+            "SELECT COUNT(*) FROM harvest_offers WHERE status='available' AND published=1"
+        ).fetchone()[0]
+
+        seed_count = db.execute(
+            "SELECT COUNT(*) FROM seed_swaps WHERE status='available' AND published=1"
+        ).fetchone()[0]
+
+        alert_count = db.execute(
+            "SELECT COUNT(*) FROM federation_alerts WHERE severity IN ('warning','urgent')"
+        ).fetchone()[0]
+
+        # Count mesh peers (received beacons from non-HTTP peers)
+        mesh_peer_count = db.execute(
+            """SELECT COUNT(DISTINCT peer_id) FROM federation_peer_data
+               WHERE peer_id NOT IN (SELECT peer_id FROM federation_peers)"""
+        ).fetchone()[0]
+
+        return {
+            "active_peers": peer_count,
+            "mesh_peers": mesh_peer_count,
+            "harvest_offers": harvest_count,
+            "seed_swaps": seed_count,
+            "active_alerts": alert_count,
+        }
+
+
 @router.get("/api/federation/peers")
 def list_peers(request: Request):
     """List all known federation peers."""
@@ -825,6 +861,42 @@ async def get_public_plant_list(request: Request):
         ).fetchall()
 
         return {"plants": [r["name"] for r in rows]}
+
+
+@router.get("/api/federation/peers/{peer_id}/health")
+def get_peer_health(peer_id: str, request: Request):
+    """Return sync health for a specific peer."""
+    require_user(request)
+    from datetime import datetime, timezone, timedelta
+    with get_db() as db:
+        peer = db.execute(
+            "SELECT * FROM federation_peers WHERE peer_id=?", (peer_id,)
+        ).fetchone()
+        if not peer:
+            raise HTTPException(404, "Peer not found")
+        peer = dict(peer)
+
+        last_seen = peer.get("last_seen")
+        health = "unknown"
+        if last_seen:
+            try:
+                ts = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                age = datetime.now(timezone.utc) - ts
+                if age < timedelta(hours=1):
+                    health = "ok"
+                elif age < timedelta(hours=24):
+                    health = "stale"
+                else:
+                    health = "error"
+            except Exception:
+                health = "unknown"
+
+        return {
+            "peer_id": peer_id,
+            "last_seen": last_seen,
+            "health": health,
+            "status": peer["status"],
+        }
 
 
 @router.get("/api/federation/sync")

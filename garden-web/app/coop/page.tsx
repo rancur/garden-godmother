@@ -14,6 +14,7 @@ import {
   getFederationPrefs,
   updateFederationPrefs,
   syncFederationPeer,
+  getFederationStats,
 } from '../api';
 import { useToast } from '../toast';
 
@@ -49,6 +50,14 @@ interface FederationPrefs {
   share_seed_swaps: boolean;
   share_journal_public: boolean;
   share_alerts: boolean;
+}
+
+interface FederationStats {
+  active_peers: number;
+  mesh_peers: number;
+  harvest_offers: number;
+  seed_swaps: number;
+  active_alerts: number;
 }
 
 // ─── Reusable Components ───
@@ -663,6 +672,68 @@ function SharingSection() {
   );
 }
 
+// ─── Stats Bar ───
+
+function StatsBar() {
+  const [stats, setStats] = useState<FederationStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getFederationStats()
+      .then((data) => setStats(data))
+      .catch(() => {/* silently ignore — stats are non-critical */})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const statCards: { label: string; key: keyof FederationStats; alert?: boolean }[] = [
+    { label: 'Active Peers', key: 'active_peers' },
+    { label: 'Mesh Peers', key: 'mesh_peers' },
+    { label: 'Harvest Offers', key: 'harvest_offers' },
+    { label: 'Seed Swaps', key: 'seed_swaps' },
+    { label: 'Active Alerts', key: 'active_alerts', alert: true },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      {statCards.map(({ label, key, alert }) => {
+        const value = stats?.[key];
+        const isAlertActive = alert && value != null && value > 0;
+        return (
+          <div
+            key={key}
+            className={`rounded-xl border px-4 py-3 flex flex-col items-center justify-center text-center shadow-sm ${
+              isAlertActive
+                ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                : 'bg-white dark:bg-gray-800 border-earth-200 dark:border-gray-700'
+            }`}
+          >
+            {loading ? (
+              <div className="h-7 w-10 bg-earth-100 dark:bg-gray-700 rounded animate-pulse mb-1" />
+            ) : (
+              <span
+                className={`text-2xl font-bold tabular-nums ${
+                  isAlertActive
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-earth-900 dark:text-gray-100'
+                }`}
+              >
+                {value ?? '—'}
+              </span>
+            )}
+            <span className={`text-xs font-medium mt-0.5 ${
+              isAlertActive
+                ? 'text-red-500 dark:text-red-400'
+                : 'text-earth-500 dark:text-gray-400'
+            }`}>
+              {label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Sub-Nav ───
 
 const COOP_NAV = [
@@ -709,6 +780,8 @@ export default function CoopPage() {
           Connect and share with other gardens in your federation.
         </p>
       </div>
+
+      <StatsBar />
 
       <CoopSubNav />
 

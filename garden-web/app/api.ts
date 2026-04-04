@@ -1574,6 +1574,18 @@ export function syncFederationPeer(peerId: number) {
   return apiFetch(`/api/federation/peers/${peerId}/sync`, { method: 'POST', body: '{}' });
 }
 
+export async function getFederationStats() {
+  const r = await fetch('/api/federation/stats');
+  if (!r.ok) throw new Error('Failed to fetch stats');
+  return r.json() as Promise<{
+    active_peers: number;
+    mesh_peers: number;
+    harvest_offers: number;
+    seed_swaps: number;
+    active_alerts: number;
+  }>;
+}
+
 // ── CO-OP BOARD & DATA ──────────────────────────────────────────────
 
 export function getCoopBoard() {
