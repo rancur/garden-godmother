@@ -547,3 +547,45 @@ class FederationPairAccept(BaseModel):
     display_name: str
     public_key: str
     instance_url: str
+
+
+# ── FEDERATION DATA MODELS ──────────────────────────────────────────
+
+class HarvestOfferCreate(BaseModel):
+    plant_name: str
+    quantity_description: str
+    notes: Optional[str] = None
+    available_from: Optional[str] = None
+    available_until: Optional[str] = None
+    published: bool = False
+
+class HarvestOfferUpdate(BaseModel):
+    quantity_description: Optional[str] = None
+    notes: Optional[str] = None
+    available_until: Optional[str] = None
+    status: Optional[str] = None
+    published: Optional[bool] = None
+
+class SeedSwapCreate(BaseModel):
+    plant_name: str
+    variety: Optional[str] = None
+    quantity_description: str
+    looking_for: Optional[str] = None
+    notes: Optional[str] = None
+    published: bool = False
+
+class SeedSwapUpdate(BaseModel):
+    quantity_description: Optional[str] = None
+    looking_for: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    published: Optional[bool] = None
+
+class FederationAlertCreate(BaseModel):
+    alert_type: str
+    title: str
+    body: str
+    severity: str = "info"
+    affects_plants: Optional[list[str]] = None
+    published: bool = False
+    expires_at: Optional[str] = None

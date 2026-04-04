@@ -2557,4 +2557,53 @@ def startup_run_migrations():
             )""",
         ])
 
+        run_migration(db, 61, "harvest_offers", [
+            """CREATE TABLE IF NOT EXISTS harvest_offers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_name TEXT NOT NULL,
+                quantity_description TEXT NOT NULL,
+                notes TEXT,
+                available_from TEXT,
+                available_until TEXT,
+                status TEXT DEFAULT 'available',
+                claimed_by_peer_id TEXT,
+                published INTEGER DEFAULT 0,
+                seq INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
+        run_migration(db, 62, "seed_swaps", [
+            """CREATE TABLE IF NOT EXISTS seed_swaps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plant_name TEXT NOT NULL,
+                variety TEXT,
+                quantity_description TEXT NOT NULL,
+                looking_for TEXT,
+                notes TEXT,
+                status TEXT DEFAULT 'available',
+                published INTEGER DEFAULT 0,
+                seq INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
+        run_migration(db, 63, "federation_alerts", [
+            """CREATE TABLE IF NOT EXISTS federation_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_peer_id TEXT,
+                alert_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                severity TEXT DEFAULT 'info',
+                affects_plants TEXT,
+                published INTEGER DEFAULT 0,
+                seq INTEGER DEFAULT 0,
+                expires_at TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )""",
+        ])
+
         logger.info("Migration system: all migrations checked/applied")
