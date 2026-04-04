@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Background sync engine for Garden Co-op federation.
 Periodically pulls data from active peers and pushes our shared data.

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Meshtastic transport for Garden Co-op.
 Handles device connection, GGMP beacon scheduling, and inbound message handling.
