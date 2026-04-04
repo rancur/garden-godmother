@@ -55,7 +55,7 @@ fi
 AUTO_ENABLED=$(docker exec garden-api python3 -c "
 import sqlite3
 try:
-    db = sqlite3.connect('/app/data/plants.db')
+    db = sqlite3.connect('/app/data/garden.db')
     val = db.execute(\"SELECT value FROM app_config WHERE key='auto_update_enabled'\").fetchone()
     print(val[0] if val else '0')
 except Exception:
