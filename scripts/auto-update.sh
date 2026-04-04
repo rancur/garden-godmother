@@ -41,11 +41,11 @@ do_update() {
 
 # ── Mode 1: Manual update request from the web UI ──
 # Check signal file via Docker exec (host user may not have Docker volume permissions)
-SIGNAL_EXISTS=$(docker exec garden-api test -f /data/.update-requested && echo "1" || echo "0")
+SIGNAL_EXISTS=$(docker exec garden-api test -f /app/data/.update-requested && echo "1" || echo "0")
 if [ "$SIGNAL_EXISTS" = "1" ]; then
-    SIGNAL_CONTENT=$(docker exec garden-api cat /data/.update-requested 2>/dev/null || true)
+    SIGNAL_CONTENT=$(docker exec garden-api cat /app/data/.update-requested 2>/dev/null || true)
     log "Update requested via web UI (signal: ${SIGNAL_CONTENT})"
-    docker exec garden-api rm -f /data/.update-requested
+    docker exec garden-api rm -f /app/data/.update-requested
     do_update
     exit 0
 fi
@@ -55,7 +55,7 @@ fi
 AUTO_ENABLED=$(docker exec garden-api python3 -c "
 import sqlite3
 try:
-    db = sqlite3.connect('/data/garden.db')
+    db = sqlite3.connect('/app/data/plants.db')
     val = db.execute(\"SELECT value FROM app_config WHERE key='auto_update_enabled'\").fetchone()
     print(val[0] if val else '0')
 except Exception:
