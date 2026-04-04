@@ -207,6 +207,16 @@ export function DesktopNav() {
           </div>
         );
       })}
+      <Link
+        href="/coop"
+        className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+          isItemActive('/coop', pathname)
+            ? 'text-garden-700 dark:text-garden-400 bg-garden-50 dark:bg-garden-900/30'
+            : 'text-earth-700 dark:text-gray-300 hover:bg-garden-50 dark:hover:bg-gray-700/50 hover:text-garden-700 dark:hover:text-garden-400'
+        }`}
+      >
+        🤝 Co-op
+      </Link>
     </div>
   );
 }

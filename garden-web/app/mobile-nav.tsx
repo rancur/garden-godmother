@@ -189,11 +189,25 @@ export function MobileNav() {
               );
             })}
 
+            {/* Co-op link */}
+            <Link
+              href="/coop"
+              onClick={() => setOpen(false)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-colors min-h-[48px] mt-2 border-t border-earth-200 dark:border-gray-700 pt-4 ${
+                pathname === '/coop' || pathname.startsWith('/coop/')
+                  ? 'text-garden-700 dark:text-garden-400 bg-garden-50 dark:bg-garden-900/30'
+                  : 'text-earth-700 dark:text-gray-300 hover:bg-garden-50 dark:hover:bg-gray-700/50'
+              }`}
+            >
+              <span className="text-xl">🤝</span>
+              <span>Co-op</span>
+            </Link>
+
             {/* Settings link */}
             <Link
               href="/settings"
               onClick={() => setOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-colors min-h-[48px] mt-2 border-t border-earth-200 dark:border-gray-700 pt-4 ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-colors min-h-[48px] ${
                 pathname === '/settings'
                   ? 'text-garden-700 dark:text-garden-400 bg-garden-50 dark:bg-garden-900/30'
                   : 'text-earth-700 dark:text-gray-300 hover:bg-garden-50 dark:hover:bg-gray-700/50'
