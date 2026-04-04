@@ -395,7 +395,7 @@ function SwapRow({
             <label className="block text-xs font-medium text-earth-700 dark:text-gray-300 mb-1">Status</label>
             <select
               value={editForm.status}
-              onChange={(e) => setField('status', e.target.value)}
+              onChange={(e) => setField('status', e.target.value as 'available' | 'expired' | 'swapped')}
               className={INPUT_CLASS}
             >
               <option value="available">Available</option>

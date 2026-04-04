@@ -225,9 +225,9 @@ export default function MeshtasticSettingsPage() {
       .then((data: MeshtasticConfig) => setConfig(data))
       .catch((err: Error) => {
         if (err.message.includes('403')) {
-          toast({ title: 'Admin required to view Meshtastic settings', variant: 'destructive' });
+          toast('Admin required to view Meshtastic settings', 'error');
         } else {
-          toast({ title: 'Could not load Meshtastic config', variant: 'destructive' });
+          toast('Could not load Meshtastic config', 'error');
         }
       })
       .finally(() => setConfigLoading(false));
@@ -246,9 +246,9 @@ export default function MeshtasticSettingsPage() {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('403')) {
-          toast({ title: 'Admin required', variant: 'destructive' });
+          toast('Admin required', 'error');
         } else {
-          toast({ title: 'Could not save setting', variant: 'destructive' });
+          toast('Could not save setting', 'error');
         }
       } finally {
         if (key) setSavingKey(null);
@@ -285,16 +285,16 @@ export default function MeshtasticSettingsPage() {
     try {
       await testMeshtasticConnection();
       setTestResult({ ok: true, msg: 'Connected successfully' });
-      toast({ title: 'Meshtastic connection established!' });
+      toast('Meshtastic connection established!', 'success');
       loadStatus();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('403')) {
-        toast({ title: 'Admin required', variant: 'destructive' });
+        toast('Admin required', 'error');
         setTestResult({ ok: false, msg: 'Admin required' });
       } else {
         setTestResult({ ok: false, msg: 'Connection failed — check hostname/port' });
-        toast({ title: 'Connection test failed', variant: 'destructive' });
+        toast('Connection test failed', 'error');
       }
     } finally {
       setTesting(false);
@@ -310,14 +310,14 @@ export default function MeshtasticSettingsPage() {
       const list: MeshtasticChannel[] = Array.isArray(data) ? data : data.channels ?? [];
       setChannels(list);
       if (list.length === 0) {
-        toast({ title: 'No channels found on device' });
+        toast('No channels found on device', 'success');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('403')) {
-        toast({ title: 'Admin required', variant: 'destructive' });
+        toast('Admin required', 'error');
       } else {
-        toast({ title: 'Could not load channels — ensure device is connected', variant: 'destructive' });
+        toast('Could not load channels — ensure device is connected', 'error');
       }
     } finally {
       setChannelsLoading(false);
