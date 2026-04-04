@@ -322,6 +322,23 @@ export function deleteSeed(id: number) {
   });
 }
 
+export function toggleSeedSwapAvailable(id: number) {
+  return apiFetch(`/api/seeds/${id}/swap`, { method: 'PATCH' });
+}
+
+// Seed Wishlist
+export function getSeedWishlist() {
+  return apiFetch('/api/seeds/wishlist');
+}
+
+export function addSeedWishlistItem(data: { plant_name: string; variety?: string; notes?: string }) {
+  return apiFetch('/api/seeds/wishlist', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function deleteSeedWishlistItem(itemId: number) {
+  return apiFetch(`/api/seeds/wishlist/${itemId}`, { method: 'DELETE' });
+}
+
 // Planting Photos
 export function getPlantingPhotos(plantingId: number) {
   return apiFetch(`/api/plantings/${plantingId}/photos`);
@@ -1092,6 +1109,11 @@ export function getDashboardStats() {
 // Aggregated Dashboard (new)
 export function getDashboard() {
   return apiFetch('/api/dashboard');
+}
+
+// Proactive suggestions
+export function getSuggestions() {
+  return apiFetch('/api/suggestions');
 }
 
 // Global Search

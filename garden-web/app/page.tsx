@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getDashboard, getTasksToday, getTasksSummary, generateTasks, completeTask, getSensorForecast, getSensorWeather, getWeatherInsights, getJournalSuggestions, quickAddJournal } from './api';
+import { getDashboard, getTasksToday, getTasksSummary, generateTasks, completeTask, getSensorForecast, getSensorWeather, getWeatherInsights, getJournalSuggestions, quickAddJournal, getSuggestions } from './api';
 import { useToast } from './toast';
 import { CardSkeleton, Skeleton } from './skeleton';
 import { taskTypeIcons } from './constants';
 import { getGardenToday, formatGardenDate } from './timezone';
 import { PullToRefresh } from './components/PullToRefresh';
+import CoopSummaryWidget from './components/CoopSummaryWidget';
 
 // ── Types ──
 
@@ -149,6 +150,18 @@ interface JournalSuggestion {
   container_type?: string;
 }
 
+interface GardenSuggestion {
+  id: string;
+  type: string;
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  body: string;
+  action_label: string;
+  action_url: string;
+  entity_id: number;
+  entity_type: string;
+}
+
 const priorityBadge: Record<string, string> = {
   urgent: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
   high: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
@@ -210,6 +223,8 @@ export default function Dashboard() {
   const [weatherInsights, setWeatherInsights] = useState<WeatherInsight[]>([]);
   const [journalSuggestions, setJournalSuggestions] = useState<JournalSuggestion[]>([]);
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
+  const [gardenSuggestions, setGardenSuggestions] = useState<GardenSuggestion[]>([]);
+  const [dismissedGardenSuggestions, setDismissedGardenSuggestions] = useState<Set<string>>(new Set());
   const [submittingActionId, setSubmittingActionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -258,6 +273,10 @@ export default function Dashboard() {
     getJournalSuggestions().then((data: JournalSuggestion[]) => {
       setJournalSuggestions(Array.isArray(data) ? data : []);
       setDismissedSuggestions(new Set());
+    }).catch(() => {});
+    getSuggestions().then((data: GardenSuggestion[]) => {
+      setGardenSuggestions(Array.isArray(data) ? data : []);
+      setDismissedGardenSuggestions(new Set());
     }).catch(() => {});
     try {
       const data = await getDashboard();
@@ -699,6 +718,9 @@ export default function Dashboard() {
               )}
             </div>
           )}
+
+          {/* Community Summary */}
+          <CoopSummaryWidget />
         </div>
       </div>
     </div>
