@@ -1646,3 +1646,33 @@ export function createFederationAlert(data: {
 export function deleteFederationAlert(id: number) {
   return apiFetch(`/api/federation-alerts/${id}`, { method: 'DELETE' });
 }
+
+// ── MESHTASTIC ──────────────────────────────────────────────────────
+
+export function getMeshtasticConfig() {
+  return apiFetch('/api/meshtastic/config');
+}
+
+export function updateMeshtasticConfig(data: Partial<{
+  enabled: boolean;
+  connection_type: string;
+  hostname: string;
+  port: number;
+  serial_port: string;
+  channel_index: number;
+  channel_name: string;
+}>) {
+  return apiFetch('/api/meshtastic/config', { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function getMeshtasticChannels() {
+  return apiFetch('/api/meshtastic/channels');
+}
+
+export function testMeshtasticConnection() {
+  return apiFetch('/api/meshtastic/connect', { method: 'POST', body: '{}' });
+}
+
+export function getMeshtasticStatus() {
+  return apiFetch('/api/meshtastic/status');
+}

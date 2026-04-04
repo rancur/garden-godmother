@@ -21,6 +21,7 @@ import {
   getBackupDownloadUrl,
   deleteBackup,
   getUpdateStatus,
+  getMeshtasticStatus,
   API_URL,
 } from '../api';
 import { useToast } from '../toast';
@@ -444,6 +445,53 @@ function formatTemp(value: number | null, unit: TempUnit): string {
   if (value === null) return '--';
   const display = unit === 'C' ? toC(value) : value;
   return `${Math.round(display)}`;
+}
+
+// ─── Mesh Network Card ───
+
+function MeshNetworkCard() {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<{ connected: boolean; hostname?: string; serial_port?: string; channel_name?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMeshtasticStatus()
+      .then((data: { connected: boolean; hostname?: string; serial_port?: string; channel_name?: string }) => setStatus(data))
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-earth-600 dark:text-gray-400">
+          Send and receive garden alerts over a local Meshtastic mesh radio network.
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          {loading ? (
+            <span className="inline-block w-20 h-5 bg-earth-100 dark:bg-gray-700 rounded-full animate-pulse" />
+          ) : status?.connected ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
+              Connected
+              {status.channel_name && <span className="ml-1 font-normal opacity-80">&#x2022; {status.channel_name}</span>}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-earth-100 text-earth-600 dark:bg-gray-700 dark:text-gray-400">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-earth-400 dark:bg-gray-500" />
+              Not connected
+            </span>
+          )}
+        </div>
+      </div>
+      <Link
+        href="/settings/meshtastic"
+        className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-garden-600 text-white hover:bg-garden-700 transition shadow-sm shrink-0"
+      >
+        Configure
+      </Link>
+    </div>
+  );
 }
 
 // ─── Section Nav ───
@@ -2209,6 +2257,11 @@ export default function SettingsPage() {
             </div>
           </SettingsCard>
         )}
+
+        {/* ─── Mesh Network ─── */}
+        <SettingsCard id="mesh-network" title="Mesh Network" icon="&#x1F4F6;">
+          <MeshNetworkCard />
+        </SettingsCard>
 
         {/* ─── 10. Danger Zone ─── */}
         <SettingsCard id="danger" title="Danger Zone" icon="&#x26A0;&#xFE0F;" danger>
