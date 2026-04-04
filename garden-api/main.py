@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -32,46 +33,15 @@ from federation_sync import run_sync_cycle
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Garden God Mother API", version="1.3.0")
-
-
-# ──── Startup events ────
-
-@app.on_event("startup")
-def startup_create_photos_dir():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── startup ──
     PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-@app.on_event("startup")
-def startup_migrations():
     startup_run_migrations()
 
-
-@app.on_event("startup")
-def startup_weather_entities():
-    """Load weather entity IDs from HA entity mappings."""
     from routes.sensors import init_weather_entities
     init_weather_entities()
 
-
-@app.on_event("startup")
-async def startup_session_cleanup():
-    """Background task to clean up expired sessions hourly."""
-    async def cleanup_loop():
-        while True:
-            await asyncio.sleep(3600)
-            try:
-                with get_db() as db:
-                    db.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.utcnow().isoformat(),))
-                    db.commit()
-            except Exception:
-                pass
-    asyncio.create_task(cleanup_loop())
-
-
-@app.on_event("startup")
-def startup_audit_cleanup():
-    """Clean up audit log entries older than 90 days."""
     with get_db() as db:
         try:
             db.execute("DELETE FROM audit_log WHERE created_at < datetime('now', '-90 days')")
@@ -79,15 +49,11 @@ def startup_audit_cleanup():
         except Exception:
             pass
 
-
-@app.on_event("startup")
-def start_scheduler():
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_sync_cycle, trigger='interval', minutes=30, id='federation_sync', replace_existing=True)
     scheduler.start()
     app.state.scheduler = scheduler
 
-    # Auto-init Meshtastic transport if configured in DB
     try:
         from meshtastic_transport import init_transport
         with get_db() as _db:
@@ -99,15 +65,25 @@ def start_scheduler():
                 channel_index=_cfg["channel_index"] or 0,
             )
     except Exception as e:
-        import logging as _logging
-        _logging.getLogger(__name__).warning(f"Failed to auto-init Meshtastic: {e}")
+        logger.warning(f"Failed to auto-init Meshtastic: {e}")
 
+    asyncio.create_task(_session_cleanup_loop())
+    await admin.startup_backup_loop()
+    await sensors.startup_sensor_recording()
 
-@app.on_event("shutdown")
-def stop_scheduler():
-    app.state.scheduler.shutdown()
+    from services.integrations import get_integration_config
+    from services.tempest_udp import start_udp_listener
+    config = get_integration_config("weather_tempest")
+    if config and config.get("local_udp"):
+        await start_udp_listener()
 
-    # Stop Meshtastic transport if running
+    yield
+
+    # ── shutdown ──
+    try:
+        app.state.scheduler.shutdown()
+    except Exception:
+        pass
     try:
         from meshtastic_transport import get_transport
         transport = get_transport()
@@ -115,6 +91,21 @@ def stop_scheduler():
             transport.stop()
     except Exception:
         pass
+
+
+async def _session_cleanup_loop():
+    """Background task to clean up expired sessions hourly."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            with get_db() as db:
+                db.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.utcnow().isoformat(),))
+                db.commit()
+        except Exception:
+            pass
+
+
+app = FastAPI(title="Garden God Mother API", version="1.3.0", lifespan=lifespan)
 
 
 # ──── Middleware ────
@@ -129,26 +120,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-async def startup_backup_loop():
-    await admin.startup_backup_loop()
-
-
-@app.on_event("startup")
-async def startup_sensor_recording():
-    await sensors.startup_sensor_recording()
-
-
-@app.on_event("startup")
-async def startup_tempest_udp():
-    """Start Tempest UDP listener if local_udp is enabled."""
-    from services.integrations import get_integration_config
-    from services.tempest_udp import start_udp_listener
-    config = get_integration_config("weather_tempest")
-    if config and config.get("local_udp"):
-        await start_udp_listener()
 
 
 # ──── Register routers ────

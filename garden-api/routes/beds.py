@@ -351,7 +351,7 @@ def create_bed(bed: BedCreate, request: Request):
                       {'name': bed.name, 'bed_type': bed.bed_type},
                       request.client.host if request.client else None)
         db.commit()
-        return {"id": cursor.lastrowid, **bed.dict(), "width_cells": w, "height_cells": h}
+        return {"id": cursor.lastrowid, **bed.model_dump(), "width_cells": w, "height_cells": h}
 
 
 @router.get("/api/beds/positions")
