@@ -5,13 +5,16 @@ import json as json_mod
 import logging
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
 
 from auth import audit_log, require_admin, require_user
 from db import get_db
 from federation_crypto import (
+    decrypt_private_key,
+    encrypt_private_key,
     generate_instance_id,
     generate_invite_code,
     generate_keypair,
@@ -37,7 +40,7 @@ router = APIRouter()
 # ──────────────── HELPERS ────────────────
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _verify_peer_request(request: Request, db) -> dict:
@@ -82,12 +85,12 @@ def _verify_peer_request(request: Request, db) -> dict:
 
 def _make_signed_request(url: str, method: str, payload: dict, identity: dict) -> dict:
     """Make an outbound signed HTTP request to a peer instance."""
-    path = "/" + url.split("/", 3)[-1] if url.count("/") >= 3 else "/"
+    path = urlparse(url).path or "/"
     timestamp = _now_iso()
     body_bytes = json_mod.dumps(payload).encode()
 
     signature = sign_request(
-        identity["private_key"],
+        decrypt_private_key(identity["private_key"]),
         method,
         path,
         timestamp,
@@ -173,7 +176,7 @@ def setup_identity(body: FederationSetup, request: Request):
                     instance_id,
                     body.display_name,
                     public_key,
-                    private_key,
+                    encrypt_private_key(private_key),
                     body.instance_url,
                     body.coarse_location,
                     now,
@@ -204,14 +207,14 @@ def create_invite(request: Request):
             )
 
         code = generate_invite_code()
-        now = datetime.utcnow()
-        expires_at = (now + timedelta(hours=24)).isoformat() + "Z"
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(hours=24)).isoformat().replace("+00:00", "Z")
 
         db.execute(
             """INSERT INTO federation_pairing_codes
                (code, created_by_user_id, expires_at, created_at)
                VALUES (?, ?, ?, ?)""",
-            (code, user["id"], expires_at, now.isoformat() + "Z"),
+            (code, user["id"], expires_at, now.isoformat().replace("+00:00", "Z")),
         )
         db.commit()
 
@@ -251,6 +254,39 @@ def connect_to_peer(body: FederationConnectRequest, request: Request):
         payload,
         identity,
     )
+
+    # MITM protection: cross-check public key from pair-request response against the
+    # peer's public /api/federation/profile endpoint.
+    # Full TOFU protection requires out-of-band key verification (e.g., QR code scanning).
+    # This double-fetch reduces but does not eliminate MITM risk.
+    pair_public_key = response_data.get("public_key", "")
+    if pair_public_key:
+        try:
+            profile_req = urllib.request.Request(
+                f"{peer_url}/api/federation/profile",
+                method="GET",
+            )
+            with urllib.request.urlopen(profile_req, timeout=10) as resp:
+                profile_data = json_mod.loads(resp.read())
+            profile_public_key = profile_data.get("public_key", "")
+            if profile_public_key and profile_public_key != pair_public_key:
+                logger.warning(
+                    "Public key mismatch for peer %s: pair-request key differs from profile key. "
+                    "Possible MITM — rejecting connection.",
+                    peer_url,
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail="Peer public key mismatch between pair-request and profile — possible MITM attack",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Could not fetch peer profile for key cross-check (%s): %s — proceeding with pair-request key",
+                peer_url,
+                exc,
+            )
 
     peer_instance_id = response_data.get("instance_id") or body.peer_url
     now = _now_iso()
@@ -311,6 +347,9 @@ def update_peer(peer_id: int, body: FederationPeerUpdate, request: Request):
         if not peer:
             raise HTTPException(status_code=404, detail="Peer not found")
         peer = dict(peer)
+
+        if body.status and body.status not in ("active", "blocked"):
+            raise HTTPException(400, "status must be 'active' or 'blocked'")
 
         updates = []
         params = []
@@ -485,7 +524,7 @@ def trigger_sync(peer_id: int, request: Request):
     timestamp = _now_iso()
     path = f"/api/federation/sync"
     signature = sign_request(
-        identity["private_key"],
+        decrypt_private_key(identity["private_key"]),
         "GET",
         path,
         timestamp,
@@ -552,17 +591,19 @@ async def receive_pair_request(body: FederationPairRequest, request: Request):
                 detail="This instance has not configured federation.",
             )
 
-        # Validate invite code
-        code_row = db.execute(
-            """SELECT * FROM federation_pairing_codes
-               WHERE code = ? AND used_at IS NULL AND expires_at > ?""",
-            (body.invite_code, _now_iso()),
-        ).fetchone()
-        if not code_row:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid or expired invite code.",
-            )
+        # Atomically claim the invite code — prevents double-use under concurrent requests
+        cursor = db.execute(
+            """UPDATE federation_pairing_codes
+               SET used_at = datetime('now'), used_by_peer_id = ?
+               WHERE code = ?
+                 AND used_at IS NULL
+                 AND expires_at > datetime('now')""",
+            (body.instance_id, body.invite_code),
+        )
+        db.commit()
+
+        if cursor.rowcount == 0:
+            raise HTTPException(400, "Invalid, expired, or already-used invite code")
 
         now = _now_iso()
 
@@ -601,11 +642,6 @@ async def receive_pair_request(body: FederationPairRequest, request: Request):
             )
             peer_id = cur.lastrowid
 
-        # Mark invite code as used
-        db.execute(
-            "UPDATE federation_pairing_codes SET used_at = ?, used_by_peer_id = ? WHERE id = ?",
-            (now, peer_id, code_row["id"]),
-        )
         db.commit()
 
     return {
@@ -621,50 +657,70 @@ async def receive_pair_accept(body: FederationPairAccept, request: Request):
     body_bytes = await request.body()
     request.state._body_bytes = body_bytes
 
+    # Signature verification is REQUIRED — headers must be present
+    timestamp = request.headers.get("X-GG-Timestamp")
+    signature = request.headers.get("X-GG-Signature")
+    if not timestamp or not signature:
+        raise HTTPException(status_code=401, detail="Invalid or missing signature")
+
+    if not verify_timestamp(timestamp):
+        raise HTTPException(status_code=401, detail="Invalid or missing signature")
+
     with get_db() as db:
         peer = db.execute(
             "SELECT * FROM federation_peers WHERE peer_id = ?", (body.instance_id,)
         ).fetchone()
-        if not peer:
-            raise HTTPException(status_code=404, detail="Unknown peer instance")
-        peer = dict(peer)
 
-        # Verify signature using the public key we stored from the pair-request
-        timestamp = request.headers.get("X-GG-Timestamp", "")
-        signature = request.headers.get("X-GG-Signature", "")
+        if peer:
+            # Known peer: verify using their stored public key
+            verify_key = dict(peer)["public_key"]
+        else:
+            # Unknown peer (first contact — TOFU): verify using the public key in the body.
+            # This is the accepting side's confirmation of a pair-request we initiated.
+            # TOFU is documented in the design; callers should confirm keys out-of-band for
+            # stronger security guarantees.
+            verify_key = body.public_key
 
-        if timestamp and signature:
-            if not verify_timestamp(timestamp):
-                raise HTTPException(
-                    status_code=401, detail="Request timestamp out of acceptable range"
-                )
-            valid = verify_request(
-                peer["public_key"],
-                request.method,
-                request.url.path,
-                timestamp,
-                body_bytes,
-                signature,
-            )
-            if not valid:
-                raise HTTPException(
-                    status_code=401, detail="Invalid request signature"
-                )
+        valid = verify_request(
+            verify_key,
+            request.method,
+            request.url.path,
+            timestamp,
+            body_bytes,
+            signature,
+        )
+        if not valid:
+            raise HTTPException(status_code=401, detail="Invalid or missing signature")
 
         now = _now_iso()
-        db.execute(
-            """UPDATE federation_peers
-               SET status = 'active', last_seen = ?,
-                   display_name = ?, public_key = ?, peer_url = ?
-               WHERE peer_id = ?""",
-            (
-                now,
-                body.display_name,
-                body.public_key,
-                body.instance_url,
-                body.instance_id,
-            ),
-        )
+        if peer:
+            db.execute(
+                """UPDATE federation_peers
+                   SET status = 'active', last_seen = ?,
+                       display_name = ?, public_key = ?, peer_url = ?
+                   WHERE peer_id = ?""",
+                (
+                    now,
+                    body.display_name,
+                    body.public_key,
+                    body.instance_url,
+                    body.instance_id,
+                ),
+            )
+        else:
+            db.execute(
+                """INSERT INTO federation_peers
+                   (peer_id, peer_url, display_name, public_key, status, created_at, last_seen)
+                   VALUES (?, ?, ?, ?, 'active', ?, ?)""",
+                (
+                    body.instance_id,
+                    body.instance_url,
+                    body.display_name,
+                    body.public_key,
+                    now,
+                    now,
+                ),
+            )
         db.commit()
 
     return {"status": "active"}

@@ -3,6 +3,7 @@ Ed25519 cryptography for Garden Co-op federation.
 """
 import base64
 import hashlib
+import os
 import secrets
 import string
 import uuid
@@ -86,3 +87,28 @@ def get_key_fingerprint(public_key_b64: str) -> str:
     """Return first 16 chars of SHA256 hex fingerprint of public key."""
     raw = base64.b64decode(public_key_b64)
     return hashlib.sha256(raw).hexdigest()[:16]
+
+
+def _get_fernet():
+    """Get a Fernet instance keyed from SECRET_KEY env var."""
+    from cryptography.fernet import Fernet
+    secret = os.environ.get("SECRET_KEY", "dev-insecure-default-please-change")
+    # Derive a 32-byte key from SECRET_KEY using SHA256, then base64url-encode it
+    key_bytes = hashlib.sha256(secret.encode()).digest()
+    fernet_key = base64.urlsafe_b64encode(key_bytes)
+    return Fernet(fernet_key)
+
+
+def encrypt_private_key(private_key_b64: str) -> str:
+    """Encrypt private key for storage. Returns encrypted token string."""
+    f = _get_fernet()
+    return f.encrypt(private_key_b64.encode()).decode()
+
+
+def decrypt_private_key(encrypted: str) -> str:
+    """Decrypt stored private key. Returns plain base64 private key."""
+    # Handle legacy plaintext (for migration)
+    if not encrypted.startswith("gAAA"):  # Fernet tokens start with gAAA
+        return encrypted  # Legacy plaintext, return as-is
+    f = _get_fernet()
+    return f.decrypt(encrypted.encode()).decode()
