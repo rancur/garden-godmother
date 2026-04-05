@@ -17,6 +17,7 @@ import {
   getPlants,
   getBeds,
   quickAddJournal,
+  createFederationAlert,
 } from '../api';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { getPlantIcon } from '../plant-icons';
@@ -119,6 +120,7 @@ export default function TasksPage() {
     visible: boolean;
   } | null>(null);
   const [journalSubmitting, setJournalSubmitting] = useState(false);
+  const [coopSharing, setCoopSharing] = useState(false);
 
   // New task form
   const [newType, setNewType] = useState('custom');
@@ -213,6 +215,31 @@ export default function TasksPage() {
       toast('Failed to save entry', 'error');
     } finally {
       setJournalSubmitting(false);
+    }
+  };
+
+  const handleShareTaskWithCoop = async () => {
+    if (!completedTaskPrompt) return;
+    const task = completedTaskPrompt.task;
+    const title = task.title.substring(0, 80);
+    const body = task.notes
+      ? `${task.title}${task.notes ? ' — ' + task.notes : ''}`
+      : task.title;
+    setCoopSharing(true);
+    try {
+      await createFederationAlert({
+        alert_type: 'info',
+        title,
+        body,
+        severity: 'info',
+        published: true,
+      });
+      toast('Shared with co-op!', 'success');
+      setCompletedTaskPrompt(null);
+    } catch {
+      toast('Failed to share with co-op', 'error');
+    } finally {
+      setCoopSharing(false);
     }
   };
 
@@ -712,6 +739,15 @@ export default function TasksPage() {
                   >
                     Spotted issue
                   </button>
+                  {completedTaskPrompt.task.notes && (
+                    <button
+                      onClick={handleShareTaskWithCoop}
+                      disabled={coopSharing || journalSubmitting}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {coopSharing ? 'Sharing...' : '\uD83D\uDCA1 Share with co-op'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

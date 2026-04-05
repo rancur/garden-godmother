@@ -31,10 +31,11 @@ interface FederationStats {
 
 interface BoardItem {
   id: string | number;
-  type: 'harvest' | 'seed_swap' | 'alert';
+  type: 'harvest' | 'seed_swap' | 'alert' | 'tip';
   peer_name: string;
   title: string;
   created_at: string;
+  alert_type?: string;
 }
 
 // ─── Helpers ───
@@ -238,6 +239,7 @@ const FEED_TYPE_META: Record<BoardItem['type'], { icon: string; label: string }>
   harvest: { icon: '🍅', label: 'Harvest offer' },
   seed_swap: { icon: '🌱', label: 'Seed swap' },
   alert: { icon: '⚠️', label: 'Alert' },
+  tip: { icon: '💡', label: 'Tip' },
 };
 
 function timeAgo(ts: string): string {

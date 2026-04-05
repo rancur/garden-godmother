@@ -114,6 +114,12 @@ export default function HarvestPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Surplus banner: shown after logging a large harvest (>32 oz / >10 items)
+  const SURPLUS_WEIGHT_OZ = 32;   // ~2 lbs / ~1 kg threshold
+  const SURPLUS_QTY = 10;
+  const [surplusBanner, setSurplusBanner] = useState<{ plantName: string; weightOz?: number; quantity?: number } | null>(null);
+  const [surplusOfferSubmitting, setSurplusOfferSubmitting] = useState(false);
+
   const emptyForm = {
     instance_id: 0,
     harvest_date: getGardenToday(),
@@ -155,17 +161,26 @@ export default function HarvestPage() {
     e.preventDefault();
     if (!formData.instance_id) return;
     setSubmitting(true);
+    const weightOz = formData.weight_oz ? parseFloat(formData.weight_oz) : undefined;
+    const quantity = formData.quantity ? parseInt(formData.quantity) : undefined;
+    const instanceId = formData.instance_id;
     try {
-      await createHarvest({
-        instance_id: formData.instance_id,
+      const result = await createHarvest({
+        instance_id: instanceId,
         harvest_date: formData.harvest_date,
-        weight_oz: formData.weight_oz ? parseFloat(formData.weight_oz) : undefined,
-        quantity: formData.quantity ? parseInt(formData.quantity) : undefined,
+        weight_oz: weightOz,
+        quantity,
         quality: formData.quality || undefined,
         notes: formData.notes || undefined,
         create_journal_entry: formData.create_journal_entry || undefined,
         final_harvest: formData.final_harvest || undefined,
       });
+      // Check if this is a large harvest that might be surplus
+      const isLarge = (weightOz != null && weightOz >= SURPLUS_WEIGHT_OZ) || (quantity != null && quantity >= SURPLUS_QTY);
+      if (isLarge) {
+        const plantName = result?.plant_name || instances.find(i => i.id === instanceId)?.plant_name || 'your harvest';
+        setSurplusBanner({ plantName, weightOz, quantity });
+      }
       setFormData(emptyForm);
       setShowForm(false);
       setLoading(true);
@@ -174,6 +189,25 @@ export default function HarvestPage() {
       setError('Failed to log harvest');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSurplusOffer = async () => {
+    if (!surplusBanner) return;
+    setSurplusOfferSubmitting(true);
+    try {
+      const parts: string[] = [];
+      if (surplusBanner.weightOz != null) parts.push(`${surplusBanner.weightOz} oz`);
+      if (surplusBanner.quantity != null) parts.push(`${surplusBanner.quantity} items`);
+      const qtyDesc = parts.length > 0 ? parts.join(', ') : 'Fresh from the garden';
+      await createHarvestOffer({ plant_name: surplusBanner.plantName, quantity_description: qtyDesc, published: true });
+      toast('Surplus offer posted to co-op!', 'success');
+      setSurplusBanner(null);
+      getSurplusSuggestions().then(setSurplusSuggestions);
+    } catch {
+      toast('Failed to post surplus offer', 'error');
+    } finally {
+      setSurplusOfferSubmitting(false);
     }
   };
 
@@ -392,6 +426,39 @@ export default function HarvestPage() {
             {submitting ? 'Saving...' : 'Save Harvest'}
           </button>
         </form>
+      )}
+
+      {/* Surplus offer banner — shown when a large harvest is logged */}
+      {surplusBanner && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-start gap-3 shadow-sm">
+          <span className="text-2xl shrink-0">{'\uD83E\uDDE3'}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+              Big harvest! Share surplus {surplusBanner.plantName} with your co-op?
+            </p>
+            <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+              {surplusBanner.weightOz != null && `${surplusBanner.weightOz} oz`}
+              {surplusBanner.weightOz != null && surplusBanner.quantity != null && ' · '}
+              {surplusBanner.quantity != null && `${surplusBanner.quantity} items`}
+              {' '}— one click creates a harvest offer from your logged data.
+            </p>
+            <div className="flex gap-2 mt-2.5">
+              <button
+                onClick={handleSurplusOffer}
+                disabled={surplusOfferSubmitting}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                {surplusOfferSubmitting ? 'Posting...' : 'Yes, post offer'}
+              </button>
+              <button
+                onClick={() => setSurplusBanner(null)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-green-700 dark:text-green-300 border border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+              >
+                No thanks
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Upcoming Harvests - collapsible section */}

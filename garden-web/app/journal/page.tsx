@@ -983,6 +983,28 @@ export default function JournalPage() {
             )}
           </div>
 
+          {/* Co-op tip sharing toggle */}
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={shareWithCoop}
+              onClick={() => setShareWithCoop((v) => !v)}
+              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-garden-500 focus:ring-offset-1 ${
+                shareWithCoop ? 'bg-garden-600' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  shareWithCoop ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className="text-xs text-earth-500 dark:text-gray-400">
+              {shareWithCoop ? '\uD83D\uDCA1 Share as co-op tip' : 'Share as co-op tip?'}
+            </span>
+          </label>
+
           {/* Submit */}
           <div className="flex justify-end gap-3">
             <button
