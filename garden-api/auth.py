@@ -49,6 +49,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             path == '/api/federation/profile' or       # Federation peer-to-peer (sig auth)
             path == '/api/federation/plant-list' or    # Federation peer-to-peer (sig auth)
             path == '/api/federation/sync' or          # Federation peer-to-peer (sig auth)
+            path == '/api/federation/pairing-qr' or    # Public pairing QR — peers scan without a session
             path.endswith('/qr') or                     # QR code images are public (scan without logging in)
             request.method == 'OPTIONS'):  # CORS preflight
             return await call_next(request)

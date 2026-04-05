@@ -55,7 +55,10 @@ export default function SeedsPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [seedSwaps, setSeedSwaps] = useState<SeedSwap[]>([]);
-  const [showSeedSwaps, setShowSeedSwaps] = useState(false);
+  const [showSeedSwaps, setShowSeedSwaps] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('seeds_community_open') === 'true';
+  });
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [showWishlist, setShowWishlist] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);

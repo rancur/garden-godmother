@@ -1612,6 +1612,20 @@ export async function getFederationStats() {
   }>;
 }
 
+export async function getPublicGardenProfile() {
+  const r = await fetch(`${API_URL}/api/federation/profile`);
+  if (!r.ok) throw new Error(`${r.status}: Failed to fetch garden profile`);
+  return r.json();
+}
+
+export function getGardenProfile() {
+  return apiFetch('/api/settings/garden-profile');
+}
+
+export function updateGardenProfile(data: { garden_bio?: string; instance_name?: string }) {
+  return apiFetch('/api/settings/garden-profile', { method: 'PATCH', body: JSON.stringify(data) });
+}
+
 // ── CO-OP BOARD & DATA ──────────────────────────────────────────────
 
 export function getCoopBoard() {
@@ -1642,6 +1656,18 @@ export function updateHarvestOffer(id: number, data: Partial<{
 
 export function deleteHarvestOffer(id: number) {
   return apiFetch(`/api/harvest-offers/${id}`, { method: 'DELETE' });
+}
+
+export function claimHarvestOffer(id: number) {
+  return apiFetch(`/api/harvest-offers/${id}/claim`, { method: 'POST' });
+}
+
+export function unclaimHarvestOffer(id: number) {
+  return apiFetch(`/api/harvest-offers/${id}/claim`, { method: 'DELETE' });
+}
+
+export function pairFromQr(data: { gg_url: string; instance_name: string; pubkey: string }) {
+  return apiFetch('/api/federation/pair-from-qr', { method: 'POST', body: JSON.stringify(data) });
 }
 
 export async function getSurplusSuggestions(): Promise<Array<{
@@ -1698,9 +1724,12 @@ export async function getCoopSummary() {
   if (!r.ok) return null;
   return r.json() as Promise<{
     active_peers: number;
-    recent_alerts: number;
+    peer_names: string[];
     harvest_offers: number;
     seed_swaps: number;
+    pest_alerts_week: number;
+    my_contributions: number;
+    recent_alerts: number;
     my_active_offers: number;
   }>;
 }

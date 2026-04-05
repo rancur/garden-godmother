@@ -2643,4 +2643,17 @@ def startup_run_migrations():
             "ALTER TABLE seed_trays ADD COLUMN reservoir_last_refilled TEXT",
         ])
 
+        # ── Migration 068: harvest offer claim columns ──
+        run_migration(db, 68, "harvest_offer_claim_columns", [
+            "ALTER TABLE harvest_offers ADD COLUMN claimed_by_user_id INTEGER",
+            "ALTER TABLE harvest_offers ADD COLUMN claimed_at TEXT",
+        ])
+
+        # ── Migration 069: view_count on federation_alerts ──
+        def _federation_alert_view_count(db):
+            _migration_add_columns_if_missing(db, "federation_alerts", {
+                "view_count": "INTEGER DEFAULT 0",
+            })
+        run_migration(db, 69, "federation_alerts_view_count", [], callback=_federation_alert_view_count)
+
         logger.info("Migration system: all migrations checked/applied")

@@ -27,6 +27,7 @@ import {
   getFederationPrefs,
   updateFederationPrefs,
   getFederationPeers,
+  pairFromQr,
   API_URL,
 } from '../api';
 import { useToast } from '../toast';
@@ -537,6 +538,13 @@ function CoopSettingsCard() {
   // Peers state
   const [peerCount, setPeerCount] = useState<number | null>(null);
 
+  // QR pairing state
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrScanInput, setQrScanInput] = useState('');
+  const [qrPairing, setQrPairing] = useState(false);
+  const [qrPairInput, setQrPairInput] = useState('');
+  const [qrPairLoading, setQrPairLoading] = useState(false);
+
   // Sharing prefs state
   const [prefs, setPrefs] = useState<CoopFederationPrefs | null>(null);
   const [prefsLoading, setPrefsLoading] = useState(true);
@@ -603,6 +611,33 @@ function CoopSettingsCard() {
     }
   };
 
+  const handlePairFromQr = async () => {
+    const raw = qrPairInput.trim();
+    if (!raw) { toast("Paste the JSON from your partner's QR code", 'error'); return; }
+    let parsed: { gg_url?: string; instance_name?: string; pubkey?: string };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      toast('Invalid JSON — copy the text shown below the QR code', 'error');
+      return;
+    }
+    if (!parsed.gg_url || !parsed.pubkey) {
+      toast('Missing gg_url or pubkey in QR data', 'error');
+      return;
+    }
+    setQrPairLoading(true);
+    try {
+      await pairFromQr({ gg_url: parsed.gg_url, instance_name: parsed.instance_name ?? '', pubkey: parsed.pubkey });
+      setQrPairInput('');
+      setPeerCount((c) => (c ?? 0) + 1);
+      toast('Peer added — waiting for them to accept', 'success');
+    } catch {
+      toast('Could not add peer from QR', 'error');
+    } finally {
+      setQrPairLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Identity */}
@@ -623,12 +658,20 @@ function CoopSettingsCard() {
                 {identity.key_fingerprint}
               </p>
             )}
-            <Link
-              href="/coop"
-              className="inline-block text-xs text-garden-600 dark:text-garden-400 hover:underline mt-1"
-            >
-              View Co-op community &rarr;
-            </Link>
+            <div className="flex items-center gap-4 flex-wrap mt-1">
+              <Link
+                href="/coop"
+                className="text-xs text-garden-600 dark:text-garden-400 hover:underline"
+              >
+                View Co-op community &rarr;
+              </Link>
+              <Link
+                href="/garden-profile"
+                className="text-xs text-garden-600 dark:text-garden-400 hover:underline"
+              >
+                View public profile &rarr;
+              </Link>
+            </div>
           </div>
         ) : showSetupForm ? (
           <form onSubmit={handleSetup} className="space-y-3">

@@ -8,6 +8,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from db import get_db
 from auth import require_user, require_admin, audit_log, get_current_user
@@ -258,6 +259,53 @@ def update_usda_zone(request: Request, data: UsdaZoneUpdate):
                       request.client.host if request.client else None)
         db.commit()
     return {"zone": data.zone}
+
+
+# ──────────────── GARDEN BIO / INSTANCE NAME ────────────────
+
+
+class GardenProfileUpdate(BaseModel):
+    garden_bio: Optional[str] = None
+    instance_name: Optional[str] = None
+
+
+@router.get("/api/settings/garden-profile")
+def get_garden_profile(request: Request):
+    """Return the public garden bio and instance name."""
+    require_user(request)
+    with get_db() as db:
+        bio_row = db.execute("SELECT value FROM app_config WHERE key = 'garden_bio'").fetchone()
+        name_row = db.execute("SELECT value FROM app_config WHERE key = 'instance_name'").fetchone()
+    return {
+        "garden_bio": bio_row["value"] if bio_row else "",
+        "instance_name": name_row["value"] if name_row else "",
+    }
+
+
+@router.patch("/api/settings/garden-profile")
+def update_garden_profile(request: Request, data: GardenProfileUpdate):
+    """Save garden bio and/or instance name to app_config."""
+    require_admin(request)
+    with get_db() as db:
+        if data.garden_bio is not None:
+            db.execute(
+                "INSERT OR REPLACE INTO app_config (key, value) VALUES ('garden_bio', ?)",
+                (data.garden_bio,),
+            )
+        if data.instance_name is not None:
+            db.execute(
+                "INSERT OR REPLACE INTO app_config (key, value) VALUES ('instance_name', ?)",
+                (data.instance_name,),
+            )
+        user = getattr(request.state, "user", None)
+        if user:
+            audit_log(
+                db, user["id"], "update", "setting", None,
+                {"garden_bio": data.garden_bio, "instance_name": data.instance_name},
+                request.client.host if request.client else None,
+            )
+        db.commit()
+    return {"ok": True}
 
 
 # ──────────────── SETTINGS (aggregated) ────────────────

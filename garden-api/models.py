@@ -554,6 +554,12 @@ class FederationPairAccept(BaseModel):
     instance_url: str
 
 
+class QRPairPayload(BaseModel):
+    gg_url: str
+    instance_name: str
+    pubkey: str
+
+
 # ── FEDERATION DATA MODELS ──────────────────────────────────────────
 
 class HarvestOfferCreate(BaseModel):

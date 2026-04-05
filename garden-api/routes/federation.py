@@ -30,6 +30,7 @@ from models import (
     FederationPeerUpdate,
     FederationPrefsUpdate,
     FederationSetup,
+    QRPairPayload,
 )
 
 logger = logging.getLogger(__name__)
@@ -671,6 +672,86 @@ def get_pairing_qr(request: Request):
         )
 
 
+@router.get("/api/federation/pairing-qr")
+def get_pairing_qr_public(request: Request):
+    """Return a QR code PNG encoding this instance's identity for peer pairing.
+
+    No auth required — peers can scan this without a session.
+    Encodes JSON: {gg_url, instance_name, pubkey}
+    """
+    import io
+    import json as _json
+
+    import qrcode
+    from fastapi.responses import StreamingResponse
+
+    with get_db() as db:
+        identity = db.execute("SELECT * FROM federation_identity WHERE id = 1").fetchone()
+        if not identity:
+            raise HTTPException(400, "Federation identity not configured")
+        identity = dict(identity)
+
+    base_url = identity.get("instance_url") or ""
+    instance_name = identity.get("display_name") or ""
+    pubkey = identity.get("public_key") or ""
+
+    payload = _json.dumps({"gg_url": base_url, "instance_name": instance_name, "pubkey": pubkey})
+
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(payload)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return StreamingResponse(buf, media_type="image/png")
+
+
+@router.post("/api/federation/pair-from-qr")
+def pair_from_qr(body: QRPairPayload, request: Request):
+    """Create a new peer entry from data scanned out of a peer's pairing QR code."""
+    user = require_user(request)
+    now = _now_iso()
+
+    peer_url = body.gg_url.rstrip("/")
+
+    with get_db() as db:
+        # Upsert peer — use gg_url as the peer_id key since we have no instance_id yet
+        existing = db.execute(
+            "SELECT id, peer_id FROM federation_peers WHERE peer_url = ?", (peer_url,)
+        ).fetchone()
+
+        if existing:
+            db.execute(
+                """UPDATE federation_peers
+                   SET display_name = ?, public_key = ?, status = 'pending', last_seen = ?
+                   WHERE peer_url = ?""",
+                (body.instance_name, body.pubkey, now, peer_url),
+            )
+            peer_row_id = existing["id"]
+        else:
+            # Use gg_url as a temporary peer_id — will be replaced once they respond
+            cur = db.execute(
+                """INSERT INTO federation_peers
+                   (peer_id, peer_url, display_name, public_key, status, created_at, last_seen)
+                   VALUES (?, ?, ?, ?, 'pending', ?, ?)""",
+                (peer_url, peer_url, body.instance_name, body.pubkey, now, now),
+            )
+            peer_row_id = cur.lastrowid
+        db.commit()
+
+        row = db.execute("SELECT * FROM federation_peers WHERE id = ?", (peer_row_id,)).fetchone()
+
+    return {"status": "pending", "peer": dict(row)}
+
+
 # ──────────────── PUBLIC PEER-TO-PEER ENDPOINTS ────────────────
 # These are called by remote GG instances, NOT by user sessions.
 # Auth is via Ed25519 request signatures, except pair-request which uses invite codes.
@@ -810,13 +891,12 @@ async def receive_pair_accept(body: FederationPairAccept, request: Request):
 
 @router.get("/api/federation/profile")
 async def get_public_profile(request: Request):
-    """Return our public identity profile to a verified peer."""
-    body_bytes = await request.body()
-    request.state._body_bytes = body_bytes
+    """Return public garden profile — no auth required.
 
+    Includes identity info, growing season summary, recent harvests,
+    available seed swaps, and available harvest offers.
+    """
     with get_db() as db:
-        peer = _verify_peer_request(request, db)
-
         identity = db.execute(
             "SELECT * FROM federation_identity WHERE id = 1"
         ).fetchone()
@@ -824,12 +904,110 @@ async def get_public_profile(request: Request):
             raise HTTPException(status_code=503, detail="Federation not configured")
 
         identity = dict(identity)
+
+        # Garden bio from app_config
+        bio_row = db.execute(
+            "SELECT value FROM app_config WHERE key = 'garden_bio'"
+        ).fetchone()
+        garden_bio = bio_row["value"] if bio_row else None
+
+        # Instance name from app_config (fallback to federation display_name)
+        name_row = db.execute(
+            "SELECT value FROM app_config WHERE key = 'instance_name'"
+        ).fetchone()
+        instance_name = name_row["value"] if name_row else identity.get("display_name", "")
+
+        # Growing season summary
+        active_plantings = db.execute(
+            "SELECT COUNT(*) FROM plantings WHERE status IN ('growing','sprouted','flowering','fruiting','established')"
+        ).fetchone()[0]
+
+        beds_in_use = db.execute(
+            """SELECT COUNT(DISTINCT bed_id) FROM plantings
+               WHERE status IN ('growing','sprouted','flowering','fruiting','established')
+               AND bed_id IS NOT NULL"""
+        ).fetchone()[0]
+
+        growing_rows = db.execute(
+            """SELECT DISTINCT pl.name
+               FROM plantings p
+               JOIN plants pl ON pl.id = p.plant_id
+               WHERE p.status IN ('growing','sprouted','flowering','fruiting','established')
+               ORDER BY pl.name
+               LIMIT 20"""
+        ).fetchall()
+        growing_plants = [r["name"] for r in growing_rows]
+
+        # Recent harvest highlights — last 3, public info only (no notes)
+        harvest_rows = db.execute(
+            """SELECT pl.name AS plant_name,
+                      h.harvest_date,
+                      h.weight_oz,
+                      h.quantity
+               FROM harvests h
+               LEFT JOIN plantings p ON h.planting_id = p.id
+               LEFT JOIN plants pl ON pl.id = p.plant_id
+               ORDER BY h.harvest_date DESC, h.id DESC
+               LIMIT 3"""
+        ).fetchall()
+        recent_harvests = [
+            {
+                "plant_name": r["plant_name"],
+                "harvest_date": r["harvest_date"],
+                "weight_oz": r["weight_oz"],
+                "quantity": r["quantity"],
+            }
+            for r in harvest_rows
+        ]
+
+        # Available seed swaps (published offers)
+        swap_rows = db.execute(
+            """SELECT id, plant_name, variety, quantity_description, looking_for
+               FROM seed_swaps
+               WHERE status = 'available' AND published = 1
+               ORDER BY created_at DESC"""
+        ).fetchall()
+        seed_swaps = [dict(r) for r in swap_rows]
+
+        # Seeds from inventory marked as swap-available
+        inventory_swap_rows = db.execute(
+            """SELECT id, plant_name, variety_name
+               FROM seed_inventory
+               WHERE coop_swap_available = 1"""
+        ).fetchall()
+        for r in inventory_swap_rows:
+            seed_swaps.append({
+                "id": None,
+                "plant_name": r["plant_name"],
+                "variety": r["variety_name"],
+                "quantity_description": "Available",
+                "looking_for": None,
+            })
+
+        # Available harvest offers
+        offer_rows = db.execute(
+            """SELECT id, plant_name, quantity_description, available_from, available_until
+               FROM harvest_offers
+               WHERE status = 'available' AND published = 1
+               ORDER BY created_at DESC"""
+        ).fetchall()
+        harvest_offers = [dict(r) for r in offer_rows]
+
         return {
             "instance_id": identity["instance_id"],
-            "display_name": identity["display_name"],
+            "display_name": instance_name,
             "public_key": identity["public_key"],
             "coarse_location": identity.get("coarse_location"),
             "instance_url": identity.get("instance_url"),
+            "garden_bio": garden_bio,
+            "growing_season": {
+                "active_plantings": active_plantings,
+                "beds_in_use": beds_in_use,
+                "plants": growing_plants,
+            },
+            "recent_harvests": recent_harvests,
+            "seed_swaps": seed_swaps,
+            "harvest_offers": harvest_offers,
         }
 
 
@@ -959,5 +1137,44 @@ async def get_sync_feed(since: int = 0, request: Request = None):
                         "expires_at": None,
                     }
                 )
+
+        # Share alerts/tips if enabled — increment view_count for each alert fetched
+        if prefs.get("share_alerts"):
+            alert_rows = db.execute(
+                """SELECT id, alert_type, title, body, severity, affects_plants,
+                          expires_at, created_at, COALESCE(view_count, 0) as view_count
+                   FROM federation_alerts
+                   WHERE source_peer_id IS NULL AND published = 1 AND id > ?
+                   ORDER BY id""",
+                (since,),
+            ).fetchall()
+            alert_ids = []
+            for r in alert_rows:
+                seq = max(seq, r["id"])
+                alert_ids.append(r["id"])
+                items.append(
+                    {
+                        "data_type": "alert",
+                        "seq": r["id"],
+                        "payload": {
+                            "alert_id": r["id"],
+                            "alert_type": r["alert_type"],
+                            "title": r["title"],
+                            "body": r["body"],
+                            "severity": r["severity"],
+                            "affects_plants": r["affects_plants"],
+                            "view_count": r["view_count"],
+                        },
+                        "expires_at": r["expires_at"],
+                    }
+                )
+            # Increment view_count for all alerts served in this request
+            if alert_ids:
+                placeholders = ",".join("?" * len(alert_ids))
+                db.execute(
+                    f"UPDATE federation_alerts SET view_count = COALESCE(view_count, 0) + 1 WHERE id IN ({placeholders})",
+                    alert_ids,
+                )
+                db.commit()
 
         return {"items": items, "next_seq": seq}

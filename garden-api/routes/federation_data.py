@@ -1,5 +1,8 @@
 """Federation data exchange routes — harvest offers, seed swaps, alerts, co-op board."""
+from __future__ import annotations
+
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from db import get_db
@@ -241,6 +244,86 @@ def delete_harvest_offer(request: Request, offer_id: int):
         db.commit()
 
 
+@router.post("/api/harvest-offers/{offer_id}/claim")
+def claim_harvest_offer(request: Request, offer_id: int):
+    """Mark a harvest offer as claimed by the current user."""
+    user = require_user(request)
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    with get_db() as db:
+        offer = db.execute("SELECT * FROM harvest_offers WHERE id = ?", (offer_id,)).fetchone()
+        if not offer:
+            raise HTTPException(status_code=404, detail="Harvest offer not found")
+        offer = dict(offer)
+
+        if offer.get("status") == "claimed":
+            raise HTTPException(status_code=409, detail="This offer has already been claimed")
+
+        # Ensure claim columns exist (guard for DBs not yet migrated)
+        columns = [row[1] for row in db.execute("PRAGMA table_info(harvest_offers)").fetchall()]
+        if "claimed_by_user_id" not in columns:
+            try:
+                db.execute("ALTER TABLE harvest_offers ADD COLUMN claimed_by_user_id INTEGER")
+                db.execute("ALTER TABLE harvest_offers ADD COLUMN claimed_at TEXT")
+                db.commit()
+            except Exception:
+                pass
+
+        db.execute(
+            """UPDATE harvest_offers
+               SET status = 'claimed', claimed_by_user_id = ?, claimed_at = ?, updated_at = datetime('now')
+               WHERE id = ?""",
+            (user["id"], now, offer_id),
+        )
+        db.commit()
+
+        # Notify — best-effort insert into notification_log for the offer creator
+        try:
+            display_name = user.get("display_name") or user.get("username", "Someone")
+            plant_name = offer.get("plant_name", "harvest")
+            db.execute(
+                """INSERT INTO notification_log (user_id, channel_type, event_type, title, body, status, error)
+                   VALUES (1, 'in_app', 'harvest_claimed', 'Harvest offer claimed', ?, 'sent', NULL)""",
+                (f"{display_name} claimed your {plant_name} offer.",),
+            )
+            db.commit()
+        except Exception:
+            pass  # notifications are best-effort
+
+        updated = db.execute("SELECT * FROM harvest_offers WHERE id = ?", (offer_id,)).fetchone()
+        return dict(updated)
+
+
+@router.delete("/api/harvest-offers/{offer_id}/claim", status_code=200)
+def unclaim_harvest_offer(request: Request, offer_id: int):
+    """Un-claim a harvest offer, reverting it to available. Only the claimer may un-claim."""
+    user = require_user(request)
+
+    with get_db() as db:
+        offer = db.execute("SELECT * FROM harvest_offers WHERE id = ?", (offer_id,)).fetchone()
+        if not offer:
+            raise HTTPException(status_code=404, detail="Harvest offer not found")
+        offer = dict(offer)
+
+        if offer.get("status") != "claimed":
+            raise HTTPException(status_code=400, detail="Offer is not claimed")
+
+        if offer.get("claimed_by_user_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="You did not claim this offer")
+
+        db.execute(
+            """UPDATE harvest_offers
+               SET status = 'available', claimed_by_user_id = NULL, claimed_at = NULL,
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (offer_id,),
+        )
+        db.commit()
+
+        updated = db.execute("SELECT * FROM harvest_offers WHERE id = ?", (offer_id,)).fetchone()
+        return dict(updated)
+
+
 # ── Seed Swaps ────────────────────────────────────────────────────────
 
 @router.get("/api/seed-swaps")
@@ -430,11 +513,11 @@ def get_coop_summary(request: Request):
     """Lightweight counts for the dashboard community widget."""
     require_user(request)
     with get_db() as db:
-        # Unread alerts (last 48h from peers)
-        alert_count = db.execute("""
+        # Pest alerts from peers this week (severity warning/urgent)
+        pest_alerts_week = db.execute("""
             SELECT COUNT(*) FROM federation_alerts
-            WHERE source_peer_id IS NOT NULL
-            AND created_at >= datetime('now', '-48 hours')
+            WHERE created_at >= datetime('now', '-7 days')
+            AND (alert_type = 'pest' OR severity IN ('warning', 'urgent'))
         """).fetchone()[0]
 
         # Peer harvest offers available
@@ -445,7 +528,6 @@ def get_coop_summary(request: Request):
                 "SELECT payload FROM federation_peer_data WHERE data_type='harvest_offers'"
             ).fetchall()
             for row in board_peers:
-                import json
                 offers = json.loads(row["payload"])
                 harvest_offer_count += len([o for o in offers if o.get("status") == "available"])
 
@@ -458,20 +540,39 @@ def get_coop_summary(request: Request):
         except Exception:
             pass
 
-        # My active offers
+        # My active offers (harvest_offers)
         my_offers = db.execute(
-            "SELECT COUNT(*) FROM harvest_offers WHERE status='available'"
+            "SELECT COUNT(*) FROM harvest_offers WHERE status='available' AND published=1"
         ).fetchone()[0]
 
-        active_peers = db.execute(
-            "SELECT COUNT(*) FROM federation_peers WHERE status='active'"
+        # My published seed swaps
+        my_seed_swaps = db.execute(
+            "SELECT COUNT(*) FROM seed_swaps WHERE status='available' AND published=1"
         ).fetchone()[0]
+
+        # My published alerts/tips
+        my_alerts = db.execute(
+            "SELECT COUNT(*) FROM federation_alerts WHERE source_peer_id IS NULL AND published=1"
+        ).fetchone()[0]
+
+        my_contributions = my_offers + my_seed_swaps + my_alerts
+
+        # Connected peers (count + names)
+        peer_rows = db.execute(
+            "SELECT display_name FROM federation_peers WHERE status='active' ORDER BY display_name"
+        ).fetchall()
+        active_peers = len(peer_rows)
+        peer_names = [r["display_name"] for r in peer_rows if r["display_name"]]
 
         return {
             "active_peers": active_peers,
-            "recent_alerts": alert_count,
+            "peer_names": peer_names,
             "harvest_offers": harvest_offer_count,
             "seed_swaps": seed_swap_count,
+            "pest_alerts_week": pest_alerts_week,
+            "my_contributions": my_contributions,
+            # keep legacy field for backward-compat
+            "recent_alerts": pest_alerts_week,
             "my_active_offers": my_offers,
         }
 
@@ -491,6 +592,7 @@ def get_coop_feed(request: Request, limit: int = 20, type: str = None):
         alerts = db.execute("""
             SELECT 'alert' as item_type, id, alert_type, title, severity,
                    source_peer_id, created_at,
+                   COALESCE(view_count, 0) as view_count,
                    CASE WHEN source_peer_id IS NULL THEN 'You' ELSE source_peer_id END as actor
             FROM federation_alerts
             ORDER BY created_at DESC LIMIT ?
@@ -505,6 +607,7 @@ def get_coop_feed(request: Request, limit: int = 20, type: str = None):
                 "alert_type": a["alert_type"],
                 "severity": a["severity"],
                 "is_mine": a["source_peer_id"] is None,
+                "view_count": a["view_count"],
                 "created_at": a["created_at"],
             })
 

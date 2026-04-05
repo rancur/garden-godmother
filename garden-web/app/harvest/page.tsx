@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantInstances, getUpcomingHarvests, getExportUrl, undoAction, getCellPositionLabel, getSurplusSuggestions, createHarvestOffer, getCoopBoard } from '../api';
+import { getHarvests, createHarvest, deleteHarvest, getHarvestSummary, getPlantInstances, getUpcomingHarvests, getExportUrl, undoAction, getCellPositionLabel, getSurplusSuggestions, createHarvestOffer, getCoopBoard, claimHarvestOffer, unclaimHarvestOffer } from '../api';
 import { TypeaheadSelect, TypeaheadOption } from '../typeahead-select';
 import { MiniGrid } from '../components/MiniGrid';
 import { useModal } from '../confirm-modal';
@@ -78,6 +78,9 @@ interface PeerHarvestOffer {
   plant_name: string;
   quantity_description?: string;
   peer_name?: string;
+  id?: number;
+  status?: string;
+  claimed_by_user_id?: number | null;
   [key: string]: unknown;
 }
 
@@ -103,12 +106,16 @@ export default function HarvestPage() {
   const [summary, setSummary] = useState<HarvestSummary | null>(null);
   const [upcomingHarvests, setUpcomingHarvests] = useState<UpcomingHarvest[]>([]);
   const [upcomingExpanded, setUpcomingExpanded] = useState(true);
-  const [communityExpanded, setCommunityExpanded] = useState(true);
+  const [communityExpanded, setCommunityExpanded] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('harvest_community_open') !== 'false';
+  });
   const [surplusSuggestions, setSurplusSuggestions] = useState<SurplusSuggestion[]>([]);
   const [peerOffers, setPeerOffers] = useState<PeerHarvestOffer[]>([]);
   const [offerFormPlant, setOfferFormPlant] = useState<string | null>(null);
   const [offerQtyDesc, setOfferQtyDesc] = useState('');
   const [offerSubmitting, setOfferSubmitting] = useState(false);
+  const [claimingOfferId, setClaimingOfferId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,12 +153,10 @@ export default function HarvestPage() {
     // Load community data independently (non-blocking)
     getSurplusSuggestions().then(data => {
       setSurplusSuggestions(data);
-      if (data.length > 0) setCommunityExpanded(true);
     });
     getCoopBoard().then((board: { harvest_offers?: PeerHarvestOffer[] }) => {
       const offers = board?.harvest_offers ?? [];
       setPeerOffers(offers);
-      if (offers.length > 0) setCommunityExpanded(true);
     }).catch(() => {/* ignore */});
   };
 
@@ -238,6 +243,34 @@ export default function HarvestPage() {
       toast('Failed to post offer', 'error');
     } finally {
       setOfferSubmitting(false);
+    }
+  };
+
+  const handleClaimOffer = async (offer: PeerHarvestOffer) => {
+    if (!offer.id || claimingOfferId !== null) return;
+    setClaimingOfferId(offer.id);
+    try {
+      await claimHarvestOffer(offer.id);
+      setPeerOffers(prev => prev.map(o => o.id === offer.id ? { ...o, status: 'claimed' } : o));
+      toast(`Claimed ${offer.plant_name} — contact ${offer.peer_name || 'the grower'} to arrange pickup!`, 'success');
+    } catch {
+      toast('Could not claim offer', 'error');
+    } finally {
+      setClaimingOfferId(null);
+    }
+  };
+
+  const handleUnclaimOffer = async (offer: PeerHarvestOffer) => {
+    if (!offer.id || claimingOfferId !== null) return;
+    setClaimingOfferId(offer.id);
+    try {
+      await unclaimHarvestOffer(offer.id);
+      setPeerOffers(prev => prev.map(o => o.id === offer.id ? { ...o, status: 'available' } : o));
+      toast('Claim removed', 'success');
+    } catch {
+      toast('Could not remove claim', 'error');
+    } finally {
+      setClaimingOfferId(null);
     }
   };
 
@@ -529,7 +562,11 @@ export default function HarvestPage() {
       {(surplusSuggestions.length > 0 || peerOffers.length > 0) && (
         <div className="bg-green-50 dark:bg-green-950/30 rounded-xl shadow border border-green-200 dark:border-green-800/50 overflow-hidden">
           <button
-            onClick={() => setCommunityExpanded(!communityExpanded)}
+            onClick={() => {
+              const next = !communityExpanded;
+              setCommunityExpanded(next);
+              localStorage.setItem('harvest_community_open', String(next));
+            }}
             className="w-full flex items-center justify-between p-4 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors"
           >
             <div className="flex items-center gap-2">
@@ -613,19 +650,42 @@ export default function HarvestPage() {
                     {'\u{1F331}'} Available Near You
                   </h3>
                   <div className="space-y-2">
-                    {peerOffers.map((offer, i) => (
-                      <div key={i} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-100 dark:border-green-800/40 flex items-center justify-between gap-2">
-                        <div>
-                          <span className="font-medium text-earth-800 dark:text-gray-200 text-sm">{offer.plant_name}</span>
-                          {offer.quantity_description && (
-                            <span className="ml-2 text-xs text-earth-500 dark:text-gray-400">{offer.quantity_description}</span>
+                    {peerOffers.map((offer, i) => {
+                      const isClaimed = offer.status === 'claimed';
+                      const isClaiming = claimingOfferId === offer.id;
+                      return (
+                        <div key={i} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-green-100 dark:border-green-800/40 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-earth-800 dark:text-gray-200 text-sm">{offer.plant_name}</span>
+                            {offer.quantity_description && (
+                              <span className="ml-2 text-xs text-earth-500 dark:text-gray-400">{offer.quantity_description}</span>
+                            )}
+                            {offer.peer_name && (
+                              <span className="ml-2 text-xs text-earth-400 dark:text-gray-500">from {offer.peer_name}</span>
+                            )}
+                          </div>
+                          {offer.id != null && (
+                            isClaimed ? (
+                              <button
+                                onClick={() => handleUnclaimOffer(offer)}
+                                disabled={isClaiming}
+                                className="shrink-0 text-xs px-3 py-1 rounded-full font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-700 hover:bg-green-200 dark:hover:bg-green-900/60 transition disabled:opacity-50"
+                              >
+                                {isClaiming ? '...' : `✓ Claimed — contact ${offer.peer_name || 'grower'}`}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleClaimOffer(offer)}
+                                disabled={isClaiming}
+                                className="shrink-0 text-xs px-3 py-1 rounded-full font-medium bg-garden-600 text-white hover:bg-garden-700 transition disabled:opacity-50"
+                              >
+                                {isClaiming ? '...' : "🙋 I'm interested / Claim"}
+                              </button>
+                            )
                           )}
                         </div>
-                        {offer.peer_name && (
-                          <span className="text-xs text-earth-400 dark:text-gray-500 whitespace-nowrap">{offer.peer_name}</span>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
