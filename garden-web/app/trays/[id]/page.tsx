@@ -449,6 +449,14 @@ export default function TrayDetailPage() {
             {tray.location && <> &middot; {tray.location}</>}
           </span>
           <button
+            onClick={() => window.open(`/trays/${trayId}/qr`, '_blank')}
+            className="min-h-[44px] sm:min-h-0 text-sm bg-earth-100 hover:bg-earth-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-earth-600 dark:text-gray-300 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+            title="Print and attach to your tray for quick access"
+          >
+            <span className="hidden sm:inline">&#x1F532; Print QR</span>
+            <span className="sm:hidden">&#x1F532;</span>
+          </button>
+          <button
             onClick={handleDuplicate}
             className="min-h-[44px] sm:min-h-0 text-sm bg-earth-100 hover:bg-earth-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-earth-600 dark:text-gray-300 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ml-auto"
             title="Duplicate tray"

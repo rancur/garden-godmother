@@ -1411,6 +1411,14 @@ export default function BedDetailPage() {
             <span className="sm:hidden">{loadingCompanions ? '...' : ''}</span>
           </button>
           <button
+            onClick={() => window.open(`/planters/${bedId}/qr`, '_blank')}
+            className="min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-earth-100 dark:bg-gray-700 text-earth-600 dark:text-gray-300 border border-earth-200 dark:border-gray-600 hover:bg-earth-200 dark:hover:bg-gray-600"
+            title="Print and attach to your planter for quick access"
+          >
+            <span className="hidden sm:inline">&#x1F532; Print QR</span>
+            <span className="sm:hidden">&#x1F532;</span>
+          </button>
+          <button
             onClick={handleDeleteBed}
             className="min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/50 ml-auto"
             title="Delete this planter"

@@ -453,6 +453,7 @@ class JournalEntryCreate(BaseModel):
     tags: Optional[list[str]] = None
     severity: Optional[str] = None  # for problem type: low, medium, high, critical
     milestone_type: Optional[str] = None  # sprouted, flowering, fruiting, first_harvest, established
+    share_with_coop: Optional[bool] = None  # broadcast as co-op tip if True
 
 class JournalEntryUpdate(BaseModel):
     entry_type: Optional[str] = None

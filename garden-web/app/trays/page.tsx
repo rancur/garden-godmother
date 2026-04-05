@@ -488,7 +488,7 @@ export default function TraysPage() {
                 <span>&#128167;</span> Refill Reservoir
               </button>
             </div>
-          )
+          )}
         </div>
         {/* Show drop-after indicator for last item only */}
         {isDropAfter && index === (traysByArea.get(areaId) || []).length - 1 && (

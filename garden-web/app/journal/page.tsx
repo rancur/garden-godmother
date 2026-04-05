@@ -231,6 +231,7 @@ export default function JournalPage() {
   const [formPhotos, setFormPhotos] = useState<File[]>([]);
   const [formPhotoPreviews, setFormPhotoPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [shareWithCoop, setShareWithCoop] = useState(false);
 
   // Edit state
   const [editingId, setEditingId] = useState<number | null>(null);

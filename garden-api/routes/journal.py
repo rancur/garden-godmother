@@ -862,6 +862,23 @@ def create_journal_entry(entry: JournalEntryCreate, request: Request):
                       {'title': entry.title, 'entry_type': entry.entry_type},
                       request.client.host if request.client else None)
         db.commit()
+
+        # Co-op tip sharing: broadcast as a federation alert if requested
+        if entry.share_with_coop:
+            try:
+                tip_text = (entry.title or entry.content or '').strip()
+                tip_title = tip_text[:80] + ('...' if len(tip_text) > 80 else '')
+                tip_body = entry.content.strip() if entry.content else tip_title
+                db.execute(
+                    """INSERT INTO federation_alerts
+                       (source_peer_id, alert_type, title, body, severity, affects_plants, published, expires_at)
+                       VALUES (NULL, 'info', ?, ?, 'info', NULL, 1, NULL)""",
+                    (tip_title, tip_body),
+                )
+                db.commit()
+            except Exception:
+                pass  # co-op share is best-effort; don't fail the journal entry
+
         row = db.execute("SELECT * FROM journal_entries WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return _enrich_journal_entry(db, dict(row))
 
