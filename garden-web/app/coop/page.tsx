@@ -268,7 +268,10 @@ function CommunityFeed() {
           : [
               ...((data.harvest_offers || []) as Omit<BoardItem, 'type'>[]).map((item) => ({ ...item, type: 'harvest' as const })),
               ...((data.seed_swaps || []) as Omit<BoardItem, 'type'>[]).map((item) => ({ ...item, type: 'seed_swap' as const })),
-              ...((data.alerts || []) as Omit<BoardItem, 'type'>[]).map((item) => ({ ...item, type: 'alert' as const })),
+              ...((data.alerts || []) as (Omit<BoardItem, 'type'> & { alert_type?: string })[]).map((item) => ({
+                ...item,
+                type: (item.alert_type === 'info' || item.alert_type === 'tip') ? 'tip' as const : 'alert' as const,
+              })),
             ];
         raw.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         setItems(raw);
