@@ -736,7 +736,7 @@ function CoopSettingsCard() {
       {/* Peers */}
       <div>
         <h3 className="text-sm font-semibold text-earth-800 dark:text-gray-200 mb-2">Peers</h3>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap mb-3">
           <span className="text-sm text-earth-700 dark:text-gray-300">
             {peerCount === null ? (
               <span className="inline-block w-16 h-4 bg-earth-100 dark:bg-gray-700 rounded animate-pulse" />
@@ -750,8 +750,75 @@ function CoopSettingsCard() {
           >
             Manage peers &rarr;
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowQrModal(true)}
+            className="text-xs px-3 py-1 rounded-full font-medium bg-earth-100 dark:bg-gray-700 text-earth-700 dark:text-gray-300 hover:bg-earth-200 dark:hover:bg-gray-600 transition"
+          >
+            📷 Show my pairing QR
+          </button>
+        </div>
+
+        {/* Add Peer from QR */}
+        <div className="space-y-2">
+          <p className="text-xs text-earth-500 dark:text-gray-400">Paste the JSON from another instance&apos;s QR to add them as a peer:</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder='{"gg_url":"...","instance_name":"...","pubkey":"..."}'
+              value={qrPairInput}
+              onChange={(e) => setQrPairInput(e.target.value)}
+              className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-earth-200 dark:border-gray-600 bg-earth-50 dark:bg-gray-700 text-earth-900 dark:text-gray-100 focus:ring-2 focus:ring-garden-500 focus:border-transparent outline-none transition font-mono"
+            />
+            <button
+              type="button"
+              onClick={handlePairFromQr}
+              disabled={qrPairLoading || !qrPairInput.trim()}
+              className="shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-garden-600 text-white hover:bg-garden-700 transition disabled:opacity-50"
+            >
+              {qrPairLoading ? 'Adding...' : 'Add Peer from QR'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* QR Modal */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowQrModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-earth-800 dark:text-gray-200">My Pairing QR</h3>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="text-earth-400 dark:text-gray-500 hover:text-earth-700 dark:hover:text-gray-200 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-xs text-earth-500 dark:text-gray-400 mb-4">
+              Show this to a nearby gardener so they can scan or paste your info to add you as a peer.
+            </p>
+            <div className="flex justify-center mb-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`${API_URL}/api/federation/pairing-qr`}
+                alt="Pairing QR code"
+                className="w-56 h-56 rounded-lg border border-earth-100 dark:border-gray-700"
+              />
+            </div>
+            <div className="flex gap-2 justify-center flex-wrap">
+              <Link
+                href="/settings/coop/pair"
+                className="text-xs text-garden-600 dark:text-garden-400 hover:underline"
+                onClick={() => setShowQrModal(false)}
+              >
+                Open full pairing page &rarr;
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sharing Preferences */}
       <div>

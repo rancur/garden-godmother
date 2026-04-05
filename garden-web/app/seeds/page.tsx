@@ -481,7 +481,11 @@ export default function SeedsPage() {
       {/* Community Seed Swaps collapsible section */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 overflow-hidden">
         <button
-          onClick={() => setShowSeedSwaps(!showSeedSwaps)}
+          onClick={() => {
+            const next = !showSeedSwaps;
+            setShowSeedSwaps(next);
+            localStorage.setItem('seeds_community_open', String(next));
+          }}
           className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-earth-50 dark:hover:bg-gray-700/50 transition-colors"
         >
           <h2 className="text-sm font-semibold text-earth-700 dark:text-gray-200 flex items-center gap-2">
