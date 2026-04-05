@@ -2637,4 +2637,10 @@ def startup_run_migrations():
             "ALTER TABLE seed_inventory ADD COLUMN coop_swap_available INTEGER DEFAULT 0",
         ])
 
+        run_migration(db, 67, "seed_trays_bottom_watering", [
+            "ALTER TABLE seed_trays ADD COLUMN watering_type TEXT DEFAULT 'top'",
+            "ALTER TABLE seed_trays ADD COLUMN reservoir_capacity_ml INTEGER",
+            "ALTER TABLE seed_trays ADD COLUMN reservoir_last_refilled TEXT",
+        ])
+
         logger.info("Migration system: all migrations checked/applied")

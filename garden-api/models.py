@@ -171,6 +171,8 @@ class TrayCreate(BaseModel):
     cell_size: str = "standard"
     location: Optional[str] = None
     notes: Optional[str] = None
+    watering_type: Optional[str] = "top"
+    reservoir_capacity_ml: Optional[int] = None
 
 class TrayCellSeed(BaseModel):
     row: int
@@ -196,6 +198,8 @@ class TrayUpdate(BaseModel):
     irrigation_zone_name: Optional[str] = None
     area_id: Optional[int] = None
     sort_order: Optional[int] = None
+    watering_type: Optional[str] = None
+    reservoir_capacity_ml: Optional[int] = None
 
 class TrayDuplicate(BaseModel):
     name: Optional[str] = None

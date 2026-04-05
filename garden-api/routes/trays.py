@@ -1,12 +1,14 @@
 """Seed tray endpoints."""
 from __future__ import annotations
 
+import io
 import json
+import os
 from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from db import get_db, row_to_dict
 from auth import require_user, require_admin
@@ -40,8 +42,8 @@ def list_trays():
 def create_tray(tray: TrayCreate):
     with get_db() as db:
         cursor = db.execute(
-            "INSERT INTO seed_trays (name, rows, cols, cell_size, location, notes) VALUES (?, ?, ?, ?, ?, ?)",
-            (tray.name, tray.rows, tray.cols, tray.cell_size, tray.location, tray.notes),
+            "INSERT INTO seed_trays (name, rows, cols, cell_size, location, notes, watering_type, reservoir_capacity_ml) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (tray.name, tray.rows, tray.cols, tray.cell_size, tray.location, tray.notes, tray.watering_type or "top", tray.reservoir_capacity_ml),
         )
         tray_id = cursor.lastrowid
         # Pre-create all cells as empty
@@ -223,7 +225,7 @@ def update_tray(tray_id: int, data: TrayUpdate):
             raise HTTPException(400, "Invalid irrigation_type for tray")
         updates = []
         params = []
-        for field in ("name", "location", "notes", "irrigation_type", "irrigation_zone_name", "sort_order"):
+        for field in ("name", "location", "notes", "irrigation_type", "irrigation_zone_name", "sort_order", "watering_type", "reservoir_capacity_ml"):
             val = getattr(data, field)
             if val is not None:
                 updates.append(f"{field} = ?")
@@ -237,6 +239,23 @@ def update_tray(tray_id: int, data: TrayUpdate):
             db.execute(f"UPDATE seed_trays SET {', '.join(updates)} WHERE id = ?", params)
             db.commit()
         return {"ok": True}
+
+
+@router.patch("/api/trays/{tray_id}/reservoir-refill")
+def refill_reservoir(tray_id: int, request: Request):
+    require_user(request)
+    with get_db() as db:
+        tray = db.execute("SELECT * FROM seed_trays WHERE id = ?", (tray_id,)).fetchone()
+        if not tray:
+            raise HTTPException(404, "Tray not found")
+        now = datetime.utcnow().isoformat()
+        db.execute(
+            "UPDATE seed_trays SET reservoir_last_refilled = ? WHERE id = ?",
+            (now, tray_id),
+        )
+        db.commit()
+        updated = db.execute("SELECT * FROM seed_trays WHERE id = ?", (tray_id,)).fetchone()
+        return dict(updated)
 
 
 @router.post("/api/trays/reorder")
@@ -342,4 +361,28 @@ def duplicate_tray(tray_id: int, data: TrayDuplicate):
         ).fetchall()
         new_tray["cell_counts"] = {s["status"]: s["cnt"] for s in stats}
         return new_tray
+
+
+@router.get("/api/trays/{tray_id}/qr")
+def get_tray_qr(tray_id: int):
+    """Return a QR code PNG that links to this tray's detail page. No auth required."""
+    import qrcode
+
+    with get_db() as db:
+        tray = db.execute("SELECT id, name FROM seed_trays WHERE id = ?", (tray_id,)).fetchone()
+        if not tray:
+            raise HTTPException(404, "Tray not found")
+
+    base_url = os.environ.get("BASE_URL", "http://localhost:3400")
+    url = f"{base_url}/trays/{tray_id}"
+
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
 

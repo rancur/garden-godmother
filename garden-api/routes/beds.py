@@ -6,8 +6,11 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+import io
+import os
+
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from db import get_db, row_to_dict
 from auth import require_user, require_admin, audit_log, get_request_user
@@ -1191,6 +1194,30 @@ def update_bed_section(bed_id: int, section_id: int, data: BedSectionUpdate, req
                           request.client.host if request.client else None)
             db.commit()
         return {"ok": True}
+
+
+@router.get("/api/beds/{bed_id}/qr")
+def get_bed_qr(bed_id: int):
+    """Return a QR code PNG that links to this bed's detail page. No auth required."""
+    import qrcode
+
+    with get_db() as db:
+        bed = db.execute("SELECT id, name FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
+        if not bed:
+            raise HTTPException(404, "Bed not found")
+
+    base_url = os.environ.get("BASE_URL", "http://localhost:3400")
+    url = f"{base_url}/planters/{bed_id}"
+
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
 
 
 @router.delete("/api/beds/{bed_id}/sections/{section_id}")

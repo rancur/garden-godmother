@@ -24,6 +24,15 @@ interface HaEntity {
   unit: string;
 }
 
+interface HaCandidate {
+  entity_id: string;
+  friendly_name: string;
+  state: string | null;
+  unit: string | null;
+  device_class: string | null;
+  already_configured: boolean;
+}
+
 const FIELD_LABELS: Record<string, { label: string; type: string; placeholder: string }> = {
   api_key: { label: 'API Key', type: 'password', placeholder: 'Enter API key' },
   api_token: { label: 'API Token', type: 'password', placeholder: 'WeatherFlow API token' },
@@ -77,6 +86,14 @@ export default function IntegrationsPage() {
   const [sensorRoles, setSensorRoles] = useState<string[]>([]);
   const [loadingEntities, setLoadingEntities] = useState(false);
   const [savingMappings, setSavingMappings] = useState(false);
+  // HA sensor discovery state
+  const [showDiscovery, setShowDiscovery] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [candidates, setCandidates] = useState<HaCandidate[]>([]);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState<string | null>(null);
+  const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
+  const [sensorTypeMap, setSensorTypeMap] = useState<Record<string, string>>({});
 
   const apiFetch = (path: string, opts?: RequestInit) =>
     fetch(`${API_URL}${path}`, { credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...opts }).then(r => {
@@ -147,6 +164,65 @@ export default function IntegrationsPage() {
   const handleToggleEntityMapping = () => {
     if (!showEntityMapping) loadEntityMappings();
     setShowEntityMapping(!showEntityMapping);
+  };
+
+  const handleDiscover = async () => {
+    setDiscovering(true);
+    setDiscoveryError(null);
+    try {
+      const res = await apiFetch('/api/sensors/ha-discover');
+      if (res.error) {
+        setDiscoveryError(res.error);
+        setCandidates([]);
+      } else {
+        setCandidates(res.candidates || []);
+        // Pre-populate sensor type guesses from device_class
+        const guesses: Record<string, string> = {};
+        for (const c of (res.candidates || [])) {
+          if (c.device_class === 'moisture') guesses[c.entity_id] = 'moisture';
+          else if (c.device_class === 'temperature') guesses[c.entity_id] = 'temperature';
+          else if (c.device_class === 'humidity') guesses[c.entity_id] = 'humidity';
+          else if (c.device_class === 'illuminance') guesses[c.entity_id] = 'light';
+          else guesses[c.entity_id] = 'moisture';
+        }
+        setSensorTypeMap(guesses);
+        // Seed already-configured set
+        const alreadyDone = new Set<string>(
+          (res.candidates || []).filter((c: HaCandidate) => c.already_configured).map((c: HaCandidate) => c.entity_id)
+        );
+        setAssignedIds(alreadyDone);
+      }
+    } catch {
+      setDiscoveryError('Failed to reach Home Assistant');
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const handleToggleDiscovery = () => {
+    if (!showDiscovery) handleDiscover();
+    setShowDiscovery(!showDiscovery);
+  };
+
+  const handleAssign = async (candidate: HaCandidate) => {
+    setAssigning(candidate.entity_id);
+    try {
+      await apiFetch('/api/sensors/ha-assign', {
+        method: 'POST',
+        body: JSON.stringify({
+          entity_id: candidate.entity_id,
+          friendly_name: candidate.friendly_name,
+          unit_of_measurement: candidate.unit,
+          sensor_type: sensorTypeMap[candidate.entity_id] || 'moisture',
+        }),
+      });
+      toast('Sensor added to Garden Godmother');
+      setAssignedIds(prev => new Set([...prev, candidate.entity_id]));
+    } catch {
+      toast('Failed to add sensor');
+    } finally {
+      setAssigning(null);
+    }
   };
 
   const handleSaveMappings = async () => {
@@ -285,6 +361,115 @@ export default function IntegrationsPage() {
           );
         })}
       </div>
+
+      {/* HA Sensor Discovery (shown when HA is configured) */}
+      {integrations.some(i => i.integration === 'home_assistant' && i.enabled) && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-earth-200 dark:border-gray-700 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{'\u{1F50D}'}</span>
+              <div>
+                <div className="font-medium text-earth-800 dark:text-gray-100">Discover Sensors</div>
+                <div className="text-xs text-earth-400 dark:text-gray-500">Auto-detect garden sensors from Home Assistant</div>
+              </div>
+            </div>
+            <button
+              onClick={handleToggleDiscovery}
+              className="text-xs px-3 py-1 rounded-lg font-medium bg-garden-600 text-white hover:bg-garden-700"
+            >
+              {showDiscovery ? 'Close' : 'Discover from Home Assistant'}
+            </button>
+          </div>
+
+          {showDiscovery && (
+            <div className="px-5 pb-4 border-t border-earth-100 dark:border-gray-700 pt-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDiscover}
+                  disabled={discovering}
+                  className="text-xs px-3 py-1 rounded-lg border border-earth-200 dark:border-gray-600 text-earth-600 dark:text-gray-300 hover:bg-earth-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                >
+                  {discovering ? 'Scanning...' : 'Refresh'}
+                </button>
+                {candidates.length > 0 && (
+                  <span className="text-xs text-earth-400 dark:text-gray-500">{candidates.length} sensor{candidates.length !== 1 ? 's' : ''} found</span>
+                )}
+              </div>
+
+              {discoveryError && (
+                <div className="text-sm text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
+                  {discoveryError}
+                </div>
+              )}
+
+              {discovering && (
+                <p className="text-sm text-earth-400 dark:text-gray-500">Scanning Home Assistant for garden sensors...</p>
+              )}
+
+              {!discovering && candidates.length === 0 && !discoveryError && (
+                <p className="text-sm text-earth-400 dark:text-gray-500">No garden-relevant sensors found. Check your Home Assistant connection.</p>
+              )}
+
+              {candidates.length > 0 && (
+                <div className="space-y-2">
+                  {candidates.map(c => {
+                    const isDone = assignedIds.has(c.entity_id);
+                    const dcIcon: Record<string, string> = {
+                      moisture: '\u{1F4A7}',
+                      temperature: '\u{1F321}\uFE0F',
+                      humidity: '\u{1F4A6}',
+                      illuminance: '\u2600\uFE0F',
+                      battery: '\u{1F50B}',
+                      pressure: '\u{1F4CF}',
+                    };
+                    const icon = dcIcon[c.device_class || ''] || '\u{1F4E1}';
+                    return (
+                      <div key={c.entity_id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-earth-50 dark:bg-gray-750 border border-earth-100 dark:border-gray-700">
+                        <span className="text-lg shrink-0">{icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-earth-800 dark:text-gray-100 truncate">{c.friendly_name}</div>
+                          <div className="text-xs text-earth-400 dark:text-gray-500 truncate">{c.entity_id}</div>
+                          {c.state != null && (
+                            <div className="text-xs text-earth-500 dark:text-gray-400">
+                              {c.state}{c.unit ? ` ${c.unit}` : ''}
+                              {c.device_class ? <span className="ml-1 text-earth-300 dark:text-gray-600">({c.device_class})</span> : null}
+                            </div>
+                          )}
+                        </div>
+                        {isDone ? (
+                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 shrink-0">
+                            {'\u2713'} Added
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <select
+                              value={sensorTypeMap[c.entity_id] || 'moisture'}
+                              onChange={e => setSensorTypeMap(m => ({ ...m, [c.entity_id]: e.target.value }))}
+                              className="text-xs px-2 py-1 border border-earth-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100"
+                            >
+                              <option value="moisture">Moisture</option>
+                              <option value="temperature">Temperature</option>
+                              <option value="humidity">Humidity</option>
+                              <option value="light">Light</option>
+                            </select>
+                            <button
+                              onClick={() => handleAssign(c)}
+                              disabled={assigning === c.entity_id}
+                              className="text-xs px-3 py-1 rounded-lg font-medium bg-garden-600 text-white hover:bg-garden-700 disabled:opacity-50"
+                            >
+                              {assigning === c.entity_id ? 'Adding...' : 'Add to GG'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Sensor Entity Mappings (shown when HA is configured) */}
       {integrations.some(i => i.integration === 'home_assistant' && i.enabled) && (

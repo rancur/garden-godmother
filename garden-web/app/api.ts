@@ -242,7 +242,7 @@ export function getTrays() {
   return apiFetch('/api/trays');
 }
 
-export function createTray(data: { name: string; rows: number; cols: number; cell_size?: string; location?: string }) {
+export function createTray(data: { name: string; rows: number; cols: number; cell_size?: string; location?: string; watering_type?: string; reservoir_capacity_ml?: number }) {
   return apiFetch('/api/trays', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -264,8 +264,12 @@ export function seedTrayCell(trayId: number, data: { row: number; col: number; p
   });
 }
 
-export function updateTray(id: number, data: { name?: string; location?: string; notes?: string; irrigation_type?: string; irrigation_zone_name?: string; area_id?: number; sort_order?: number }) {
+export function updateTray(id: number, data: { name?: string; location?: string; notes?: string; irrigation_type?: string; irrigation_zone_name?: string; area_id?: number; sort_order?: number; watering_type?: string; reservoir_capacity_ml?: number }) {
   return apiFetch(`/api/trays/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function refillTrayReservoir(trayId: number) {
+  return apiFetch(`/api/trays/${trayId}/reservoir-refill`, { method: 'PATCH' });
 }
 
 export function deleteTray(id: number) {

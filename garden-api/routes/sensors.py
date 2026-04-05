@@ -14,6 +14,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from db import get_db
 from auth import require_user, require_admin
@@ -2298,6 +2299,106 @@ async def get_sensor_readings_for_target(target_type: str, target_id: int, reque
         readings.append(reading)
 
     return {"assignments": [dict(a) for a in assignments], "readings": readings}
+
+
+# ──────────────── HA SENSOR DISCOVERY ────────────────
+
+_HA_GARDEN_DEVICE_CLASSES = {"moisture", "temperature", "humidity", "illuminance", "battery", "pressure"}
+_HA_GARDEN_KEYWORDS = {"soil", "garden", "plant", "greenhouse", "moisture", "humidity"}
+
+
+@router.get("/api/sensors/ha-discover")
+async def discover_ha_sensors(request: Request):
+    """Discover garden-relevant sensors from Home Assistant."""
+    require_user(request)
+    config = get_integration_config("home_assistant")
+    if not config or not config.get("token"):
+        return {"error": "Home Assistant not configured", "candidates": []}
+
+    ha_url = config.get("url", "").rstrip("/")
+    ha_token = config["token"]
+    headers = {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(f"{ha_url}/api/states", headers=headers)
+            if r.status_code != 200:
+                return {"error": f"Home Assistant returned {r.status_code}", "candidates": []}
+            all_states = r.json()
+    except Exception as exc:
+        logger.warning("HA discover request failed: %s", exc)
+        return {"error": f"Could not reach Home Assistant: {exc}", "candidates": []}
+
+    # Collect already-configured entity_ids from sensor_assignments
+    with get_db() as db:
+        rows = db.execute("SELECT DISTINCT entity_id FROM sensor_assignments").fetchall()
+    configured_ids = {r["entity_id"] for r in rows}
+
+    candidates = []
+    seen: set[str] = set()
+    for state in all_states:
+        entity_id: str = state.get("entity_id", "")
+        if entity_id in seen:
+            continue
+        attrs = state.get("attributes", {})
+        device_class = attrs.get("device_class") or ""
+        # Filter: device_class match OR keyword in entity_id
+        if device_class.lower() in _HA_GARDEN_DEVICE_CLASSES or any(kw in entity_id.lower() for kw in _HA_GARDEN_KEYWORDS):
+            seen.add(entity_id)
+            candidates.append({
+                "entity_id": entity_id,
+                "friendly_name": attrs.get("friendly_name") or entity_id,
+                "state": state.get("state"),
+                "unit": attrs.get("unit_of_measurement"),
+                "device_class": device_class or None,
+                "already_configured": entity_id in configured_ids,
+            })
+
+    candidates.sort(key=lambda c: (c["already_configured"], c["friendly_name"].lower()))
+    return {"candidates": candidates, "error": None}
+
+
+class HaAssignRequest(BaseModel):
+    entity_id: str
+    friendly_name: str
+    unit_of_measurement: str | None = None
+    sensor_type: str  # "moisture" | "temperature" | "humidity" | "light"
+
+
+@router.post("/api/sensors/ha-assign")
+async def ha_assign_sensor(body: HaAssignRequest, request: Request):
+    """Create/upsert a sensor entity record from a discovered HA entity."""
+    require_admin(request)
+    entity_id = body.entity_id.strip()
+    if not entity_id:
+        raise HTTPException(status_code=400, detail="entity_id is required")
+
+    # Map sensor_type to sensor_role used in sensor_assignments
+    role_map = {
+        "moisture": "soil_moisture",
+        "temperature": "soil_temperature",
+        "humidity": "humidity",
+        "light": "light",
+    }
+    sensor_role = role_map.get(body.sensor_type, body.sensor_type)
+
+    # Upsert into sensor_assignments with a generic area target (id=0 means unassigned)
+    # We insert as target_type='area', target_id=0 as a "global/unassigned" placeholder
+    # so the entity appears in the configured list; users can reassign it later.
+    with get_db() as db:
+        db.execute("""
+            INSERT INTO sensor_assignments (entity_id, entity_friendly_name, target_type, target_id, sensor_role)
+            VALUES (?, ?, 'area', 0, ?)
+            ON CONFLICT(entity_id, target_type, target_id) DO UPDATE SET
+                entity_friendly_name = excluded.entity_friendly_name,
+                sensor_role = excluded.sensor_role
+        """, (entity_id, body.friendly_name, sensor_role))
+        db.commit()
+        row = db.execute(
+            "SELECT * FROM sensor_assignments WHERE entity_id = ? AND target_type = 'area' AND target_id = 0",
+            (entity_id,)
+        ).fetchone()
+    return dict(row)
 
 
 # ──────────────── SHOPPING LIST ────────────────

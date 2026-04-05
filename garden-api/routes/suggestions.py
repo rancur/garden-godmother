@@ -266,6 +266,48 @@ def _seed_swap_suggestions(db: Any, today: date) -> list[dict]:
     return suggestions
 
 
+def _reservoir_suggestions(db: Any, today: date) -> list[dict]:
+    """Flag bottom-watering trays whose reservoir hasn't been refilled in 7+ days."""
+    rows = db.execute("""
+        SELECT id, name, reservoir_last_refilled
+        FROM seed_trays
+        WHERE watering_type IN ('bottom', 'self_watering')
+    """).fetchall()
+
+    suggestions = []
+    for r in rows:
+        d = dict(r)
+        last_refilled = d.get("reservoir_last_refilled")
+        if last_refilled:
+            try:
+                lr = datetime.fromisoformat(last_refilled.replace("Z", ""))
+                days_since = (datetime.utcnow() - lr).days
+            except (ValueError, TypeError):
+                days_since = 999
+        else:
+            days_since = 999
+
+        if days_since < 7:
+            continue
+
+        suggestions.append({
+            "id": f"reservoir-tray:{d['id']}",
+            "type": "reservoir",
+            "priority": "medium",
+            "title": f"Check reservoir on {d['name']}",
+            "body": (
+                f"The reservoir on {d['name']} was last refilled "
+                + (f"{days_since} days ago." if days_since < 999 else "an unknown time ago — check if it needs a top-up.")
+            ),
+            "action_label": "Refill Reservoir",
+            "action_url": "/trays",
+            "entity_id": d["id"],
+            "entity_type": "tray",
+        })
+
+    return suggestions
+
+
 # ─── endpoint ────────────────────────────────────────────────────────────────
 
 
@@ -280,6 +322,7 @@ def get_suggestions(request: Request):
 
         suggestions.extend(_harvest_suggestions(db, today))
         suggestions.extend(_watering_suggestions(db, today))
+        suggestions.extend(_reservoir_suggestions(db, today))
         suggestions.extend(_seed_start_suggestions(db, today))
         suggestions.extend(_succession_suggestions(db, today))
         suggestions.extend(_seed_swap_suggestions(db, today))

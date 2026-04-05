@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { getTrays, createTray, updateTray, deleteTray, duplicateTray, getAreas, updateArea, deleteArea, reorderTrays } from '../api';
+import { getTrays, createTray, updateTray, deleteTray, duplicateTray, getAreas, updateArea, deleteArea, reorderTrays, refillTrayReservoir } from '../api';
 import { useToast } from '../toast';
 import { useModal } from '../confirm-modal';
 import type { Area } from '../types';
@@ -21,6 +21,9 @@ interface Tray {
   area_name: string | null;
   area_color: string | null;
   sort_order: number;
+  watering_type: string | null;
+  reservoir_capacity_ml: number | null;
+  reservoir_last_refilled: string | null;
 }
 
 export default function TraysPage() {
@@ -30,7 +33,7 @@ export default function TraysPage() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', rows: 6, cols: 12, cell_size: 'standard', location: '' });
+  const [formData, setFormData] = useState({ name: '', rows: 6, cols: 12, cell_size: 'standard', location: '', watering_type: 'top' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
@@ -72,8 +75,8 @@ export default function TraysPage() {
     if (!formData.name.trim()) return;
     setSubmitting(true);
     try {
-      await createTray({ name: formData.name, rows: formData.rows, cols: formData.cols, cell_size: formData.cell_size, location: formData.location || undefined });
-      setFormData({ name: '', rows: 6, cols: 12, cell_size: 'standard', location: '' });
+      await createTray({ name: formData.name, rows: formData.rows, cols: formData.cols, cell_size: formData.cell_size, location: formData.location || undefined, watering_type: formData.watering_type });
+      setFormData({ name: '', rows: 6, cols: 12, cell_size: 'standard', location: '', watering_type: 'top' });
       setShowForm(false);
       loadData();
     } catch { setError('Failed to create tray'); }
@@ -106,6 +109,16 @@ export default function TraysPage() {
     const copyCells = await showConfirm({ title: 'Copy Plantings?', message: 'Copy cell plantings to the new tray?', confirmText: 'Copy Cells', cancelText: 'Empty Cells' });
     try { await duplicateTray(tray.id, { name: newName || undefined, copy_cells: copyCells }); loadData(); toast('Tray duplicated!'); }
     catch { setError('Failed to duplicate tray'); }
+  };
+
+  const handleRefillReservoir = async (e: React.MouseEvent, tray: Tray) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await refillTrayReservoir(tray.id);
+      loadData();
+      toast('Reservoir refilled!', 'success');
+    } catch { setError('Failed to log reservoir refill'); }
   };
 
   const handleDeleteArea = async (areaId: number) => {
@@ -367,6 +380,14 @@ export default function TraysPage() {
     }
   }, []);
 
+  const getReservoirDaysAgo = (tray: Tray): number | null => {
+    if (!tray.reservoir_last_refilled) return null;
+    try {
+      const dt = new Date(tray.reservoir_last_refilled);
+      return Math.floor((Date.now() - dt.getTime()) / 86400000);
+    } catch { return null; }
+  };
+
   const renderTrayCard = (tray: Tray, areaId: number | null, index: number) => {
     const seeded = tray.cell_counts?.seeded || 0;
     const germinated = tray.cell_counts?.germinated || 0;
@@ -374,6 +395,8 @@ export default function TraysPage() {
     const transplanted = tray.cell_counts?.transplanted || 0;
     const failed = tray.cell_counts?.failed || 0;
     const total = tray.rows * tray.cols;
+    const isBottomWatering = tray.watering_type === 'bottom' || tray.watering_type === 'self_watering';
+    const reservoirDaysAgo = getReservoirDaysAgo(tray);
     const isDropBefore = dropTarget && dropTarget.areaId === areaId && dropTarget.index === index;
     const isDropAfter = dropTarget && dropTarget.areaId === areaId && dropTarget.index === index + 1;
     const isDragging = (dragItem?.id === tray.id) || (touchDrag?.id === tray.id);
@@ -437,8 +460,35 @@ export default function TraysPage() {
               ))}
               {total > 48 && <span className="text-xs text-earth-300 ml-1">...</span>}
             </div>
+            {/* Bottom-watering reservoir info */}
+            {isBottomWatering && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium">
+                  {tray.watering_type === 'self_watering' ? 'Self-watering' : 'Bottom watering'}
+                </span>
+                {reservoirDaysAgo !== null ? (
+                  <span className={`text-xs ${reservoirDaysAgo >= 7 ? 'text-orange-600 dark:text-orange-400 font-semibold' : 'text-earth-400 dark:text-gray-500'}`}>
+                    Last refilled: {reservoirDaysAgo === 0 ? 'today' : `${reservoirDaysAgo}d ago`}
+                  </span>
+                ) : (
+                  <span className="text-xs text-earth-400 dark:text-gray-500">Reservoir: never refilled</span>
+                )}
+              </div>
+            )}
             {/* Area assigned via drag-and-drop between sections */}
           </Link>
+          {/* Reservoir refill button — outside Link to avoid navigation */}
+          {isBottomWatering && (
+            <div className="flex items-center pr-3">
+              <button
+                onClick={(e) => handleRefillReservoir(e, tray)}
+                className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-700 font-medium transition-colors whitespace-nowrap"
+                title="Log reservoir refill"
+              >
+                <span>&#128167;</span> Refill Reservoir
+              </button>
+            </div>
+          )
         </div>
         {/* Show drop-after indicator for last item only */}
         {isDropAfter && index === (traysByArea.get(areaId) || []).length - 1 && (
@@ -576,6 +626,15 @@ export default function TraysPage() {
               <label className="block text-sm font-medium text-earth-600 dark:text-gray-300 mb-1">Location</label>
               <input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} placeholder="e.g., South window, grow tent"
                 className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-garden-500 focus:border-garden-500 outline-none bg-white dark:bg-gray-700 dark:text-gray-100" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-earth-600 dark:text-gray-300 mb-1">Watering Type</label>
+              <select value={formData.watering_type} onChange={(e) => setFormData({ ...formData, watering_type: e.target.value })}
+                className="w-full px-3 py-2 border border-earth-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-garden-500 focus:border-garden-500 outline-none bg-white dark:bg-gray-700 dark:text-gray-100">
+                <option value="top">Top watering</option>
+                <option value="bottom">Bottom watering (reservoir)</option>
+                <option value="self_watering">Self-watering / wicking</option>
+              </select>
             </div>
           </div>
           <p className="text-sm text-earth-400">This creates a {formData.rows} x {formData.cols} tray ({formData.rows * formData.cols} cells).</p>
