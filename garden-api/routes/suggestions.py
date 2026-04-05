@@ -23,11 +23,16 @@ def _priority_key(s: dict) -> tuple:
 
 
 def _watering_suggestions(db: Any, today: date) -> list[dict]:
-    """Flag active plantings whose last watering journal entry is overdue."""
+    """Flag active plantings whose last watering journal entry is overdue.
+
+    Skips plantings in beds managed by automated irrigation (Rachio, drip,
+    soaker hose, etc.) — those beds are watered on a schedule GG doesn't track.
+    """
     rows = db.execute("""
         SELECT p.id, p.plant_id, p.bed_id, p.status, p.planted_date,
                pl.name as plant_name, pl.category,
                gb.name as bed_name,
+               COALESCE(gb.irrigation_type, '') as irrigation_type,
                (
                    SELECT MAX(je.created_at)
                    FROM journal_entries je
@@ -38,6 +43,8 @@ def _watering_suggestions(db: Any, today: date) -> list[dict]:
         JOIN plants pl ON p.plant_id = pl.id
         LEFT JOIN garden_beds gb ON p.bed_id = gb.id
         WHERE p.status IN ('seeded','sprouted','growing','flowering','fruiting','established')
+          AND COALESCE(gb.irrigation_type, '') NOT LIKE 'rachio%'
+          AND COALESCE(gb.irrigation_type, '') NOT IN ('drip', 'soaker_hose', 'automated')
     """).fetchall()
 
     suggestions = []
