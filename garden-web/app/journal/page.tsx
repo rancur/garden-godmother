@@ -510,6 +510,7 @@ export default function JournalPage() {
     setFormPlantingType('');
     setFormSeverity('');
     setFormMilestoneType('');
+    setShareWithCoop(false);
     formPhotoPreviews.forEach((url) => URL.revokeObjectURL(url));
     setFormPhotos([]);
     setFormPhotoPreviews([]);
@@ -541,6 +542,7 @@ export default function JournalPage() {
         tray_id: formTrayId ? Number(formTrayId) : undefined,
         severity: formSeverity || undefined,
         milestone_type: formMilestoneType || undefined,
+        share_with_coop: shareWithCoop || undefined,
       });
       if (formPhotos.length > 0 && entry.id) {
         await uploadJournalPhotos(entry.id, formPhotos);
@@ -548,7 +550,7 @@ export default function JournalPage() {
       resetForm();
       setShowForm(false);
       loadFeed();
-      toast('Journal entry created!');
+      toast(shareWithCoop ? 'Journal entry created and shared with co-op!' : 'Journal entry created!', 'success');
     } catch {
       setError('Failed to create journal entry');
     } finally {
