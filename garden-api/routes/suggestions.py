@@ -23,11 +23,15 @@ def _priority_key(s: dict) -> tuple:
 
 
 def _watering_suggestions(db: Any, today: date) -> list[dict]:
-    """Flag active plantings whose last watering journal entry is overdue."""
+    """Flag active plantings whose last watering journal entry is overdue.
+
+    Skips beds with automated irrigation (rachio_controller, rachio_hose_timer).
+    """
     rows = db.execute("""
         SELECT p.id, p.plant_id, p.bed_id, p.status, p.planted_date,
                pl.name as plant_name, pl.category,
                gb.name as bed_name,
+               gb.irrigation_type,
                (
                    SELECT MAX(je.created_at)
                    FROM journal_entries je
@@ -43,6 +47,10 @@ def _watering_suggestions(db: Any, today: date) -> list[dict]:
     suggestions = []
     for r in rows:
         d = dict(r)
+        # Skip beds with automated irrigation — they don't need manual watering alerts
+        irr_type = d.get("irrigation_type") or ""
+        if irr_type in ("rachio_controller", "rachio_hose_timer"):
+            continue
         last_watered_at = d.get("last_watered_at")
         if last_watered_at:
             try:
