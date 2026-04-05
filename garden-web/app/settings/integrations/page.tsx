@@ -217,7 +217,7 @@ export default function IntegrationsPage() {
         }),
       });
       toast('Sensor added to Garden Godmother');
-      setAssignedIds(prev => new Set([...prev, candidate.entity_id]));
+      setAssignedIds(prev => new Set([...Array.from(prev), candidate.entity_id]));
     } catch {
       toast('Failed to add sensor');
     } finally {
