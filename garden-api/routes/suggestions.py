@@ -49,7 +49,6 @@ def _watering_suggestions(db: Any, today: date) -> list[dict]:
 
     suggestions = []
     for r in rows:
-        d = dict(r)
         last_watered_at = d.get("last_watered_at")
         if last_watered_at:
             try:
