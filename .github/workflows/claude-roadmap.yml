@@ -1,0 +1,56 @@
+name: Claude Roadmap Driver
+
+on:
+  schedule:
+    - cron: '0 15 * * *'  # 3pm UTC daily
+  workflow_dispatch:
+
+jobs:
+  roadmap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          model: claude-sonnet-4-6
+          max_turns: 25
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are the roadmap driver for Garden Godmother, a self-hosted garden management app.
+
+            Read ROADMAP.md and pick ONE item from the "Up Next" section to implement. Choose based on:
+            - Impact: features that improve daily gardening workflow
+            - Feasibility: can be completed in a single PR
+            - Dependencies: no external service setup required
+
+            Implementation rules:
+            - Follow conventions in CLAUDE.md and CONTRIBUTING.md
+            - Backend: add routes in garden-api/routes/, use existing patterns
+            - Frontend: add pages in garden-web/app/, use Tailwind, follow toast conventions
+            - Add tests in garden-api/tests/ for any new backend logic
+            - Run `cd garden-api && ruff check .` before committing
+            - Run `cd garden-web && npx next lint` before committing
+
+            After implementing:
+            1. Create a feature branch and PR with a clear description
+            2. Move the item from "Up Next" to "In Progress" in ROADMAP.md
+            3. Include screenshots or code snippets in the PR description showing what changed

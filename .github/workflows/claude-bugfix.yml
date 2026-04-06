@@ -1,0 +1,64 @@
+name: Claude Bug Hunter
+
+on:
+  schedule:
+    - cron: '0 18 * * *'  # 6pm UTC daily
+  workflow_dispatch:
+
+jobs:
+  bugfix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          model: claude-sonnet-4-6
+          max_turns: 15
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are the bug hunter for Garden Godmother, a self-hosted garden management app.
+
+            Systematically look for bugs and issues:
+
+            1. **Static analysis**: Run `cd garden-api && ruff check .` and `cd garden-web && npx next lint`. Fix any errors found.
+
+            2. **Test suite**: Run `cd garden-api && python -m pytest tests/ -v`. Fix any failing tests.
+
+            3. **Type safety**: Look for common TypeScript issues in garden-web/app/:
+               - Unhandled API error responses (missing try/catch or .catch())
+               - Missing null checks on optional data
+               - Incorrect toast() usage (must be positional args, not object pattern)
+
+            4. **API consistency**: Check that frontend API calls in garden-web/app/api.ts match the backend route signatures in garden-api/routes/.
+
+            5. **Security scan**: Look for:
+               - SQL injection risks (string formatting in queries instead of parameterized)
+               - Missing auth checks on routes that should require authentication
+               - Hardcoded secrets or credentials
+
+            For each bug found:
+            - Fix it directly if the fix is straightforward
+            - Create a PR grouping related fixes together
+            - Title: "fix: [description of what was fixed]"
+            - If a bug is complex and needs human review, open an issue instead
+
+            If no bugs are found, do nothing — do not create empty PRs or issues.

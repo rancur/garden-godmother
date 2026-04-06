@@ -10,3 +10,9 @@ node_modules/
 __pycache__/
 *.pyc
 .DS_Store
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/

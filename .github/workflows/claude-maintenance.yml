@@ -1,0 +1,42 @@
+name: Claude Maintenance
+
+on:
+  schedule:
+    - cron: '0 14 * * 1'  # Monday 2pm UTC
+  workflow_dispatch:
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          model: claude-sonnet-4-6
+          max_turns: 15
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are the weekly maintenance bot for Garden Godmother.
+
+            Perform the following maintenance tasks:
+
+            1. **Dependency audit**: Check garden-api/requirements.txt and garden-web/package.json for outdated or insecure dependencies. If any are found, create a PR with updates.
+
+            2. **Code quality**: Run ruff check on the Python backend and report any new warnings. Fix trivial issues (unused imports, formatting) directly.
+
+            3. **Migration health**: Verify all SQLite migrations in garden-api/migrations/ are numbered sequentially with no gaps.
+
+            4. **Dead code scan**: Look for unused route files, orphaned components, or unreferenced imports.
+
+            5. **Documentation sync**: Verify CLAUDE.md and README.md reflect the current project structure (route count, migration count, feature list).
+
+            If you find issues, create a single PR with all fixes. Title it "chore: weekly maintenance [date]". If everything looks clean, open an issue summarizing the health check with label "maintenance".
