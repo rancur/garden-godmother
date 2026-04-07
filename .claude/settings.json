@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)", "Bash(pip *)", "Bash(pip3 *)", "Bash(pytest *)",
+      "Bash(python *)", "Bash(python3 *)", "Bash(ruff *)", "Bash(npm *)",
+      "Bash(npx *)", "Bash(gh *)", "Bash(ls *)", "Bash(mkdir *)",
+      "Bash(find *)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)",
+      "Bash(wc *)", "Bash(cp *)", "Bash(mv *)", "Bash(rm *)",
+      "Read", "Write", "Edit", "Glob", "Grep"
+    ]
+  }
+}
