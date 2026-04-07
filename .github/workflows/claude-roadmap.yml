@@ -12,6 +12,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,9 +32,8 @@ jobs:
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
-          model: claude-sonnet-4-6
-          max_turns: 25
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--model claude-sonnet-4-6 --max-turns 25"
           prompt: |
             You are the roadmap driver for Garden Godmother, a self-hosted garden management app.
 
