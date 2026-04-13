@@ -30,6 +30,9 @@ router = APIRouter()
 SESSION_MAX_AGE = 30 * 24 * 3600  # 30 days
 # Configure for your domain — set COOKIE_DOMAIN env var for production (e.g. ".yourdomain.com")
 COOKIE_DOMAIN = os.environ.get("COOKIE_DOMAIN", "") or None
+# Cookie Secure flag — default off so HTTP-only Docker deployments work out of the box.
+# Set COOKIE_SECURE=true when serving behind HTTPS (reverse proxy, production, etc.)
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "").lower() in ("1", "true", "yes")
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -117,7 +120,7 @@ def set_session_cookie(response: Response, session_id: str):
         domain=COOKIE_DOMAIN,
         path="/",
         httponly=True,
-        secure=True,
+        secure=COOKIE_SECURE,
         samesite="lax",
         max_age=SESSION_MAX_AGE,
     )

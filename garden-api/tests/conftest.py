@@ -97,26 +97,9 @@ def client(monkeypatch):
     """
     import auth as auth_mod
     monkeypatch.setattr(auth_mod, "COOKIE_DOMAIN", None)
+    monkeypatch.setattr(auth_mod, "COOKIE_SECURE", False)
 
     from main import app
-
-    # Patch set_session_cookie to NOT set secure=True (TestClient uses http)
-    original_set = auth_mod.set_session_cookie
-
-    def _test_set_session_cookie(response, session_id):
-        from fastapi.responses import Response as _Resp
-        response.set_cookie(
-            key="ggm_session",
-            value=session_id,
-            domain=None,
-            path="/",
-            httponly=True,
-            secure=False,  # TestClient uses http://testserver
-            samesite="lax",
-            max_age=auth_mod.SESSION_MAX_AGE,
-        )
-
-    monkeypatch.setattr(auth_mod, "set_session_cookie", _test_set_session_cookie)
 
     return TestClient(app, raise_server_exceptions=False)
 
