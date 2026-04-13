@@ -6,7 +6,7 @@ Pillow>=10.0.0
 argon2-cffi==23.1.0
 pywebpush==2.0.0
 py-vapid==1.9.0
-pytest==8.3.0
+pytest==9.0.3
 cryptography
 apscheduler
 # Optional: meshtastic transport (install only if using LoRa hardware)
