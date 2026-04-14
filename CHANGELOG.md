@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.10.1 (2026-04-14)
+
+### Bug Fixes
+- **Fix Docker install crash** — removed 23 duplicate plant entries from init_db.py that were introduced during merge conflict resolutions of plant research PRs (#115, #116, #129, #130, #132). One duplicate (Mexican Oregano) was missing required fields, causing a `KeyError: 'cold_tolerance'` during `create_reference_db.py` (#137).
+
+### Dependencies
+- **pytest** bumped from 8.3.0 to 9.0.3 (#136)
+
 ## v2.2.0 (2026-03-29)
 
 ### Voice Journal & Photo-First Flow
