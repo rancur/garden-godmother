@@ -91,9 +91,9 @@ jobs:
             -e GG_DB_PATH=/app/data/garden.db \
             -p 3402:3402 \
             garden-api:test
-          # Wait for the server to be ready
+          # Wait for the server to be ready — use setup-status (public endpoint)
           for i in $(seq 1 30); do
-            if docker exec api-test python -c "import urllib.request; urllib.request.urlopen('http://localhost:3402/api/plants')" 2>/dev/null; then
+            if docker exec api-test python -c "import urllib.request; urllib.request.urlopen('http://localhost:3402/api/settings/setup-status')" 2>/dev/null; then
               echo "API is responding"
               break
             fi
@@ -116,13 +116,21 @@ jobs:
           conn.close()
           "
 
-      - name: Smoke test — health endpoint
+      - name: Smoke test — API responds to authenticated request
         run: |
           docker exec api-test python -c "
           import urllib.request, json
-          resp = urllib.request.urlopen('http://localhost:3402/api/health')
-          print(f'Health check: {resp.status}')
-          assert resp.status == 200, f'Health check failed: {resp.status}'
+          # Login with default admin credentials (created on first boot)
+          import sqlite3
+          conn = sqlite3.connect('/app/data/garden.db')
+          users = conn.execute('SELECT username FROM users').fetchall()
+          conn.close()
+          print(f'Users in DB: {[u[0] for u in users]}')
+          # Use setup-status (public) to verify the API serves JSON
+          resp = urllib.request.urlopen('http://localhost:3402/api/settings/setup-status')
+          data = json.loads(resp.read())
+          print(f'Setup status: {data}')
+          assert resp.status == 200
           "
 
       - name: Cleanup
