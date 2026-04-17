@@ -754,6 +754,99 @@ def get_companion_suggestions(bed_id: int, x: int, y: int, request: Request):
         }
 
 
+@router.get("/api/beds/{bed_id}/companion-score")
+def get_bed_companion_score(bed_id: int, request: Request):
+    """Return a compatibility score for the current bed layout based on companion relationships."""
+    require_user(request)
+    with get_db() as db:
+        bed = db.execute("SELECT id FROM garden_beds WHERE id = ?", (bed_id,)).fetchone()
+        if not bed:
+            raise HTTPException(404, "Bed not found")
+
+        plantings = db.execute(
+            """
+            SELECT pt.id, pt.cell_x, pt.cell_y, pl.name AS plant_name
+            FROM plantings pt
+            JOIN plants pl ON pt.plant_id = pl.id
+            WHERE pt.bed_id = ?
+              AND pt.status NOT IN ('harvested', 'removed', 'failed')
+              AND pt.cell_role = 'primary'
+            """,
+            (bed_id,),
+        ).fetchall()
+        plantings = [dict(p) for p in plantings]
+
+        if len(plantings) < 2:
+            return {
+                "score": 100,
+                "grade": "A",
+                "plant_count": len(plantings),
+                "companion_count": 0,
+                "antagonist_count": 0,
+                "companion_pairs": [],
+                "antagonist_pairs": [],
+            }
+
+        companion_pairs = []
+        antagonist_pairs = []
+
+        for i in range(len(plantings)):
+            for j in range(i + 1, len(plantings)):
+                p1, p2 = plantings[i], plantings[j]
+                # Check bidirectional relationship
+                row = db.execute(
+                    """
+                    SELECT c.relationship FROM companions c
+                    JOIN plants p ON c.plant_id = p.id
+                    WHERE p.name = ? COLLATE NOCASE AND c.companion_name = ? COLLATE NOCASE
+                    """,
+                    (p1["plant_name"], p2["plant_name"]),
+                ).fetchone()
+                if not row:
+                    row = db.execute(
+                        """
+                        SELECT c.relationship FROM companions c
+                        JOIN plants p ON c.plant_id = p.id
+                        WHERE p.name = ? COLLATE NOCASE AND c.companion_name = ? COLLATE NOCASE
+                        """,
+                        (p2["plant_name"], p1["plant_name"]),
+                    ).fetchone()
+
+                if row:
+                    pair = {
+                        "plant1": p1["plant_name"],
+                        "plant2": p2["plant_name"],
+                        "cell1": [p1["cell_x"], p1["cell_y"]],
+                        "cell2": [p2["cell_x"], p2["cell_y"]],
+                    }
+                    if row["relationship"] == "companion":
+                        companion_pairs.append(pair)
+                    elif row["relationship"] == "antagonist":
+                        antagonist_pairs.append(pair)
+
+        score = max(0, min(100, 100 + len(companion_pairs) * 5 - len(antagonist_pairs) * 20))
+        if score >= 90:
+            grade = "A"
+        elif score >= 75:
+            grade = "B"
+        elif score >= 60:
+            grade = "C"
+        elif score >= 45:
+            grade = "D"
+        else:
+            grade = "F"
+
+        return {
+            "score": score,
+            "grade": grade,
+            "plant_count": len(plantings),
+            "companion_count": len(companion_pairs),
+            "antagonist_count": len(antagonist_pairs),
+            "companion_pairs": companion_pairs,
+            "antagonist_pairs": antagonist_pairs,
+        }
+
+
 @router.post("/api/plantings")
 def create_planting(planting: PlantingCreate, request: Request):
     with get_db() as db:

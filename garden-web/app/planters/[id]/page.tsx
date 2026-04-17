@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, resizeBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate, getCompanionSuggestions, addCompanion, updatePlantingPosition } from '../../api';
+import { getBedGrid, getBeds, getPlants, createPlanting, updatePlanting, deletePlanting, updateBed, deleteBed, resizeBed, checkCompanion, checkRotation, getPlantingPhotos, uploadPlantingPhoto, deletePhoto, getPhotoUrl, getBedSuggestions, analyzePhoto, getPhotoAnalysis, createPlantingNote, getPlantingNotes, deleteNote, getBedHistory, getIrrigationZones, getAreas, getBedSections, createBedSection, updateBedSection, deleteBedSection, getBedIrrigationSchedule, getPlanterTypes, getSoilTypes, getSoilProducts, getPlantHarvestInfo, movePlanting, movePlantingToGround, undoAction, getPlantVarieties, getVarieties, getTemplates, applyTemplate, getCompanionSuggestions, addCompanion, updatePlantingPosition, getBedCompanionScore } from '../../api';
 import FreeformPlanterView from '../../components/FreeformPlanterView';
 import SoilAmendments from '../../components/SoilAmendments';
 import SensorReadings from '../../components/SensorReadings';
@@ -183,6 +183,9 @@ export default function BedDetailPage() {
   const [loadingCompanions, setLoadingCompanions] = useState(false);
   const [companionCache, setCompanionCache] = useState<Record<string, 'good' | 'bad' | 'neutral'>>({});
 
+  // Bed-wide companion compatibility score
+  const [companionScore, setCompanionScore] = useState<{ score: number; grade: string; plant_count: number; companion_count: number; antagonist_count: number; antagonist_pairs: { plant1: string; plant2: string }[] } | null>(null);
+
   // Cell detail state
   const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
   const [selectedPlanting, setSelectedPlanting] = useState<Planting | null>(null);
@@ -329,6 +332,10 @@ export default function BedDetailPage() {
     return HARVESTABLE_STATUSES;
   }, [harvestInfoCache]);
 
+  const refreshCompanionScore = useCallback(() => {
+    getBedCompanionScore(bedId).then(setCompanionScore).catch(() => {});
+  }, [bedId]);
+
   const loadBed = useCallback(() => {
     getBedGrid(bedId)
       .then((bedData) => {
@@ -349,9 +356,10 @@ export default function BedDetailPage() {
             setSelectedPlanting(updated);
           }
         }
+        refreshCompanionScore();
       })
       .catch(() => setError('Failed to load planter'));
-  }, [bedId, selectedCell]);
+  }, [bedId, selectedCell, refreshCompanionScore]);
 
 
   useEffect(() => {
@@ -377,6 +385,7 @@ export default function BedDetailPage() {
       })
       .catch(() => setError('Failed to load data'))
       .finally(() => setLoading(false));
+    refreshCompanionScore();
   }, [bedId]);
 
   // Fetch harvest info when a planting is selected
@@ -1360,6 +1369,27 @@ export default function BedDetailPage() {
             return (
               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-earth-100 dark:bg-gray-700 text-earth-600 dark:text-gray-300">
                 {pt.brand ? `${pt.brand} · ` : ''}{pt.name}
+              </span>
+            );
+          })()}
+          {companionScore && companionScore.plant_count >= 2 && (() => {
+            const { grade, antagonist_count, companion_count, antagonist_pairs } = companionScore;
+            const gradeColor =
+              grade === 'A' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+              grade === 'B' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
+              grade === 'C' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
+              'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300';
+            const tooltip = [
+              `Compatibility: ${grade} (${companionScore.score}/100)`,
+              companion_count > 0 ? `${companion_count} good pair${companion_count !== 1 ? 's' : ''}` : '',
+              antagonist_count > 0 ? `${antagonist_count} conflict${antagonist_count !== 1 ? 's' : ''}: ${antagonist_pairs.slice(0, 3).map(p => `${p.plant1} ✗ ${p.plant2}`).join(', ')}` : '',
+            ].filter(Boolean).join(' · ');
+            return (
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium cursor-default ${gradeColor}`}
+                title={tooltip}
+              >
+                🌿 {grade}{antagonist_count > 0 ? ` · ⚠️ ${antagonist_count}` : ''}
               </span>
             );
           })()}

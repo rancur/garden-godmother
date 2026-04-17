@@ -185,6 +185,10 @@ export function getCompanionSuggestions(bedId: number, x: number, y: number) {
   return apiFetch(`/api/beds/${bedId}/cell/${x}/${y}/companion-suggestions`);
 }
 
+export function getBedCompanionScore(bedId: number) {
+  return apiFetch(`/api/beds/${bedId}/companion-score`);
+}
+
 export function addCompanion(bedId: number, data: { plant_id: number; cell_x: number; cell_y: number; companion_of: number; planted_date: string; variety_id?: number }) {
   return apiFetch('/api/plantings', {
     method: 'POST',

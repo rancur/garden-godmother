@@ -8,13 +8,13 @@ Tracked features and improvements, roughly prioritized. Items move to CHANGELOG.
 
 - [ ] **Seasonal planting templates** — pre-built planting plans per USDA zone and season (spring cool-crop, summer heat, fall succession, winter cover)
 - [ ] **Batch task actions** — multi-select tasks for bulk complete, snooze, or reassign
+- [ ] **Companion planting score on planter view** — show a compatibility score for current bed layout, flag bad neighbors
 
 ## Up Next
 
 ### Data & Intelligence
 - [ ] **Weather history analytics** — chart temperature, rainfall, and humidity trends over time; correlate with harvest yields
 - [ ] **Soil amendment tracker** — log amendments (compost, fertilizer, lime, sulfur) per bed with pH/nutrient targets and reapplication reminders
-- [ ] **Companion planting score on planter view** — show a compatibility score for current bed layout, flag bad neighbors
 - [ ] **Harvest yield predictions** — ML-lite model using historical harvest data, weather, and plant variety to estimate expected yield
 - [ ] **Plant succession calculator** — auto-suggest staggered planting dates for continuous harvest of lettuce, beans, radishes, etc.
 
