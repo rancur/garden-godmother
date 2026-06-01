@@ -3739,27 +3739,6 @@ PLANTS = [
         "companions": ["Lavender", "Rosemary", "Sage", "Marigold"],
         "antagonists": ["None known"],
     },
-    # ── HOLY BASIL (TULSI) ──
-    {
-        "name": "Holy Basil",
-        "category": "herb",
-        "subcategory": "culinary",
-        "days_to_maturity_min": 60,
-        "days_to_maturity_max": 90,
-        "spacing_inches": 12,
-        "sun": "full to partial",
-        "water": "moderate",
-        "heat_tolerance": "excellent",
-        "cold_tolerance": "low",
-        "desert_seasons": ["warm", "monsoon"],
-        "sow_indoor_weeks_before_transplant": 6,
-        "desert_sow_outdoor": ["03-15", "04-30"],
-        "desert_transplant": ["04-01", "05-15"],
-        "desert_harvest": ["05-15", "11-15"],
-        "notes": "Ocimum tenuiflorum (tulsi). More heat-tolerant than sweet basil and thrives through desert summers. Clove-peppery flavor for Thai cuisine and tea. Reseeds readily.",
-        "companions": ["Tomato", "Pepper", "Eggplant", "Marigold"],
-        "antagonists": ["Sage", "Rue"],
-    },
     # ── MEXICAN OREGANO ──
     {
         "name": "Mexican Oregano",
@@ -6191,6 +6170,35 @@ def init_db():
         ("Water Spinach", "Narrow-leaf (Ching Quat)", "Slender-leaved kangkong, preferred for stir-fry, very heat tolerant.", 50, 70, "excellent", None, "mild, crisp stems, tender leaves", "Trailing 1-3 ft shoots", "Green, narrow leaves", "Trailing aquatic/semi-aquatic", 5, "Narrow-leaf type prized for crisp stems. Thrives above 100F with constant moisture — top desert summer green. Note federal noxious-weed status; permit may be required.", "echocommunity.org"),
         ("Water Spinach", "Broadleaf (Pak Quat)", "Broad-leaved kangkong, faster and more productive in wet soil.", 50, 75, "excellent", None, "mild, succulent", "Trailing 1-3 ft shoots", "Green, broad arrow leaves", "Trailing semi-aquatic", 4, "Broadleaf type, vigorous in wet beds or large pots. Cut-and-come-again. Heat-loving monsoon-season green; confirm local legality before growing.", "echocommunity.org"),
         ("Tigernut", "Yellow chufa (var. sativus)", "Sweet almond-flavored tubers, the type used for horchata de chufa.", 90, 120, "high", None, "sweet, nutty, almond/coconut", "Tubers ~0.5 in", "Tan/brown tubers", "Grassy sedge 1-2 ft", 4, "Cultivated sweet chufa. Loves heat but needs steady moisture or it goes dormant. Harvest tubers in fall after tops yellow. Contain in a bed/pot — can spread.", "cultivariable.com"),
+
+        # ── LIMA BEAN varieties ──
+        ("Lima Bean", "Henderson's Bush", "Compact, reliable baby-lima bush; heavy early set, small white beans 3+ per pod.", 60, 72, "moderate", None, "mild, buttery", "Bush 18-24 in", "Pale green/white seed", "Bush determinate", 4, "Fast and early — best fit for the short spring window before June heat; the strongest low-desert bush choice.", "University of Arizona / harvesttotable.com"),
+        ("Lima Bean", "Fordhook 242", "Large-seeded bush, AAS winner, holds in warmer weather better than most.", 72, 85, "moderate", None, "rich, hazelnut-like", "Bush 20-24 in", "Large pale green seed", "Bush determinate", 4, "Big buttery beans; slightly later, so push to early spring or rely on the monsoon crop.", "growinginthegarden.com"),
+        ("Lima Bean", "King of the Garden", "Vigorous climbing pole lima, long harvest, large flat beans.", 85, 90, "moderate", None, "buttery, full", "Vine 10-15 ft", "White seed", "Pole indeterminate", 3, "Long season favors monsoon planting for fall set; needs a tall trellis and consistent water.", "harvesttotable.com"),
+
+        # ── QUINOA varieties ──
+        ("Quinoa", "Cherry Vanilla", "Ornamental 3-5 ft plants, pale-pink to deep-fuchsia seed heads; bred for low-water poor soils.", 90, 120, "high", "high", "nutty grain; mild greens", "3-5 ft", "Pink to fuchsia", "Upright branched", 3, "The most heat/drought-tolerant named variety and shortest-statured; best low-desert grain bet if winter-sown, but still risks May heat at seed fill.", "savvygardening.com"),
+        ("Quinoa", "Brightest Brilliant Rainbow", "Vigorous 4-6 ft multicolor heads (pink, burgundy, orange, gold, cream, lime); fast germinating.", 90, 120, "moderate", "high", "classic nutty quinoa", "4-6 ft", "Rainbow mix", "Upright branched", 3, "Wants days under ~95F and cool nights; winter-sow only, stake against wind; taller so more lodging risk.", "botanicalinterests.com"),
+
+        # ── CUBAN OREGANO varieties ──
+        ("Cuban Oregano", "Green (species)", "Standard green-leaf form; thick fuzzy succulent leaves, most heat- and sun-tolerant of the type.", 60, 90, "high", None, "strong oregano-thyme-camphor", "18 in", "Green", "Spreading/mounding", 4, "Most reliable in Phoenix/Tucson with afternoon shade; drought-tolerant once established.", "UF/IFAS"),
+        ("Cuban Oregano", "Variegatus", "Variegated form — green leaves edged creamy white; same flavor, slightly less vigorous.", 60, 90, "moderate", None, "oregano-camphor", "12-18 in", "Green/cream variegated", "Spreading/trailing", 3, "Variegation increases sunburn risk; needs full afternoon shade in low desert. Best in containers.", "stevesleaves.com"),
+
+        # ── ANISE HYSSOP varieties ──
+        ("Anise Hyssop", "Golden Jubilee", "Chartreuse-gold foliage, lavender-blue flower spikes; AAS winner; comes true from seed.", 80, 100, "moderate", None, "anise-licorice", "24-30 in", "Gold foliage / lavender-blue bloom", "Upright clump", 3, "Bright foliage scorches more readily in low-desert sun — afternoon shade essential; best as a cool-season ornamental-edible.", "johnnyseeds.com"),
+        ("Anise Hyssop", "Blue Fortune", "Sterile powder-blue flower spikes, vigorous and uniform; more heat-resilient than the species.", 90, 110, "moderate", "good", "anise-mint", "30-36 in", "Powder-blue bloom", "Upright clump", 3, "More robust in heat than the species but still needs afternoon shade and sharp drainage; sterile so no reseeding.", "hort.extension.wisc.edu"),
+
+        # ── ORGAN PIPE CACTUS varieties ──
+        ("Organ Pipe Cactus", "Sonoran type (var. thurberi)", "Standard Arizona/Sonoran columnar form; sweet red pitaya dulce, bat-pollinated night flowers.", 12775, 18250, "excellent", "high", "sweet, watermelon-like", "16-20 ft tall", "Red-purple fruit, white flowers", "Multi-stem columnar", 5, "The true low-desert native; slow but bulletproof once established above 25F.", "University of Arizona Arboretum"),
+
+        # ── FINGER LIME varieties ──
+        ("Finger Lime", "Rainforest Pearl", "Vigorous pink-fleshed selection, popular and adaptable.", 730, 1095, "moderate", None, "tart lime, floral", "6-10 ft", "Pink/burgundy skin, pink pearls", "Upright thorny shrub", 3, "One of the more vigorous, heat-coping selections; still needs afternoon shade and frost protection in low desert.", "gardeningknowhow.com"),
+        ("Finger Lime", "Pink Ice", "Burgundy-skinned with pink pearls and grapefruit aroma.", 730, 1095, "moderate", None, "tart, grapefruit-floral", "6-8 ft", "Burgundy skin, pink vesicles", "Dense shrub", 3, "Ornamental and productive; container culture recommended for frost mobility.", "epicgardening.com"),
+        ("Finger Lime", "Red Champagne", "Sought-after red-pulp commercial selection.", 730, 1095, "moderate", None, "bright, sweet-tart, floral", "6-12 ft", "Green-bronze skin, red pearls", "Thorny upright", 3, "High-value pulp; provide dappled light and protect young bark from sunburn.", "uscitrusnursery.com"),
+
+        # ── SOUR ORANGE varieties ──
+        ("Sour Orange (Seville)", "Seville (Common)", "Traditional bitter marmalade orange, rough rind, very seedy.", 730, 1460, "high", "Phytophthora-tolerant; CTV-susceptible", "intensely sour/bitter", "20-30 ft", "Deep orange rind, orange flesh", "Upright thorny tree", 5, "The benchmark low-desert citrus — heat, drought, alkaline-soil and frost tolerant; ubiquitous AZ street tree and rootstock.", "Purdue NewCROP / UC Riverside"),
+        ("Sour Orange (Seville)", "Bouquet de Fleurs", "Compact thornless sour orange grown for fragrant neroli blossoms.", 730, 1460, "high", "CTV-susceptible", "sour, very aromatic", "10-15 ft", "Orange fruit", "Compact rounded", 4, "Smaller habit suits desert courtyards; same heat/alkaline tolerance, prized for blossom fragrance.", "citrusvariety.ucr.edu"),
 
     ]
 
