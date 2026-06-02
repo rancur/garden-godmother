@@ -6803,6 +6803,26 @@ PLANTS = [
         "companions": ["Prickly Pear", "Agave", "Globe Mallow", "Brittlebush"],
         "antagonists": [],
     },
+    {
+        "name": "Star Jasmine",
+        "category": "flower",
+        "subcategory": "vine",
+        "days_to_maturity_min": 365,
+        "days_to_maturity_max": 730,
+        "spacing_inches": 48,
+        "sun": "full to partial",
+        "water": "moderate",
+        "heat_tolerance": "moderate",
+        "cold_tolerance": "moderate",
+        "desert_seasons": ["cool", "warm"],
+        "sow_indoor_weeks_before_transplant": 0,
+        "desert_sow_outdoor": None,
+        "desert_transplant": ["10-01", "04-30"],
+        "desert_harvest": ["03-15", "05-15"],
+        "notes": "Trachelospermum jasminoides (Confederate/star jasmine). Evergreen twining vine or spreading groundcover prized for intensely fragrant white star-shaped flowers in spring. Evergreen in low desert; hardy to ~10-15F (USDA 8-10). NEEDS A TRELLIS to climb (15-25 ft) or use as a 1-2 ft groundcover. Requires afternoon shade in peak summer to avoid leaf scorch above 110F; reflected west-wall heat will burn it. Moderate water, well-drained soil. Prune after spring bloom to shape. Nearly pest-free. Milky sap can irritate skin.",
+        "companions": ["Lavender", "Salvia Hot Lips", "Marigold"],
+        "antagonists": [],
+    },
 ]
 
 
