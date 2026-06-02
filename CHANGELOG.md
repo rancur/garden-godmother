@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.12.0 (2026-06-01)
+
+### Plant Library Expansion
+- **+76 plants, +75 varieties** — consolidated 28 `plant-research/*` draft PRs (2026-04-14 → 2026-06-01) into a single clean batch. The per-branch PRs each edited the same plant DB (`init_db.py`) and conflicted with one another, so they were merged, deduped, and validated together rather than one-by-one. Plant library grows 247 → 323 plants and 305 → 380 variety entries.
+- Highlights: desert-adapted natives (Quailbush, Old Man Saltbush, Fremont Wolfberry, Brittlebush, Desert Lavender, Creosote Bush, Screwbean Mesquite, Sotol), perennial/heat-tolerant edibles (Yacon, Tree Collard, Egyptian Walking Onion, I'itoi Onion, Magenta Spreen), pulses (Moth Bean, Winged Bean, Cowpea, Horse Gram, Bambara Groundnut, Lentil), and tropical/citrus (Banana, Pomelo, Calamondin, Kaffir Lime, Mandarin, Peach, Pluot, Pistachio).
+
+### Data Quality
+- **Deduped 6 redundant plant entries** that the research bot proposed but already existed (or duplicated each other): Sour Orange (= existing *Sour Orange (Seville)*), Chiltepin (= *Chiltepin Pepper*), Sunchoke (= *Jerusalem Artichoke*), Pepino Dulce (= *Pepino Melon*), Pummelo (= Pomelo), Tree Collards (= Tree Collard).
+- Fixed a stray `desert_rating` key on the *Pineapple Sage* plant entry (belongs only on varieties).
+- Normalized `fruit tree` → `fruit` category for consistency with the existing taxonomy.
+- Removed a pre-existing duplicate *Guava / Mexican Cream* variety row.
+
 ## v2.10.1 (2026-04-14)
 
 ### Bug Fixes
